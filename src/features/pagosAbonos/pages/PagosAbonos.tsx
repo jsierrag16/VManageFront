@@ -1,11 +1,28 @@
-import { useState, useMemo, useEffect } from 'react';
-import { Search, Plus, Edit, Trash2, Eye, Clock, CheckCircle, CreditCard, TrendingUp, DollarSign, ChevronLeft, ChevronRight, XCircle } from 'lucide-react';
-import { Button } from '../../../shared/components/ui/button';
-import { Input } from '../../../shared/components/ui/input';
-import { Label } from '../../../shared/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../../../shared/components/ui/dialog';
-import { toast } from 'sonner';
-import { Badge } from '../../../shared/components/ui/badge';
+import { useState, useMemo, useEffect } from "react";
+import {
+  Search,
+  Eye,
+  Clock,
+  CheckCircle,
+  CreditCard,
+  TrendingUp,
+  DollarSign,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
+import { Button } from "../../../shared/components/ui/button";
+import { Input } from "../../../shared/components/ui/input";
+import { Label } from "../../../shared/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "../../../shared/components/ui/dialog";
+import { toast } from "sonner";
+import { Badge } from "../../../shared/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -13,14 +30,33 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '../../../shared/components/ui/table';
+} from "../../../shared/components/ui/table";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../../../shared/components/ui/select';
+} from "../../../shared/components/ui/select";
+
+type MetodoPago = "Efectivo" | "Transferencia" | "Tarjeta" | "Cheque";
+type EstadoPago = "Pagado" | "Parcial" | "Pendiente";
+
+/* 👇 DEFINIRLA AQUÍ */
+const METODOS_PAGO: MetodoPago[] = [
+  "Efectivo",
+  "Transferencia",
+  "Tarjeta",
+  "Cheque",
+];
+
+interface Abono {
+  fecha: string;
+  monto: number;
+  metodoPago: MetodoPago;
+  usuario: string;
+  observaciones: string;
+}
 
 interface PagoAbono {
   id: number;
@@ -28,162 +64,162 @@ interface PagoAbono {
   remisionAsociada: string;
   cliente: string;
   fecha: string;
-  metodoPago: 'Efectivo' | 'Transferencia' | 'Tarjeta' | 'Cheque';
+  metodoPago: MetodoPago;
   monto: number;
   saldoPendiente: number;
-  estadoPago: 'Pagado' | 'Parcial' | 'Pendiente';
+  estadoPago: EstadoPago;
   observaciones: string;
   bodega: string;
-  abonos?: {
-    fecha: string;
-    monto: number;
-    metodoPago: 'Efectivo' | 'Transferencia' | 'Tarjeta' | 'Cheque';
-    usuario: string;
-    observaciones: string;
-  }[];
+  abonos?: Abono[];
 }
 
 export const pagosAbonosData: PagoAbono[] = [
   {
     id: 1,
-    numeroTransaccion: 'TRX-001',
-    remisionAsociada: 'RV-001',
-    cliente: 'Comercializadora El Campo',
-    fecha: '2024-01-15',
-    metodoPago: 'Transferencia',
-    monto: 16950.00,
+    numeroTransaccion: "TRX-001",
+    remisionAsociada: "RV-001",
+    cliente: "Comercializadora El Campo",
+    fecha: "2024-01-15",
+    metodoPago: "Transferencia",
+    monto: 16950.0,
     saldoPendiente: 0,
-    estadoPago: 'Pagado',
-    observaciones: 'Pago completo de remisión',
-    bodega: 'Bodega Central',
-    abonos: []
+    estadoPago: "Pagado",
+    observaciones: "Pago completo de remisión",
+    bodega: "Bodega Central",
+    abonos: [],
   },
   {
     id: 2,
-    numeroTransaccion: 'TRX-002',
-    remisionAsociada: 'RV-002',
-    cliente: 'Distribuidora Las Palmas',
-    fecha: '2024-01-14',
-    metodoPago: 'Efectivo',
-    monto: 9605.00,
-    saldoPendiente: 4605.00,
-    estadoPago: 'Parcial',
-    observaciones: 'Pago parcial con abonos',
-    bodega: 'Bodega Central',
+    numeroTransaccion: "TRX-002",
+    remisionAsociada: "RV-002",
+    cliente: "Distribuidora Las Palmas",
+    fecha: "2024-01-14",
+    metodoPago: "Efectivo",
+    monto: 9605.0,
+    saldoPendiente: 4605.0,
+    estadoPago: "Parcial",
+    observaciones: "Pago parcial con abonos",
+    bodega: "Bodega Central",
     abonos: [
       {
-        fecha: '2024-01-14',
-        monto: 5000.00,
-        metodoPago: 'Efectivo',
-        usuario: 'Admin Sistema',
-        observaciones: 'Primer abono'
-      }
-    ]
+        fecha: "2024-01-14",
+        monto: 5000.0,
+        metodoPago: "Efectivo",
+        usuario: "Admin Sistema",
+        observaciones: "Primer abono",
+      },
+    ],
   },
   {
     id: 3,
-    numeroTransaccion: 'TRX-003',
-    remisionAsociada: 'RV-003',
-    cliente: 'Granja Santa Rosa',
-    fecha: '2024-01-16',
-    metodoPago: 'Transferencia',
-    monto: 5876.00,
-    saldoPendiente: 5876.00,
-    estadoPago: 'Pendiente',
-    observaciones: 'Pago pendiente de recibir',
-    bodega: 'Bodega Norte',
-    abonos: []
+    numeroTransaccion: "TRX-003",
+    remisionAsociada: "RV-003",
+    cliente: "Granja Santa Rosa",
+    fecha: "2024-01-16",
+    metodoPago: "Transferencia",
+    monto: 5876.0,
+    saldoPendiente: 5876.0,
+    estadoPago: "Pendiente",
+    observaciones: "Pago pendiente de recibir",
+    bodega: "Bodega Norte",
+    abonos: [],
   },
   {
     id: 4,
-    numeroTransaccion: 'TRX-004',
-    remisionAsociada: 'RV-004',
-    cliente: 'Comercializadora El Campo',
-    fecha: '2024-01-13',
-    metodoPago: 'Efectivo',
-    monto: 13560.00,
-    saldoPendiente: 3560.00,
-    estadoPago: 'Parcial',
-    observaciones: 'Pago en cuotas',
-    bodega: 'Bodega Central',
+    numeroTransaccion: "TRX-004",
+    remisionAsociada: "RV-004",
+    cliente: "Comercializadora El Campo",
+    fecha: "2024-01-13",
+    metodoPago: "Efectivo",
+    monto: 13560.0,
+    saldoPendiente: 3560.0,
+    estadoPago: "Parcial",
+    observaciones: "Pago en cuotas",
+    bodega: "Bodega Central",
     abonos: [
       {
-        fecha: '2024-01-13',
-        monto: 5000.00,
-        metodoPago: 'Efectivo',
-        usuario: 'Admin Sistema',
-        observaciones: 'Primera cuota'
+        fecha: "2024-01-13",
+        monto: 5000.0,
+        metodoPago: "Efectivo",
+        usuario: "Admin Sistema",
+        observaciones: "Primera cuota",
       },
       {
-        fecha: '2024-01-20',
-        monto: 5000.00,
-        metodoPago: 'Tarjeta',
-        usuario: 'Admin Sistema',
-        observaciones: 'Segunda cuota'
-      }
-    ]
+        fecha: "2024-01-20",
+        monto: 5000.0,
+        metodoPago: "Tarjeta",
+        usuario: "Admin Sistema",
+        observaciones: "Segunda cuota",
+      },
+    ],
   },
   {
     id: 5,
-    numeroTransaccion: 'TRX-005',
-    remisionAsociada: 'RV-005',
-    cliente: 'Distribuidora ABC',
-    fecha: '2024-01-12',
-    metodoPago: 'Transferencia',
-    monto: 2825.00,
+    numeroTransaccion: "TRX-005",
+    remisionAsociada: "RV-005",
+    cliente: "Distribuidora ABC",
+    fecha: "2024-01-12",
+    metodoPago: "Transferencia",
+    monto: 2825.0,
     saldoPendiente: 0,
-    estadoPago: 'Pagado',
-    observaciones: 'Pago completo',
-    bodega: 'Bodega Sur',
-    abonos: []
-  }
+    estadoPago: "Pagado",
+    observaciones: "Pago completo",
+    bodega: "Bodega Sur",
+    abonos: [],
+  },
 ];
 
 interface PagosAbonosProps {
   currentUser?: any;
-  triggerCreate?: number;
+  selectedBodega: string; // ✅ importante para filtrar
 }
 
-export default function PagosAbonos({ currentUser }: PagosAbonosProps) {
-  const [searchTerm, setSearchTerm] = useState('');
+
+
+export default function PagosAbonos({ currentUser, selectedBodega }: PagosAbonosProps) {
+  const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+
   const [pagosAbonos, setPagosAbonos] = useState<PagoAbono[]>(pagosAbonosData);
+
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isAbonoModalOpen, setIsAbonoModalOpen] = useState(false);
   const [selectedPago, setSelectedPago] = useState<PagoAbono | null>(null);
-  const [abonoData, setAbonoData] = useState({
+
+  const [abonoData, setAbonoData] = useState<{
+    monto: number;
+    metodoPago: MetodoPago;
+    observaciones: string;
+  }>({
     monto: 0,
-    metodoPago: 'Efectivo' as 'Efectivo' | 'Transferencia' | 'Tarjeta' | 'Cheque',
-    observaciones: ''
+    metodoPago: "Efectivo",
+    observaciones: "",
   });
 
-  // Obtener fecha actual
-  const getFechaActual = () => {
-    return new Date().toISOString().split('T')[0];
-  };
+  const getFechaActual = () => new Date().toISOString().split("T")[0];
 
-  // Filtrar pagos por búsqueda y bodega del usuario
+  // ✅ Filtrar por bodega seleccionada (y luego por búsqueda)
   const filteredPagos = useMemo(() => {
     let filtered = pagosAbonos;
 
-    // Filtrar por bodega del usuario si existe
-    if (currentUser?.bodega) {
-      filtered = filtered.filter(pago => pago.bodega === currentUser.bodega);
+    if (selectedBodega && selectedBodega !== "Todas las bodegas") {
+      filtered = filtered.filter((pago) => pago.bodega === selectedBodega);
     }
 
-    // Filtrar por búsqueda
-    if (searchTerm) {
-      filtered = filtered.filter(pago =>
-        pago.numeroTransaccion.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        pago.remisionAsociada.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        pago.cliente.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        pago.estadoPago.toLowerCase().includes(searchTerm.toLowerCase())
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase();
+      filtered = filtered.filter(
+        (pago) =>
+          pago.numeroTransaccion.toLowerCase().includes(q) ||
+          pago.remisionAsociada.toLowerCase().includes(q) ||
+          pago.cliente.toLowerCase().includes(q) ||
+          pago.estadoPago.toLowerCase().includes(q)
       );
     }
 
     return filtered;
-  }, [pagosAbonos, searchTerm, currentUser]);
+  }, [pagosAbonos, searchTerm, selectedBodega]);
 
   // Paginación
   const totalPages = Math.ceil(filteredPagos.length / itemsPerPage);
@@ -191,66 +227,72 @@ export default function PagosAbonos({ currentUser }: PagosAbonosProps) {
   const endIndex = startIndex + itemsPerPage;
   const currentPagos = filteredPagos.slice(startIndex, endIndex);
 
-  // Resetear a página 1 cuando cambia el filtro
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm]);
+  }, [searchTerm, selectedBodega]);
 
-  // Calcular estadísticas
+  // ✅ Estadísticas consistentes (recaudado = monto - saldoPendiente)
   const stats = useMemo(() => {
     let filtered = pagosAbonos;
-    if (currentUser?.bodega) {
-      filtered = filtered.filter(p => p.bodega === currentUser.bodega);
+    if (selectedBodega && selectedBodega !== "Todas las bodegas") {
+      filtered = filtered.filter((p) => p.bodega === selectedBodega);
     }
 
     const totalTransacciones = filtered.length;
-    const totalRecibido = filtered
-      .filter(p => p.estadoPago === 'Pagado')
-      .reduce((sum, p) => sum + p.monto, 0);
-    const totalParcial = filtered
-      .filter(p => p.estadoPago === 'Parcial')
-      .reduce((sum, p) => sum + (p.monto - p.saldoPendiente), 0);
-    const pendientes = filtered.filter(p => p.estadoPago === 'Pendiente').length;
-    
-    return { totalTransacciones, totalRecibido, totalParcial, pendientes };
-  }, [pagosAbonos, currentUser]);
+
+    const totalRecaudado = filtered.reduce(
+      (sum, p) => sum + (p.monto - p.saldoPendiente),
+      0
+    );
+
+    const saldoPendienteTotal = filtered.reduce((sum, p) => sum + p.saldoPendiente, 0);
+
+    const pendientes = filtered.filter((p) => p.estadoPago === "Pendiente").length;
+
+    return { totalTransacciones, totalRecaudado, saldoPendienteTotal, pendientes };
+  }, [pagosAbonos, selectedBodega]);
 
   const handleAgregarAbono = () => {
-    if (!selectedPago || !abonoData.monto || abonoData.monto <= 0) {
-      toast.error('Por favor ingresa un monto válido');
+    if (!selectedPago) return;
+
+    if (!abonoData.monto || abonoData.monto <= 0) {
+      toast.error("Por favor ingresa un monto válido");
       return;
     }
 
     if (abonoData.monto > selectedPago.saldoPendiente) {
-      toast.error('El monto del abono no puede ser mayor al saldo pendiente');
+      toast.error("El monto del abono no puede ser mayor al saldo pendiente");
       return;
     }
 
-    const nuevoAbono = {
+    const nuevoAbono: Abono = {
       fecha: getFechaActual(),
       monto: abonoData.monto,
       metodoPago: abonoData.metodoPago,
-      usuario: currentUser?.nombre || 'Admin Sistema',
-      observaciones: abonoData.observaciones
+      usuario: currentUser?.nombre || "Admin Sistema",
+      observaciones: abonoData.observaciones,
     };
 
     const nuevoSaldo = selectedPago.saldoPendiente - abonoData.monto;
-    const nuevoEstado = nuevoSaldo === 0 ? 'Pagado' : 'Parcial';
+    const nuevoEstado: EstadoPago = nuevoSaldo === 0 ? "Pagado" : "Parcial";
 
-    setPagosAbonos(pagosAbonos.map(pago =>
-      pago.id === selectedPago.id
-        ? {
+    setPagosAbonos((prev) =>
+      prev.map((pago) =>
+        pago.id === selectedPago.id
+          ? {
             ...pago,
             saldoPendiente: nuevoSaldo,
-            estadoPago: nuevoEstado as 'Pagado' | 'Parcial' | 'Pendiente',
-            abonos: [...(pago.abonos || []), nuevoAbono]
+            estadoPago: nuevoEstado,
+            abonos: [...(pago.abonos || []), nuevoAbono],
           }
-        : pago
-    ));
+          : pago
+      )
+    );
 
-    toast.success('Abono registrado exitosamente');
+    toast.success("Abono registrado exitosamente");
     setIsAbonoModalOpen(false);
-    setAbonoData({ monto: 0, metodoPago: 'Efectivo', observaciones: '' });
+    setSelectedPago(null);
+    setAbonoData({ monto: 0, metodoPago: "Efectivo", observaciones: "" });
   };
 
   const openViewModal = (pago: PagoAbono) => {
@@ -263,18 +305,19 @@ export default function PagosAbonos({ currentUser }: PagosAbonosProps) {
     setIsAbonoModalOpen(true);
   };
 
-  const getEstadoBadge = (estado: string) => {
-    const badges = {
-      'Pendiente': { class: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: Clock },
-      'Pagado': { class: 'bg-green-100 text-green-800 border-green-200', icon: CheckCircle },
-      'Parcial': { class: 'bg-orange-100 text-orange-800 border-orange-200', icon: TrendingUp }
+  const getEstadoBadge = (estado: EstadoPago) => {
+    const badges: Record<
+      EstadoPago,
+      { class: string; icon: typeof Clock }
+    > = {
+      Pendiente: { class: "bg-yellow-100 text-yellow-800 border-yellow-200", icon: Clock },
+      Pagado: { class: "bg-green-100 text-green-800 border-green-200", icon: CheckCircle },
+      Parcial: { class: "bg-orange-100 text-orange-800 border-orange-200", icon: TrendingUp },
     };
-    return badges[estado as keyof typeof badges] || badges['Pendiente'];
+    return badges[estado];
   };
 
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-  };
+  const handlePageChange = (page: number) => setCurrentPage(page);
 
   return (
     <div className="space-y-6">
@@ -293,20 +336,24 @@ export default function PagosAbonos({ currentUser }: PagosAbonosProps) {
         <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-6 text-white">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-green-100 text-sm">Total Pagado</p>
-              <p className="text-3xl mt-2">${stats.totalRecibido.toLocaleString('es-CO')}</p>
+              <p className="text-green-100 text-sm">Total Recaudado</p>
+              <p className="text-3xl mt-2">
+                ${stats.totalRecaudado.toLocaleString("es-CO")}
+              </p>
             </div>
             <CheckCircle className="text-green-200" size={40} />
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-lg p-6 text-white">
+        <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-xl shadow-lg p-6 text-white">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-orange-100 text-sm">Abonos Recibidos</p>
-              <p className="text-3xl mt-2">${stats.totalParcial.toLocaleString('es-CO')}</p>
+              <p className="text-red-100 text-sm">Saldo Pendiente</p>
+              <p className="text-3xl mt-2">
+                ${stats.saldoPendienteTotal.toLocaleString("es-CO")}
+              </p>
             </div>
-            <TrendingUp className="text-orange-200" size={40} />
+            <DollarSign className="text-red-200" size={40} />
           </div>
         </div>
 
@@ -337,7 +384,7 @@ export default function PagosAbonos({ currentUser }: PagosAbonosProps) {
         </div>
       </div>
 
-      {/* Tabla de pagos y abonos */}
+      {/* Tabla */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <Table>
@@ -354,6 +401,7 @@ export default function PagosAbonos({ currentUser }: PagosAbonosProps) {
                 <TableHead className="text-center">Acciones</TableHead>
               </TableRow>
             </TableHeader>
+
             <TableBody>
               {filteredPagos.length === 0 ? (
                 <TableRow>
@@ -366,17 +414,21 @@ export default function PagosAbonos({ currentUser }: PagosAbonosProps) {
                 currentPagos.map((pago, index) => {
                   const estadoBadge = getEstadoBadge(pago.estadoPago);
                   const IconEstado = estadoBadge.icon;
-                  
+
                   return (
                     <TableRow key={pago.id} className="hover:bg-gray-50">
                       <TableCell className="text-gray-500">{startIndex + index + 1}</TableCell>
                       <TableCell className="font-medium">{pago.remisionAsociada}</TableCell>
                       <TableCell>{pago.cliente}</TableCell>
-                      <TableCell>{new Date(pago.fecha).toLocaleDateString('es-CO')}</TableCell>
+                      <TableCell>{new Date(pago.fecha).toLocaleDateString("es-CO")}</TableCell>
                       <TableCell>{pago.metodoPago}</TableCell>
-                      <TableCell>${pago.monto.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</TableCell>
-                      <TableCell className={pago.saldoPendiente > 0 ? 'text-red-600 font-medium' : ''}>
-                        {pago.saldoPendiente > 0 ? `$${pago.saldoPendiente.toLocaleString('es-CO', { minimumFractionDigits: 2 })}` : '-'}
+                      <TableCell>
+                        ${pago.monto.toLocaleString("es-CO", { minimumFractionDigits: 2 })}
+                      </TableCell>
+                      <TableCell className={pago.saldoPendiente > 0 ? "text-red-600 font-medium" : ""}>
+                        {pago.saldoPendiente > 0
+                          ? `$${pago.saldoPendiente.toLocaleString("es-CO", { minimumFractionDigits: 2 })}`
+                          : "-"}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className={estadoBadge.class}>
@@ -395,6 +447,7 @@ export default function PagosAbonos({ currentUser }: PagosAbonosProps) {
                           >
                             <Eye size={16} className="text-blue-600" />
                           </Button>
+
                           {pago.saldoPendiente > 0 && (
                             <Button
                               variant="ghost"
@@ -420,7 +473,7 @@ export default function PagosAbonos({ currentUser }: PagosAbonosProps) {
         {filteredPagos.length > 0 && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
             <div className="text-sm text-gray-600">
-              Mostrando {startIndex + 1} - {Math.min(endIndex, filteredPagos.length)} de{' '}
+              Mostrando {startIndex + 1} - {Math.min(endIndex, filteredPagos.length)} de{" "}
               {filteredPagos.length} transacciones
             </div>
             <div className="flex items-center gap-2">
@@ -434,11 +487,12 @@ export default function PagosAbonos({ currentUser }: PagosAbonosProps) {
                 <ChevronLeft size={16} />
                 Anterior
               </Button>
+
               <div className="flex items-center gap-1">
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                   <Button
                     key={page}
-                    variant={currentPage === page ? 'default' : 'outline'}
+                    variant={currentPage === page ? "default" : "outline"}
                     size="sm"
                     onClick={() => handlePageChange(page)}
                     className="h-8 w-8 p-0"
@@ -447,6 +501,7 @@ export default function PagosAbonos({ currentUser }: PagosAbonosProps) {
                   </Button>
                 ))}
               </div>
+
               <Button
                 variant="outline"
                 size="sm"
@@ -471,9 +526,9 @@ export default function PagosAbonos({ currentUser }: PagosAbonosProps) {
               Detalles completos del pago y sus abonos
             </DialogDescription>
           </DialogHeader>
+
           {selectedPago && (
             <div className="space-y-6 py-4">
-              {/* Información general */}
               <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
                 <div>
                   <p className="text-sm text-gray-600">Remisión Asociada</p>
@@ -485,7 +540,7 @@ export default function PagosAbonos({ currentUser }: PagosAbonosProps) {
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Fecha</p>
-                  <p className="font-semibold">{new Date(selectedPago.fecha).toLocaleDateString('es-CO')}</p>
+                  <p className="font-semibold">{new Date(selectedPago.fecha).toLocaleDateString("es-CO")}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Método de Pago</p>
@@ -503,34 +558,39 @@ export default function PagosAbonos({ currentUser }: PagosAbonosProps) {
                 </div>
               </div>
 
-              {/* Resumen financiero */}
               <div className="border rounded-lg p-4 space-y-2">
                 <div className="flex justify-between text-lg">
                   <span className="text-gray-600">Monto Total:</span>
-                  <span className="font-bold">${selectedPago.monto.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</span>
+                  <span className="font-bold">
+                    ${selectedPago.monto.toLocaleString("es-CO", { minimumFractionDigits: 2 })}
+                  </span>
                 </div>
-                {selectedPago.abonos && selectedPago.abonos.length > 0 && (
-                  <div className="flex justify-between text-lg">
-                    <span className="text-gray-600">Total Abonado:</span>
-                    <span className="font-semibold text-green-600">
-                      ${(selectedPago.monto - selectedPago.saldoPendiente).toLocaleString('es-CO', { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                )}
+
+                <div className="flex justify-between text-lg">
+                  <span className="text-gray-600">Total Abonado:</span>
+                  <span className="font-semibold text-green-600">
+                    ${(selectedPago.monto - selectedPago.saldoPendiente).toLocaleString("es-CO", {
+                      minimumFractionDigits: 2,
+                    })}
+                  </span>
+                </div>
+
                 {selectedPago.saldoPendiente > 0 && (
                   <div className="flex justify-between text-lg border-t pt-2">
                     <span className="text-gray-600">Saldo Pendiente:</span>
-                    <span className="font-bold text-red-600">${selectedPago.saldoPendiente.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</span>
+                    <span className="font-bold text-red-600">
+                      ${selectedPago.saldoPendiente.toLocaleString("es-CO", { minimumFractionDigits: 2 })}
+                    </span>
                   </div>
                 )}
               </div>
 
-              {/* Historial de abonos */}
               {selectedPago.abonos && selectedPago.abonos.length > 0 && (
                 <div className="border rounded-lg overflow-hidden">
                   <div className="bg-gray-50 p-3 border-b">
                     <h3 className="font-semibold">Historial de Abonos</h3>
                   </div>
+
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
@@ -545,13 +605,13 @@ export default function PagosAbonos({ currentUser }: PagosAbonosProps) {
                       <TableBody>
                         {selectedPago.abonos.map((abono, index) => (
                           <TableRow key={index}>
-                            <TableCell>{new Date(abono.fecha).toLocaleDateString('es-CO')}</TableCell>
+                            <TableCell>{new Date(abono.fecha).toLocaleDateString("es-CO")}</TableCell>
                             <TableCell className="font-medium text-green-600">
-                              ${abono.monto.toLocaleString('es-CO', { minimumFractionDigits: 2 })}
+                              ${abono.monto.toLocaleString("es-CO", { minimumFractionDigits: 2 })}
                             </TableCell>
                             <TableCell>{abono.metodoPago}</TableCell>
                             <TableCell>{abono.usuario}</TableCell>
-                            <TableCell>{abono.observaciones || '-'}</TableCell>
+                            <TableCell>{abono.observaciones || "-"}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -560,7 +620,6 @@ export default function PagosAbonos({ currentUser }: PagosAbonosProps) {
                 </div>
               )}
 
-              {/* Observaciones */}
               {selectedPago.observaciones && (
                 <div className="border rounded-lg p-4">
                   <p className="text-sm text-gray-600 mb-1">Observaciones</p>
@@ -569,8 +628,15 @@ export default function PagosAbonos({ currentUser }: PagosAbonosProps) {
               )}
             </div>
           )}
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setIsViewModalOpen(false); setSelectedPago(null); }}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsViewModalOpen(false);
+                setSelectedPago(null);
+              }}
+            >
               Cerrar
             </Button>
           </DialogFooter>
@@ -586,16 +652,21 @@ export default function PagosAbonos({ currentUser }: PagosAbonosProps) {
               Registra un abono para el pago de {selectedPago?.cliente}
             </DialogDescription>
           </DialogHeader>
+
           {selectedPago && (
             <div className="space-y-4 py-4">
               <div className="p-4 bg-gray-50 rounded-lg">
                 <div className="flex justify-between mb-2">
                   <span className="text-sm text-gray-600">Monto Total:</span>
-                  <span className="font-semibold">${selectedPago.monto.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</span>
+                  <span className="font-semibold">
+                    ${selectedPago.monto.toLocaleString("es-CO", { minimumFractionDigits: 2 })}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600">Saldo Pendiente:</span>
-                  <span className="font-bold text-red-600">${selectedPago.saldoPendiente.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</span>
+                  <span className="font-bold text-red-600">
+                    ${selectedPago.saldoPendiente.toLocaleString("es-CO", { minimumFractionDigits: 2 })}
+                  </span>
                 </div>
               </div>
 
@@ -606,23 +677,31 @@ export default function PagosAbonos({ currentUser }: PagosAbonosProps) {
                   type="number"
                   step="0.01"
                   max={selectedPago.saldoPendiente}
-                  value={abonoData.monto || ''}
-                  onChange={(e) => setAbonoData({ ...abonoData, monto: parseFloat(e.target.value) || 0 })}
+                  value={abonoData.monto || ""}
+                  onChange={(e) =>
+                    setAbonoData({ ...abonoData, monto: parseFloat(e.target.value) || 0 })
+                  }
                   placeholder="0.00"
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="metodo-abono">Método de Pago *</Label>
-                <Select value={abonoData.metodoPago} onValueChange={(value: any) => setAbonoData({ ...abonoData, metodoPago: value })}>
+                <Select
+                  value={abonoData.metodoPago}
+                  onValueChange={(value: string) =>
+                    setAbonoData({ ...abonoData, metodoPago: value as MetodoPago })
+                  }
+                >
                   <SelectTrigger id="metodo-abono">
                     <SelectValue placeholder="Selecciona método" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Efectivo">Efectivo</SelectItem>
-                    <SelectItem value="Transferencia">Transferencia</SelectItem>
-                    <SelectItem value="Tarjeta">Tarjeta</SelectItem>
-                    <SelectItem value="Cheque">Cheque</SelectItem>
+                    {METODOS_PAGO.map((metodo) => (
+                      <SelectItem key={metodo} value={metodo}>
+                        {metodo}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -638,12 +717,13 @@ export default function PagosAbonos({ currentUser }: PagosAbonosProps) {
               </div>
             </div>
           )}
+
           <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => { 
-                setIsAbonoModalOpen(false); 
-                setAbonoData({ monto: 0, metodoPago: 'Efectivo', observaciones: '' });
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsAbonoModalOpen(false);
+                setAbonoData({ monto: 0, metodoPago: "Efectivo", observaciones: "" });
                 setSelectedPago(null);
               }}
             >

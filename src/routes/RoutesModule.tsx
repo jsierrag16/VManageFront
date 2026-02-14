@@ -8,10 +8,11 @@ import { PublicRoute } from "./components/PublicRoute";
 
 // Páginas
 import Login from "../features/auth/pages/login";
+import Dashboard from "../features/dashboard/pages/Dashboard";
+import Bodegas from "../features/bodegas/pages/Bodegas";
 
-// Layout + rutas internas
-import MainLayout from "../layouts/MainLayout"; // ajusta la ruta si tu MainLayout está en otra carpeta
-import AppRoutes from "./AppRoutes"; // ajusta si lo creaste en otra ruta
+// Layout
+import MainLayout from "../layouts/MainLayout";
 
 // Assets
 import vManageLogo from "../assets/images/VManageLogo.png";
@@ -19,17 +20,10 @@ import vManageLogoSmall from "../assets/images/VLogo.png";
 import gvmLogo from "../assets/images/GVMLogo.png";
 
 export default function RoutesModule() {
-  const { usuario, setUsuario } = useAuth();
+  const { usuario, logout } = useAuth();
 
   // ✅ Por ahora seguimos usando estado para "activeSection" (luego lo cambiamos a useLocation)
   const [activeSection, setActiveSection] = useState("dashboard");
-  const [selectedBodega, setSelectedBodega] = useState("Todas las bodegas");
-
-  const handleLogout = () => {
-    localStorage.removeItem("usuario");
-    localStorage.removeItem("isAuthenticated");
-    setUsuario(null);
-  };
 
   return (
     <BrowserRouter>
@@ -51,11 +45,9 @@ export default function RoutesModule() {
             <ProtectedRoute>
               <MainLayout
                 currentUser={usuario}
-                onLogout={handleLogout}
+                onLogout={logout}
                 activeSection={activeSection}
                 setActiveSection={setActiveSection}
-                selectedBodega={selectedBodega}
-                setSelectedBodega={setSelectedBodega}
                 vManageLogo={vManageLogo}
                 vManageLogoSmall={vManageLogoSmall}
                 gvmLogo={gvmLogo}
@@ -63,8 +55,16 @@ export default function RoutesModule() {
             </ProtectedRoute>
           }
         >
-          {/* ✅ Rutas hijas dentro de /app */}
-          <Route path="*" element={<AppRoutes />} />
+          {/* ✅ Rutas hijas reales dentro de /app */}
+          <Route index element={<Dashboard />} />
+
+          {/* BODEGAS */}
+          <Route path="bodegas" element={<Bodegas />} />
+          <Route path="bodegas/crear" element={<Bodegas />} />
+          <Route path="bodegas/:id/editar" element={<Bodegas />} />
+
+          {/* fallback dentro de /app */}
+          <Route path="*" element={<Navigate to="/app" replace />} />
         </Route>
 
         {/* REDIRECCIONES */}

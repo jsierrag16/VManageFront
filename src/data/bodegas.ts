@@ -1,50 +1,45 @@
+// src/data/bodegas.ts
+
 export interface Bodega {
-  id: string;
-  codigo: string;
+  id: number;
   nombre: string;
+  departamento: string;
+  municipio: string;
   direccion: string;
-  ciudad: string;
-  responsable: string;
-  telefono: string;
-  capacidad: string;
-  descripcion?: string;
   estado: boolean;
 }
 
 export const bodegasData: Bodega[] = [
   {
-    id: 'BOD-001',
-    codigo: 'BOD-001',
-    nombre: 'Bodega Principal',
-    direccion: 'Calle 80 #45-23',
-    ciudad: 'Bogotá',
-    responsable: 'Carlos Rodríguez',
-    telefono: '601-234-5678',
-    capacidad: '1000 m²',
-    descripcion: 'Bodega principal para almacenamiento general',
+    id: 1,
+    nombre: "Bodega Principal",
+    departamento: "Cundinamarca",
+    municipio: "Bogotá D.C.",
+    direccion: "Calle 80 #45-23",
     estado: true,
   },
   {
-    id: 'BOD-002',
-    codigo: 'BOD-002',
-    nombre: 'Bodega Secundaria',
-    direccion: 'Carrera 15 #123-45',
-    ciudad: 'Bogotá',
-    responsable: 'María García',
-    telefono: '601-345-6789',
-    capacidad: '500 m²',
-    descripcion: 'Bodega para productos refrigerados',
+    id: 2,
+    nombre: "Bodega Secundaria",
+    departamento: "Cundinamarca",
+    municipio: "Soacha",
+    direccion: "Carrera 15 #123-45",
     estado: true,
   },
   {
-    id: 'BOD-003',
-    codigo: 'BOD-003',
-    nombre: 'Bodega Medellín',
-    direccion: 'Carrera 43A #12-34',
-    ciudad: 'Medellín',
-    responsable: 'Pedro López',
-    telefono: '604-567-8901',
-    capacidad: '800 m²',
+    id: 3,
+    nombre: "Bodega Medellín",
+    departamento: "Antioquia",
+    municipio: "Medellín",
+    direccion: "Carrera 43A #12-34",
     estado: true,
+  },
+  {
+    id: 4,
+    nombre: "Bodega Cali",
+    departamento: "Valle del Cauca",
+    municipio: "Cali",
+    direccion: "Calle 25 #100-45",
+    estado: false,
   },
 ];

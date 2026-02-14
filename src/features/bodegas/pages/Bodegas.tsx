@@ -1,7 +1,10 @@
-import { useState, useMemo, useEffect } from 'react';
-import { Search, Plus, Edit, Trash2, CheckCircle, Filter } from 'lucide-react';
-import { Button } from '../../../shared/components/ui/button';
-import { Input } from '../../../shared/components/ui/input';
+import { useEffect, useMemo, useState } from "react";
+import { useMatch, useNavigate, useParams } from "react-router-dom";
+import { Search, Plus, Edit, Trash2, CheckCircle, Filter } from "lucide-react";
+import { toast } from "sonner";
+
+import { Button } from "../../../shared/components/ui/button";
+import { Input } from "../../../shared/components/ui/input";
 import {
   Table,
   TableBody,
@@ -9,7 +12,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '../../../shared/components/ui/table';
+} from "../../../shared/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -17,212 +20,180 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from '../../../shared/components/ui/dialog';
-import { Label } from '../../../shared/components/ui/label';
+} from "../../../shared/components/ui/dialog";
+import { Label } from "../../../shared/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../../../shared/components/ui/select';
-import { toast } from 'sonner';
-import { departamentosColombia } from '../../../data/colombia';
+} from "../../../shared/components/ui/select";
 
-interface Bodega {
-  id: number;
-  nombre: string;
-  departamento: string;
-  municipio: string;
-  direccion: string;
-  estado: boolean;
-}
+import { departamentosColombia } from "../../../data/colombia";
 
-// Datos iniciales de bodegas
-const bodegasDataInitial: Bodega[] = [
-  {
-    id: 1,
-    nombre: 'Bodega Principal',
-    departamento: 'Cundinamarca',
-    municipio: 'Bogotá D.C.',
-    direccion: 'Calle 80 #45-23',
-    estado: true,
-  },
-  {
-    id: 2,
-    nombre: 'Bodega Secundaria',
-    departamento: 'Cundinamarca',
-    municipio: 'Soacha',
-    direccion: 'Carrera 15 #123-45',
-    estado: true,
-  },
-  {
-    id: 3,
-    nombre: 'Bodega Medellín',
-    departamento: 'Antioquia',
-    municipio: 'Medellín',
-    direccion: 'Carrera 43A #12-34',
-    estado: true,
-  },
-  {
-    id: 4,
-    nombre: 'Bodega Cali',
-    departamento: 'Valle del Cauca',
-    municipio: 'Cali',
-    direccion: 'Calle 25 #100-45',
-    estado: false,
-  },
-];
+// ✅ TIPOS + SERVICES (AJUSTA ESTA RUTA A TU PROYECTO)
+import type { Bodega } from "../../../data/bodegas";
+import {
+  getBodegas,
+  createBodega,
+  updateBodega,
+  deleteBodega,
+  toggleEstadoBodega,
+} from "../services/bodegas.services";
 
 interface BodegasProps {
   triggerCreate?: number;
 }
 
+type BodegaCreatePayload = Omit<Bodega, "id">;
+type BodegaUpdatePayload = Omit<Bodega, "id">;
+
 export default function Bodegas({ triggerCreate }: BodegasProps) {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [estadoFilter, setEstadoFilter] = useState<string>('todos');
-  const [bodegas, setBodegas] = useState<Bodega[]>(bodegasDataInitial);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
+  const navigate = useNavigate();
+
+  // ✅ rutas (modales por URL)
+  const isCreateRoute = !!useMatch("/app/bodegas/crear");
+  const isEditRoute = !!useMatch("/app/bodegas/:id/editar");
+  const params = useParams<{ id: string }>();
+  const editId = params.id ? Number(params.id) : null;
+
+  const goList = () => navigate("/app/bodegas");
+  const goCreate = () => navigate("/app/bodegas/crear");
+  const goEdit = (id: number) => navigate(`/app/bodegas/${id}/editar`);
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [estadoFilter, setEstadoFilter] = useState<string>("todos");
+
+  const [bodegas, setBodegas] = useState<Bodega[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Modales que NO dependen de URL (confirmaciones)
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
+
   const [selectedBodega, setSelectedBodega] = useState<Bodega | null>(null);
   const [bodegaParaCambioEstado, setBodegaParaCambioEstado] = useState<Bodega | null>(null);
 
-  // Form states
-  const [formNombre, setFormNombre] = useState('');
-  const [formDepartamento, setFormDepartamento] = useState('');
-  const [formMunicipio, setFormMunicipio] = useState('');
-  const [formDireccion, setFormDireccion] = useState('');
+  // Form
+  const [formNombre, setFormNombre] = useState("");
+  const [formDepartamento, setFormDepartamento] = useState("");
+  const [formMunicipio, setFormMunicipio] = useState("");
+  const [formDireccion, setFormDireccion] = useState("");
 
-  // Estados para validaciones en tiempo real
   const [errors, setErrors] = useState({
-    nombre: '',
-    departamento: '',
-    municipio: '',
-    direccion: ''
+    nombre: "",
+    departamento: "",
+    municipio: "",
+    direccion: "",
   });
+
   const [touched, setTouched] = useState({
     nombre: false,
     departamento: false,
     municipio: false,
-    direccion: false
+    direccion: false,
   });
 
-  // Funciones de validación individuales
+  // ✅ cargar bodegas
+  useEffect(() => {
+    (async () => {
+      try {
+        setIsLoading(true);
+        const data = await getBodegas();
+        setBodegas(data);
+      } catch {
+        toast.error("No se pudieron cargar las bodegas");
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, []);
+
+  // ✅ si usas triggerCreate
+  useEffect(() => {
+    if (!triggerCreate) return;
+    resetForm();
+    setSelectedBodega(null);
+    goCreate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [triggerCreate]);
+
+  // ✅ cuando entras a /editar por URL, cargamos el form con la bodega
+  useEffect(() => {
+    if (!isEditRoute) return;
+    if (!editId) return;
+
+    const b = bodegas.find((x) => x.id === editId);
+    if (!b) {
+      // Si refrescan la página o no existe, volvemos a lista
+      toast.error("Bodega no encontrada");
+      goList();
+      return;
+    }
+
+    setSelectedBodega(b);
+    setFormNombre(b.nombre);
+    setFormDepartamento(b.departamento);
+    setFormMunicipio(b.municipio);
+    setFormDireccion(b.direccion);
+    setErrors({ nombre: "", departamento: "", municipio: "", direccion: "" });
+    setTouched({ nombre: false, departamento: false, municipio: false, direccion: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditRoute, editId, bodegas]);
+
+  // ✅ si entras a /crear por URL, reseteamos
+  useEffect(() => {
+    if (!isCreateRoute) return;
+    resetForm();
+    setSelectedBodega(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCreateRoute]);
+
+  // Validaciones
   const validateNombre = (value: string) => {
-    if (!value.trim()) {
-      return 'El nombre de la bodega es requerido';
-    }
-    // Solo letras, números, espacios y guiones
+    if (!value.trim()) return "El nombre de la bodega es requerido";
     const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s\-]+$/;
-    if (!validPattern.test(value)) {
-      return 'Solo se permiten letras, números, espacios y guiones';
-    }
-    if (value.trim().length < 3) {
-      return 'Mínimo 3 caracteres';
-    }
-    if (value.trim().length > 100) {
-      return 'Máximo 100 caracteres';
-    }
-    return '';
+    if (!validPattern.test(value)) return "Solo se permiten letras, números, espacios y guiones";
+    if (value.trim().length < 3) return "Mínimo 3 caracteres";
+    if (value.trim().length > 100) return "Máximo 100 caracteres";
+    return "";
   };
 
-  const validateDepartamento = (value: string) => {
-    if (!value) {
-      return 'El departamento es requerido';
-    }
-    return '';
-  };
-
-  const validateMunicipio = (value: string) => {
-    if (!value) {
-      return 'El municipio es requerido';
-    }
-    return '';
-  };
+  const validateDepartamento = (value: string) => (!value ? "El departamento es requerido" : "");
+  const validateMunicipio = (value: string) => (!value ? "El municipio es requerido" : "");
 
   const validateDireccion = (value: string) => {
-    if (!value.trim()) {
-      return 'La dirección es requerida';
-    }
-    // Permitir letras, números, espacios, guiones, comas, puntos y #
+    if (!value.trim()) return "La dirección es requerida";
     const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s\-,#.]+$/;
-    if (!validPattern.test(value)) {
-      return 'Solo se permiten letras, números, espacios, guiones, comas, puntos y #';
-    }
-    if (value.trim().length < 5) {
-      return 'Mínimo 5 caracteres';
-    }
-    if (value.trim().length > 200) {
-      return 'Máximo 200 caracteres';
-    }
-    return '';
+    if (!validPattern.test(value)) return "Solo se permiten letras, números, espacios, guiones, comas, puntos y #";
+    if (value.trim().length < 5) return "Mínimo 5 caracteres";
+    if (value.trim().length > 200) return "Máximo 200 caracteres";
+    return "";
   };
 
-  // Handlers con validación en tiempo real
-  const handleNombreChange = (value: string) => {
-    setFormNombre(value);
-    if (touched.nombre) {
-      setErrors({ ...errors, nombre: validateNombre(value) });
-    }
+  const resetForm = () => {
+    setFormNombre("");
+    setFormDepartamento("");
+    setFormMunicipio("");
+    setFormDireccion("");
+    setErrors({ nombre: "", departamento: "", municipio: "", direccion: "" });
+    setTouched({ nombre: false, departamento: false, municipio: false, direccion: false });
   };
 
-  const handleDepartamentoChange = (value: string) => {
-    setFormDepartamento(value);
-    if (touched.departamento) {
-      setErrors({ ...errors, departamento: validateDepartamento(value) });
-    }
-  };
-
-  const handleMunicipioChange = (value: string) => {
-    setFormMunicipio(value);
-    if (touched.municipio) {
-      setErrors({ ...errors, municipio: validateMunicipio(value) });
-    }
-  };
-
-  const handleDireccionChange = (value: string) => {
-    setFormDireccion(value);
-    if (touched.direccion) {
-      setErrors({ ...errors, direccion: validateDireccion(value) });
-    }
-  };
-
-  // Handlers onBlur
-  const handleNombreBlur = () => {
-    setTouched({ ...touched, nombre: true });
-    setErrors({ ...errors, nombre: validateNombre(formNombre) });
-  };
-
-  const handleDepartamentoBlur = () => {
-    setTouched({ ...touched, departamento: true });
-    setErrors({ ...errors, departamento: validateDepartamento(formDepartamento) });
-  };
-
-  const handleMunicipioBlur = () => {
-    setTouched({ ...touched, municipio: true });
-    setErrors({ ...errors, municipio: validateMunicipio(formMunicipio) });
-  };
-
-  const handleDireccionBlur = () => {
-    setTouched({ ...touched, direccion: true });
-    setErrors({ ...errors, direccion: validateDireccion(formDireccion) });
-  };
-
-  // Obtener municipios del departamento seleccionado
+  // Municipios segun depto
   const municipiosDisponibles = useMemo(() => {
-    const dept = departamentosColombia.find(d => d.nombre === formDepartamento);
+    const dept = departamentosColombia.find((d) => d.nombre === formDepartamento);
     return dept ? dept.municipios : [];
   }, [formDepartamento]);
 
-  // Resetear municipio cuando cambia el departamento
+  // Reset municipio cuando cambia depto
   useEffect(() => {
-    setFormMunicipio('');
+    setFormMunicipio("");
   }, [formDepartamento]);
 
-  // Filtrar bodegas
+  // Filtrado
   const filteredBodegas = useMemo(() => {
     return bodegas.filter((bodega) => {
       const searchLower = searchTerm.toLowerCase();
@@ -231,94 +202,53 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
         bodega.departamento.toLowerCase().includes(searchLower) ||
         bodega.municipio.toLowerCase().includes(searchLower) ||
         bodega.direccion.toLowerCase().includes(searchLower);
-      
-      // Filtrar por estado
+
       let matchesEstado = true;
-      if (estadoFilter === 'activas') {
-        matchesEstado = bodega.estado === true;
-      } else if (estadoFilter === 'inactivas') {
-        matchesEstado = bodega.estado === false;
-      }
-      // Si es "todos", no filtramos por estado
-      
+      if (estadoFilter === "activas") matchesEstado = bodega.estado === true;
+      else if (estadoFilter === "inactivas") matchesEstado = bodega.estado === false;
+
       return matchesSearch && matchesEstado;
     });
   }, [bodegas, searchTerm, estadoFilter]);
 
-  const handleCreate = () => {
-    setFormNombre('');
-    setFormDepartamento('');
-    setFormMunicipio('');
-    setFormDireccion('');
-    setErrors({
-      nombre: '',
-      departamento: '',
-      municipio: '',
-      direccion: ''
-    });
-    setTouched({
-      nombre: false,
-      departamento: false,
-      municipio: false,
-      direccion: false
-    });
-    setShowCreateModal(true);
+  // Handlers form con validación
+  const handleNombreChange = (value: string) => {
+    setFormNombre(value);
+    if (touched.nombre) setErrors((prev) => ({ ...prev, nombre: validateNombre(value) }));
+  };
+  const handleDepartamentoChange = (value: string) => {
+    setFormDepartamento(value);
+    if (touched.departamento) setErrors((prev) => ({ ...prev, departamento: validateDepartamento(value) }));
+  };
+  const handleMunicipioChange = (value: string) => {
+    setFormMunicipio(value);
+    if (touched.municipio) setErrors((prev) => ({ ...prev, municipio: validateMunicipio(value) }));
+  };
+  const handleDireccionChange = (value: string) => {
+    setFormDireccion(value);
+    if (touched.direccion) setErrors((prev) => ({ ...prev, direccion: validateDireccion(value) }));
   };
 
-  const handleEdit = (bodega: Bodega) => {
-    setSelectedBodega(bodega);
-    setFormNombre(bodega.nombre);
-    setFormDepartamento(bodega.departamento);
-    setFormMunicipio(bodega.municipio);
-    setFormDireccion(bodega.direccion);
-    setErrors({
-      nombre: '',
-      departamento: '',
-      municipio: '',
-      direccion: ''
-    });
-    setTouched({
-      nombre: false,
-      departamento: false,
-      municipio: false,
-      direccion: false
-    });
-    setShowEditModal(true);
+  const handleNombreBlur = () => {
+    setTouched((prev) => ({ ...prev, nombre: true }));
+    setErrors((prev) => ({ ...prev, nombre: validateNombre(formNombre) }));
   };
-
-  const handleDelete = (bodega: Bodega) => {
-    setSelectedBodega(bodega);
-    setShowDeleteModal(true);
+  const handleDepartamentoBlur = () => {
+    setTouched((prev) => ({ ...prev, departamento: true }));
+    setErrors((prev) => ({ ...prev, departamento: validateDepartamento(formDepartamento) }));
   };
-
-  const toggleEstado = (bodega: Bodega) => {
-    setBodegaParaCambioEstado(bodega);
-    setShowConfirmEstadoModal(true);
+  const handleMunicipioBlur = () => {
+    setTouched((prev) => ({ ...prev, municipio: true }));
+    setErrors((prev) => ({ ...prev, municipio: validateMunicipio(formMunicipio) }));
   };
-
-  const handleConfirmEstado = () => {
-    if (bodegaParaCambioEstado) {
-      setBodegas(
-        bodegas.map((b) =>
-          b.id === bodegaParaCambioEstado.id ? { ...b, estado: !b.estado } : b
-        )
-      );
-      toast.success(`Bodega ${!bodegaParaCambioEstado.estado ? 'activada' : 'desactivada'} exitosamente`);
-      setShowConfirmEstadoModal(false);
-      setBodegaParaCambioEstado(null);
-    }
+  const handleDireccionBlur = () => {
+    setTouched((prev) => ({ ...prev, direccion: true }));
+    setErrors((prev) => ({ ...prev, direccion: validateDireccion(formDireccion) }));
   };
 
   const validateForm = () => {
-    // Marcar todos los campos como tocados
-    setTouched({
-      nombre: true,
-      departamento: true,
-      municipio: true,
-      direccion: true
-    });
+    setTouched({ nombre: true, departamento: true, municipio: true, direccion: true });
 
-    // Validar con las funciones individuales
     const nombreError = validateNombre(formNombre);
     const departamentoError = validateDepartamento(formDepartamento);
     const municipioError = validateMunicipio(formMunicipio);
@@ -328,63 +258,113 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
       nombre: nombreError,
       departamento: departamentoError,
       municipio: municipioError,
-      direccion: direccionError
+      direccion: direccionError,
     });
 
-    // Si hay algún error, no permitir continuar
     if (nombreError || departamentoError || municipioError || direccionError) {
-      toast.error('Por favor corrige los errores en el formulario');
+      toast.error("Por favor corrige los errores en el formulario");
       return false;
     }
 
     return true;
   };
 
-  const confirmCreate = () => {
+  // ✅ acciones UI -> rutas
+  const onClickCreate = () => {
+    resetForm();
+    setSelectedBodega(null);
+    goCreate();
+  };
+
+  const onClickEdit = (bodega: Bodega) => {
+    goEdit(bodega.id);
+  };
+
+  const onClickDelete = (bodega: Bodega) => {
+    setSelectedBodega(bodega);
+    setShowDeleteModal(true);
+  };
+
+  const onClickToggleEstado = (bodega: Bodega) => {
+    setBodegaParaCambioEstado(bodega);
+    setShowConfirmEstadoModal(true);
+  };
+
+  // Services
+  const confirmCreate = async () => {
     if (!validateForm()) return;
 
-    const newBodega: Bodega = {
-      id: Math.max(...bodegas.map((b) => b.id), 0) + 1,
-      nombre: formNombre.trim(),
-      departamento: formDepartamento,
-      municipio: formMunicipio,
-      direccion: formDireccion.trim(),
-      estado: true,
-    };
+    try {
+      const payload: BodegaCreatePayload = {
+        nombre: formNombre.trim(),
+        departamento: formDepartamento,
+        municipio: formMunicipio,
+        direccion: formDireccion.trim(),
+        estado: true,
+      };
 
-    setBodegas([...bodegas, newBodega]);
-    setShowCreateModal(false);
-    setShowSuccessModal(true);
+      const created = await createBodega(payload);
+      setBodegas((prev) => [created, ...prev]);
+
+      setShowSuccessModal(true);
+      goList();
+    } catch {
+      toast.error("No se pudo crear la bodega");
+    }
   };
 
-  const confirmEdit = () => {
-    if (!selectedBodega || !validateForm()) return;
+  const confirmEdit = async () => {
+    if (!selectedBodega) {
+      toast.error("No hay bodega seleccionada para editar");
+      return;
+    }
+    if (!validateForm()) return;
 
-    setBodegas(
-      bodegas.map((b) =>
-        b.id === selectedBodega.id
-          ? {
-              ...b,
-              nombre: formNombre.trim(),
-              departamento: formDepartamento,
-              municipio: formMunicipio,
-              direccion: formDireccion.trim(),
-            }
-          : b
-      )
-    );
-    setShowEditModal(false);
-    toast.success('Bodega actualizada exitosamente');
+    try {
+      const payload: BodegaUpdatePayload = {
+        nombre: formNombre.trim(),
+        departamento: formDepartamento,
+        municipio: formMunicipio,
+        direccion: formDireccion.trim(),
+        estado: selectedBodega.estado,
+      };
+
+      const updated = await updateBodega(selectedBodega.id, payload);
+      setBodegas((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+
+      toast.success("Bodega actualizada exitosamente");
+      goList();
+    } catch {
+      toast.error("No se pudo actualizar la bodega");
+    }
   };
 
-  const confirmDelete = () => {
-    setBodegas(bodegas.filter((b) => b.id !== selectedBodega?.id));
-    setShowDeleteModal(false);
-    toast.success('Bodega eliminada exitosamente');
+  const confirmDelete = async () => {
+    if (!selectedBodega) return;
+
+    try {
+      await deleteBodega(selectedBodega.id);
+      setBodegas((prev) => prev.filter((b) => b.id !== selectedBodega.id));
+      setShowDeleteModal(false);
+      toast.success("Bodega eliminada exitosamente");
+    } catch {
+      toast.error("No se pudo eliminar la bodega");
+    }
   };
 
-  const handleSuccessModalClose = () => {
-    setShowSuccessModal(false);
+  const confirmToggleEstado = async () => {
+    if (!bodegaParaCambioEstado) return;
+
+    try {
+      const updated = await toggleEstadoBodega(bodegaParaCambioEstado.id);
+      setBodegas((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+
+      toast.success(`Bodega ${updated.estado ? "activada" : "desactivada"} exitosamente`);
+      setShowConfirmEstadoModal(false);
+      setBodegaParaCambioEstado(null);
+    } catch {
+      toast.error("No se pudo cambiar el estado");
+    }
   };
 
   return (
@@ -392,12 +372,10 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
       {/* Header */}
       <div>
         <h2 className="text-gray-900">Gestión de Bodegas</h2>
-        <p className="text-gray-600 mt-1">
-          Administra las bodegas y centros de almacenamiento
-        </p>
+        <p className="text-gray-600 mt-1">Administra las bodegas y centros de almacenamiento</p>
       </div>
 
-      {/* Search Bar and Action Buttons */}
+      {/* Search + filtros + botón */}
       <div className="flex items-center gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
@@ -408,55 +386,43 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
             className="pl-10"
           />
         </div>
-        
-        {/* Filtro de Estado */}
+
+        {/* Filtro Estado */}
         <div className="flex items-center gap-2 border border-gray-300 rounded-lg p-1 bg-gray-50">
           <Filter size={16} className="text-gray-500 ml-2" />
           <Button
             size="sm"
-            variant={estadoFilter === 'todos' ? 'default' : 'ghost'}
-            onClick={() => setEstadoFilter('todos')}
-            className={`h-8 ${
-              estadoFilter === 'todos'
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'hover:bg-gray-200'
-            }`}
+            variant={estadoFilter === "todos" ? "default" : "ghost"}
+            onClick={() => setEstadoFilter("todos")}
+            className={`h-8 ${estadoFilter === "todos" ? "bg-blue-600 text-white hover:bg-blue-700" : "hover:bg-gray-200"}`}
           >
             Todas
           </Button>
           <Button
             size="sm"
-            variant={estadoFilter === 'activas' ? 'default' : 'ghost'}
-            onClick={() => setEstadoFilter('activas')}
-            className={`h-8 ${
-              estadoFilter === 'activas'
-                ? 'bg-green-600 text-white hover:bg-green-700'
-                : 'hover:bg-gray-200'
-            }`}
+            variant={estadoFilter === "activas" ? "default" : "ghost"}
+            onClick={() => setEstadoFilter("activas")}
+            className={`h-8 ${estadoFilter === "activas" ? "bg-green-600 text-white hover:bg-green-700" : "hover:bg-gray-200"}`}
           >
             Activas
           </Button>
           <Button
             size="sm"
-            variant={estadoFilter === 'inactivas' ? 'default' : 'ghost'}
-            onClick={() => setEstadoFilter('inactivas')}
-            className={`h-8 ${
-              estadoFilter === 'inactivas'
-                ? 'bg-red-600 text-white hover:bg-red-700'
-                : 'hover:bg-gray-200'
-            }`}
+            variant={estadoFilter === "inactivas" ? "default" : "ghost"}
+            onClick={() => setEstadoFilter("inactivas")}
+            className={`h-8 ${estadoFilter === "inactivas" ? "bg-red-600 text-white hover:bg-red-700" : "hover:bg-gray-200"}`}
           >
             Inactivas
           </Button>
         </div>
 
-        <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
+        <Button onClick={onClickCreate} className="bg-blue-600 hover:bg-blue-700" disabled={isLoading}>
           <Plus size={18} className="mr-2" />
           Nueva Bodega
         </Button>
       </div>
 
-      {/* Table */}
+      {/* Tabla */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <Table>
@@ -469,8 +435,15 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                 <TableHead className="text-right w-32">Acciones</TableHead>
               </TableRow>
             </TableHeader>
+
             <TableBody>
-              {filteredBodegas.length === 0 ? (
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-10 text-gray-500">
+                    Cargando bodegas...
+                  </TableCell>
+                </TableRow>
+              ) : filteredBodegas.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-8 text-gray-500">
                     No se encontraron bodegas
@@ -488,14 +461,14 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => toggleEstado(bodega)}
+                        onClick={() => onClickToggleEstado(bodega)}
                         className={
                           bodega.estado
-                            ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                            : 'bg-red-100 text-red-800 hover:bg-red-200'
+                            ? "bg-green-100 text-green-800 hover:bg-green-200"
+                            : "bg-red-100 text-red-800 hover:bg-red-200"
                         }
                       >
-                        {bodega.estado ? 'Activa' : 'Inactiva'}
+                        {bodega.estado ? "Activa" : "Inactiva"}
                       </Button>
                     </TableCell>
                     <TableCell>
@@ -503,7 +476,7 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => handleEdit(bodega)}
+                          onClick={() => onClickEdit(bodega)}
                           className="h-8 w-8 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
                           title="Editar"
                         >
@@ -512,7 +485,7 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => handleDelete(bodega)}
+                          onClick={() => onClickDelete(bodega)}
                           className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
                           title="Eliminar"
                         >
@@ -528,18 +501,19 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
         </div>
       </div>
 
-      {/* Modal Crear Bodega */}
-      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent 
-          className="max-w-2xl max-h-[90vh] overflow-y-auto" 
-          onInteractOutside={(e) => e.preventDefault()}
-        >
+      {/* ✅ MODAL CREAR (por ruta) */}
+      <Dialog
+        open={isCreateRoute}
+        onOpenChange={(open:boolean) => {
+          if (!open) goList();
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" onInteractOutside={(e: Event) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle>Crear Nueva Bodega</DialogTitle>
-            <DialogDescription>
-              Completa la información para registrar una nueva bodega en el sistema
-            </DialogDescription>
+            <DialogDescription>Completa la información para registrar una nueva bodega en el sistema</DialogDescription>
           </DialogHeader>
+
           <div className="space-y-4">
             <div>
               <Label htmlFor="create-nombre">Nombre de la Bodega *</Label>
@@ -549,15 +523,23 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                 onChange={(e) => handleNombreChange(e.target.value)}
                 onBlur={handleNombreBlur}
                 placeholder="Ej: Bodega Principal"
-                className={errors.nombre ? 'border-red-500' : ''}
+                className={errors.nombre ? "border-red-500" : ""}
               />
               {errors.nombre && <p className="text-red-500 text-sm mt-1">{errors.nombre}</p>}
             </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="create-departamento">Departamento *</Label>
-                <Select value={formDepartamento} onValueChange={handleDepartamentoChange} onOpenChange={(open) => !open && handleDepartamentoBlur()}>
-                  <SelectTrigger id="create-departamento" className={errors.departamento && touched.departamento ? "border-red-500" : ""}>
+                <Select
+                  value={formDepartamento}
+                  onValueChange={handleDepartamentoChange}
+                  onOpenChange={(open: boolean) => !open && handleDepartamentoBlur()}
+                >
+                  <SelectTrigger
+                    id="create-departamento"
+                    className={errors.departamento && touched.departamento ? "border-red-500" : ""}
+                  >
                     <SelectValue placeholder="Selecciona un departamento" />
                   </SelectTrigger>
                   <SelectContent>
@@ -568,19 +550,21 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                     ))}
                   </SelectContent>
                 </Select>
-                {errors.departamento && touched.departamento && (
-                  <p className="text-red-500 text-sm mt-1">{errors.departamento}</p>
-                )}
+                {errors.departamento && touched.departamento && <p className="text-red-500 text-sm mt-1">{errors.departamento}</p>}
               </div>
+
               <div>
                 <Label htmlFor="create-municipio">Municipio *</Label>
-                <Select 
-                  value={formMunicipio} 
+                <Select
+                  value={formMunicipio}
                   onValueChange={handleMunicipioChange}
-                  onOpenChange={(open) => !open && handleMunicipioBlur()}
+                  onOpenChange={(open: boolean) => !open && handleMunicipioBlur()}
                   disabled={!formDepartamento}
                 >
-                  <SelectTrigger id="create-municipio" className={errors.municipio && touched.municipio ? "border-red-500" : ""}>
+                  <SelectTrigger
+                    id="create-municipio"
+                    className={errors.municipio && touched.municipio ? "border-red-500" : ""}
+                  >
                     <SelectValue placeholder="Selecciona un municipio" />
                   </SelectTrigger>
                   <SelectContent>
@@ -591,11 +575,10 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                     ))}
                   </SelectContent>
                 </Select>
-                {errors.municipio && touched.municipio && (
-                  <p className="text-red-500 text-sm mt-1">{errors.municipio}</p>
-                )}
+                {errors.municipio && touched.municipio && <p className="text-red-500 text-sm mt-1">{errors.municipio}</p>}
               </div>
             </div>
+
             <div>
               <Label htmlFor="create-direccion">Dirección *</Label>
               <Input
@@ -604,13 +587,14 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                 onChange={(e) => handleDireccionChange(e.target.value)}
                 onBlur={handleDireccionBlur}
                 placeholder="Ej: Calle 80 #45-23"
-                className={errors.direccion ? 'border-red-500' : ''}
+                className={errors.direccion ? "border-red-500" : ""}
               />
               {errors.direccion && <p className="text-red-500 text-sm mt-1">{errors.direccion}</p>}
             </div>
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateModal(false)}>
+            <Button variant="outline" onClick={goList}>
               Cancelar
             </Button>
             <Button onClick={confirmCreate} className="bg-blue-600 hover:bg-blue-700">
@@ -620,18 +604,19 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Editar Bodega */}
-      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent 
-          className="max-w-2xl max-h-[90vh] overflow-y-auto" 
-          onInteractOutside={(e) => e.preventDefault()}
-        >
+      {/* ✅ MODAL EDITAR (por ruta) */}
+      <Dialog
+        open={isEditRoute}
+        onOpenChange={(open: boolean) => {
+          if (!open) goList();
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" onInteractOutside={(e : Event) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle>Editar Bodega</DialogTitle>
-            <DialogDescription>
-              Modifica la información de la bodega
-            </DialogDescription>
+            <DialogDescription>Modifica la información de la bodega</DialogDescription>
           </DialogHeader>
+
           <div className="space-y-4">
             <div>
               <Label htmlFor="edit-nombre">Nombre de la Bodega *</Label>
@@ -641,15 +626,23 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                 onChange={(e) => handleNombreChange(e.target.value)}
                 onBlur={handleNombreBlur}
                 placeholder="Ej: Bodega Principal"
-                className={errors.nombre ? 'border-red-500' : ''}
+                className={errors.nombre ? "border-red-500" : ""}
               />
               {errors.nombre && <p className="text-red-500 text-sm mt-1">{errors.nombre}</p>}
             </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="edit-departamento">Departamento *</Label>
-                <Select value={formDepartamento} onValueChange={handleDepartamentoChange} onOpenChange={(open) => !open && handleDepartamentoBlur()}>
-                  <SelectTrigger id="edit-departamento" className={errors.departamento && touched.departamento ? "border-red-500" : ""}>
+                <Select
+                  value={formDepartamento}
+                  onValueChange={handleDepartamentoChange}
+                  onOpenChange={(open: boolean) => !open && handleDepartamentoBlur()}
+                >
+                  <SelectTrigger
+                    id="edit-departamento"
+                    className={errors.departamento && touched.departamento ? "border-red-500" : ""}
+                  >
                     <SelectValue placeholder="Selecciona un departamento" />
                   </SelectTrigger>
                   <SelectContent>
@@ -660,19 +653,21 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                     ))}
                   </SelectContent>
                 </Select>
-                {errors.departamento && touched.departamento && (
-                  <p className="text-red-500 text-sm mt-1">{errors.departamento}</p>
-                )}
+                {errors.departamento && touched.departamento && <p className="text-red-500 text-sm mt-1">{errors.departamento}</p>}
               </div>
+
               <div>
                 <Label htmlFor="edit-municipio">Municipio *</Label>
-                <Select 
-                  value={formMunicipio} 
+                <Select
+                  value={formMunicipio}
                   onValueChange={handleMunicipioChange}
-                  onOpenChange={(open) => !open && handleMunicipioBlur()}
+                  onOpenChange={(open: boolean) => !open && handleMunicipioBlur()}
                   disabled={!formDepartamento}
                 >
-                  <SelectTrigger id="edit-municipio" className={errors.municipio && touched.municipio ? "border-red-500" : ""}>
+                  <SelectTrigger
+                    id="edit-municipio"
+                    className={errors.municipio && touched.municipio ? "border-red-500" : ""}
+                  >
                     <SelectValue placeholder="Selecciona un municipio" />
                   </SelectTrigger>
                   <SelectContent>
@@ -683,11 +678,10 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                     ))}
                   </SelectContent>
                 </Select>
-                {errors.municipio && touched.municipio && (
-                  <p className="text-red-500 text-sm mt-1">{errors.municipio}</p>
-                )}
+                {errors.municipio && touched.municipio && <p className="text-red-500 text-sm mt-1">{errors.municipio}</p>}
               </div>
             </div>
+
             <div>
               <Label htmlFor="edit-direccion">Dirección *</Label>
               <Input
@@ -696,13 +690,14 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                 onChange={(e) => handleDireccionChange(e.target.value)}
                 onBlur={handleDireccionBlur}
                 placeholder="Ej: Calle 80 #45-23"
-                className={errors.direccion ? 'border-red-500' : ''}
+                className={errors.direccion ? "border-red-500" : ""}
               />
               {errors.direccion && <p className="text-red-500 text-sm mt-1">{errors.direccion}</p>}
             </div>
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEditModal(false)}>
+            <Button variant="outline" onClick={goList}>
               Cancelar
             </Button>
             <Button onClick={confirmEdit} className="bg-orange-600 hover:bg-orange-700">
@@ -712,15 +707,14 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Eliminar Bodega */}
+      {/* MODAL ELIMINAR */}
       <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Eliminar Bodega</DialogTitle>
-            <DialogDescription>
-              ¿Estás seguro de que deseas eliminar esta bodega? Esta acción no se puede deshacer.
-            </DialogDescription>
+            <DialogDescription>¿Estás seguro de que deseas eliminar esta bodega? Esta acción no se puede deshacer.</DialogDescription>
           </DialogHeader>
+
           {selectedBodega && (
             <div className="py-4">
               <p className="text-gray-700">
@@ -731,6 +725,7 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
               </p>
             </div>
           )}
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDeleteModal(false)}>
               Cancelar
@@ -742,15 +737,14 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Confirmación Cambio de Estado */}
+      {/* MODAL CONFIRMAR ESTADO */}
       <Dialog open={showConfirmEstadoModal} onOpenChange={setShowConfirmEstadoModal}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Confirmar Cambio de Estado</DialogTitle>
-            <DialogDescription>
-              ¿Estás seguro de que deseas cambiar el estado de esta bodega?
-            </DialogDescription>
+            <DialogDescription>¿Estás seguro de que deseas cambiar el estado de esta bodega?</DialogDescription>
           </DialogHeader>
+
           <div className="space-y-3 py-4">
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Bodega:</span>
@@ -758,48 +752,48 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Estado Actual:</span>
-              <span className={`font-medium ${bodegaParaCambioEstado?.estado ? 'text-green-700' : 'text-red-700'}`}>
-                {bodegaParaCambioEstado?.estado ? 'Activa' : 'Inactiva'}
+              <span className={`font-medium ${bodegaParaCambioEstado?.estado ? "text-green-700" : "text-red-700"}`}>
+                {bodegaParaCambioEstado?.estado ? "Activa" : "Inactiva"}
               </span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Nuevo Estado:</span>
-              <span className={`font-medium ${!bodegaParaCambioEstado?.estado ? 'text-green-700' : 'text-red-700'}`}>
-                {!bodegaParaCambioEstado?.estado ? 'Activa' : 'Inactiva'}
+              <span className={`font-medium ${!bodegaParaCambioEstado?.estado ? "text-green-700" : "text-red-700"}`}>
+                {!bodegaParaCambioEstado?.estado ? "Activa" : "Inactiva"}
               </span>
             </div>
           </div>
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowConfirmEstadoModal(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleConfirmEstado} className="bg-blue-600 hover:bg-blue-700">
+            <Button onClick={confirmToggleEstado} className="bg-blue-600 hover:bg-blue-700">
               Confirmar
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Éxito */}
+      {/* MODAL ÉXITO */}
       <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="sr-only">Registro Exitoso</DialogTitle>
-            <DialogDescription className="sr-only">
-              La bodega se ha registrado correctamente
-            </DialogDescription>
+            <DialogDescription className="sr-only">La bodega se ha registrado correctamente</DialogDescription>
+
             <div className="flex justify-center mb-4">
               <div className="rounded-full bg-green-100 p-3">
                 <CheckCircle className="h-12 w-12 text-green-600" />
               </div>
             </div>
+
             <DialogTitle className="text-center">¡Registro Exitoso!</DialogTitle>
-            <DialogDescription className="text-center">
-              La bodega ha sido creada correctamente en el sistema
-            </DialogDescription>
+            <DialogDescription className="text-center">La bodega ha sido creada correctamente en el sistema</DialogDescription>
           </DialogHeader>
+
           <DialogFooter className="flex justify-center">
-            <Button onClick={handleSuccessModalClose} className="bg-green-600 hover:bg-green-700">
+            <Button onClick={() => setShowSuccessModal(false)} className="bg-green-600 hover:bg-green-700">
               Aceptar
             </Button>
           </DialogFooter>

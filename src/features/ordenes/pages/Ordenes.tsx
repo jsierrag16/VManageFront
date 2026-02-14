@@ -26,7 +26,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { toast } from 'sonner';
 import { clientesData as initialClientesData, Cliente } from '../../../data/clientes';
 import { productosData, Producto } from '../../../data/productos';
-import { bodegasData, Bodega } from '../../../data/bodegas';
+import { bodegasData } from '../../../data/bodegas';
 import { cotizacionesData } from '../../cotizaciones/pages/Cotizaciones';
 
 interface Orden {

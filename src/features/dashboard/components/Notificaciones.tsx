@@ -1,87 +1,94 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Bell, AlertTriangle, Package, Clock, Truck, CheckCircle } from 'lucide-react';
-import { Button } from '../../../shared/components/ui/button';
+import { useState, useEffect, useMemo } from "react";
+import { Bell, AlertTriangle, Package, Clock, Truck, CheckCircle } from "lucide-react";
+import { Button } from "../../../shared/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription
-} from '../../../shared/components/ui/dialog';
-import { Badge } from '../../../shared/components/ui/badge';
-import { ScrollArea } from '../../../shared/components/ui/scroll-area';
-import { toast } from 'sonner';
-import { Traslado } from '../../../data/traslados';
-import { Producto } from '../../../data/productos';
+  DialogDescription,
+} from "../../../shared/components/ui/dialog";
+import { Badge } from "../../../shared/components/ui/badge";
+import { ScrollArea } from "../../../shared/components/ui/scroll-area";
+import { toast } from "sonner";
+import { Traslado } from "../../../data/traslados";
+import { Producto } from "../../../data/productos";
+import { useAuth } from "../../../shared/context/AuthContext";
+import { bodegasData } from "../../../data/bodegas";
 
 interface NotificacionesProps {
   traslados: Traslado[];
   productos: Producto[];
-  selectedBodega: string;
   onNavigateToTraslados?: () => void;
   onNavigateToExistencias?: () => void;
 }
 
 export interface Notificacion {
   id: string;
-  tipo: 'traslado' | 'vencimiento' | 'stockBajo';
+  tipo: "traslado" | "vencimiento" | "stockBajo";
   titulo: string;
   descripcion: string;
   fecha: string;
-  prioridad: 'alta' | 'media' | 'baja';
+  prioridad: "alta" | "media" | "baja";
   leida: boolean;
   datos?: any;
 }
 
-export default function Notificaciones({ 
-  traslados, 
-  productos, 
-  selectedBodega,
+export default function Notificaciones({
+  traslados,
+  productos,
   onNavigateToTraslados,
-  onNavigateToExistencias 
+  onNavigateToExistencias,
 }: NotificacionesProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
 
-  // Generar notificaciones basadas en los datos
+  const { selectedBodegaId } = useAuth();
+
+  const selectedBodegaNombre =
+    selectedBodegaId === 0
+      ? "Todas las bodegas"
+      : bodegasData.find((b) => b.id === selectedBodegaId)?.nombre ?? "Todas las bodegas";
+
   const generarNotificaciones = useMemo(() => {
     const notifs: Notificacion[] = [];
     const hoy = new Date();
-    const treintaDias = new Date();
-    treintaDias.setDate(hoy.getDate() + 30);
 
-    // Filtrar por bodega si no es "Todas las bodegas"
-    const trasladosFiltrados = selectedBodega === 'Todas las bodegas' 
-      ? traslados 
-      : traslados.filter(t => 
-          t.bodegaOrigen === selectedBodega || t.bodegaDestino === selectedBodega
-        );
+    // 1) Traslados filtrados por bodega (si NO es "Todas")
+    const trasladosFiltrados =
+      selectedBodegaNombre === "Todas las bodegas"
+        ? traslados
+        : traslados.filter(
+            (t) =>
+              t.bodegaOrigen === selectedBodegaNombre ||
+              t.bodegaDestino === selectedBodegaNombre
+          );
 
     // 1. Notificaciones de traslados pendientes (estado Enviado)
     trasladosFiltrados
-      .filter(t => t.estado === 'Enviado')
-      .forEach(traslado => {
+      .filter((t) => t.estado === "Enviado")
+      .forEach((traslado) => {
         const diasTranscurridos = Math.floor(
           (hoy.getTime() - new Date(traslado.fecha).getTime()) / (1000 * 60 * 60 * 24)
         );
-        
+
         notifs.push({
           id: `traslado-${traslado.id}`,
-          tipo: 'traslado',
+          tipo: "traslado",
           titulo: `Traslado pendiente: ${traslado.codigo}`,
           descripcion: `De ${traslado.bodegaOrigen} a ${traslado.bodegaDestino} - ${traslado.items.length} productos - ${diasTranscurridos} día(s) en tránsito`,
           fecha: traslado.fecha,
-          prioridad: diasTranscurridos > 3 ? 'alta' : diasTranscurridos > 1 ? 'media' : 'baja',
+          prioridad: diasTranscurridos > 3 ? "alta" : diasTranscurridos > 1 ? "media" : "baja",
           leida: false,
-          datos: traslado
+          datos: traslado,
         });
       });
 
-    // 2. Notificaciones de productos próximos a vencer (próximos 30 días)
-    productos.forEach(producto => {
-      producto.lotes.forEach(lote => {
-        // Filtrar por bodega si no es "Todas las bodegas"
-        if (selectedBodega !== 'Todas las bodegas' && lote.bodega !== selectedBodega) {
+    // 2. Productos próximos a vencer (próximos 30 días)
+    productos.forEach((producto) => {
+      producto.lotes.forEach((lote) => {
+        // Filtrar por bodega si NO es "Todas"
+        if (selectedBodegaNombre !== "Todas las bodegas" && lote.bodega !== selectedBodegaNombre) {
           return;
         }
 
@@ -89,49 +96,46 @@ export default function Notificaciones({
         const diasParaVencer = Math.floor(
           (fechaVencimiento.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24)
         );
-        
+
         if (diasParaVencer >= 0 && diasParaVencer <= 30 && lote.cantidadDisponible > 0) {
           notifs.push({
             id: `vencimiento-${lote.id}`,
-            tipo: 'vencimiento',
+            tipo: "vencimiento",
             titulo: `Producto próximo a vencer: ${producto.nombre}`,
             descripcion: `Lote ${lote.numeroLote} - ${lote.cantidadDisponible} unidades - Vence en ${diasParaVencer} día(s) - ${lote.bodega}`,
             fecha: lote.fechaVencimiento,
-            prioridad: diasParaVencer <= 7 ? 'alta' : diasParaVencer <= 15 ? 'media' : 'baja',
+            prioridad: diasParaVencer <= 7 ? "alta" : diasParaVencer <= 15 ? "media" : "baja",
             leida: false,
-            datos: { producto, lote }
+            datos: { producto, lote },
           });
         }
       });
     });
 
-    // 3. Notificaciones de stock bajo (menos de 50 unidades por bodega)
-    productos.forEach(producto => {
-      // Agrupar stock por bodega
-      const stockPorBodega: { [key: string]: number } = {};
-      producto.lotes.forEach(lote => {
-        if (!stockPorBodega[lote.bodega]) {
-          stockPorBodega[lote.bodega] = 0;
-        }
-        stockPorBodega[lote.bodega] += lote.cantidadDisponible;
+    // 3. Stock bajo (menos de 50 unidades por bodega)
+    productos.forEach((producto) => {
+      const stockPorBodega: Record<string, number> = {};
+
+      producto.lotes.forEach((lote) => {
+        stockPorBodega[lote.bodega] = (stockPorBodega[lote.bodega] ?? 0) + lote.cantidadDisponible;
       });
 
       Object.entries(stockPorBodega).forEach(([bodega, stock]) => {
-        // Filtrar por bodega si no es "Todas las bodegas"
-        if (selectedBodega !== 'Todas las bodegas' && bodega !== selectedBodega) {
+        // Filtrar por bodega si NO es "Todas"
+        if (selectedBodegaNombre !== "Todas las bodegas" && bodega !== selectedBodegaNombre) {
           return;
         }
 
         if (stock > 0 && stock < 50) {
           notifs.push({
             id: `stock-${producto.id}-${bodega}`,
-            tipo: 'stockBajo',
+            tipo: "stockBajo",
             titulo: `Stock bajo: ${producto.nombre}`,
             descripcion: `Solo ${stock} unidades disponibles en ${bodega}`,
             fecha: hoy.toISOString(),
-            prioridad: stock < 20 ? 'alta' : 'media',
+            prioridad: stock < 20 ? "alta" : "media",
             leida: false,
-            datos: { producto, bodega, stock }
+            datos: { producto, bodega, stock },
           });
         }
       });
@@ -144,46 +148,44 @@ export default function Notificaciones({
       if (pesoDiff !== 0) return pesoDiff;
       return new Date(b.fecha).getTime() - new Date(a.fecha).getTime();
     });
-  }, [traslados, productos, selectedBodega]);
+  }, [traslados, productos, selectedBodegaNombre]);
 
   useEffect(() => {
     setNotificaciones(generarNotificaciones);
   }, [generarNotificaciones]);
 
-  const notificacionesNoLeidas = notificaciones.filter(n => !n.leida).length;
+  const notificacionesNoLeidas = notificaciones.filter((n) => !n.leida).length;
 
   const marcarComoLeida = (id: string) => {
-    setNotificaciones(prev => 
-      prev.map(n => n.id === id ? { ...n, leida: true } : n)
-    );
+    setNotificaciones((prev) => prev.map((n) => (n.id === id ? { ...n, leida: true } : n)));
   };
 
   const marcarTodasComoLeidas = () => {
-    setNotificaciones(prev => prev.map(n => ({ ...n, leida: true })));
-    toast.success('Todas las notificaciones marcadas como leídas');
+    setNotificaciones((prev) => prev.map((n) => ({ ...n, leida: true })));
+    toast.success("Todas las notificaciones marcadas como leídas");
   };
 
   const handleNotificacionClick = (notif: Notificacion) => {
     marcarComoLeida(notif.id);
-    
-    if (notif.tipo === 'traslado' && onNavigateToTraslados) {
+
+    if (notif.tipo === "traslado" && onNavigateToTraslados) {
       setIsOpen(false);
       onNavigateToTraslados();
       toast.info(`Navegando a traslado ${notif.datos.codigo}`);
-    } else if ((notif.tipo === 'vencimiento' || notif.tipo === 'stockBajo') && onNavigateToExistencias) {
+    } else if ((notif.tipo === "vencimiento" || notif.tipo === "stockBajo") && onNavigateToExistencias) {
       setIsOpen(false);
       onNavigateToExistencias();
-      toast.info('Navegando a existencias');
+      toast.info("Navegando a existencias");
     }
   };
 
   const getIcono = (tipo: string) => {
     switch (tipo) {
-      case 'traslado':
+      case "traslado":
         return <Truck className="w-5 h-5" />;
-      case 'vencimiento':
+      case "vencimiento":
         return <Clock className="w-5 h-5" />;
-      case 'stockBajo':
+      case "stockBajo":
         return <Package className="w-5 h-5" />;
       default:
         return <AlertTriangle className="w-5 h-5" />;
@@ -192,27 +194,27 @@ export default function Notificaciones({
 
   const getColorPrioridad = (prioridad: string) => {
     switch (prioridad) {
-      case 'alta':
-        return 'bg-red-100 text-red-800 border-red-200';
-      case 'media':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'baja':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
+      case "alta":
+        return "bg-red-100 text-red-800 border-red-200";
+      case "media":
+        return "bg-yellow-100 text-yellow-800 border-yellow-200";
+      case "baja":
+        return "bg-blue-100 text-blue-800 border-blue-200";
       default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
+        return "bg-gray-100 text-gray-800 border-gray-200";
     }
   };
 
   return (
     <>
-      <button 
+      <button
         onClick={() => setIsOpen(true)}
         className="relative p-2 hover:bg-blue-700 rounded-lg transition-colors text-white"
       >
         <Bell size={20} />
         {notificacionesNoLeidas > 0 && (
           <span className="absolute top-1 right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-xs rounded-full shadow-sm">
-            {notificacionesNoLeidas > 99 ? '99+' : notificacionesNoLeidas}
+            {notificacionesNoLeidas > 99 ? "99+" : notificacionesNoLeidas}
           </span>
         )}
       </button>
@@ -228,6 +230,7 @@ export default function Notificaciones({
               <DialogDescription className="sr-only">
                 Lista de notificaciones del sistema
               </DialogDescription>
+
               {notificacionesNoLeidas > 0 && (
                 <Button
                   variant="outline"
@@ -256,9 +259,9 @@ export default function Notificaciones({
                     key={notif.id}
                     onClick={() => handleNotificacionClick(notif)}
                     className={`p-4 rounded-lg border-2 transition-all cursor-pointer ${
-                      notif.leida 
-                        ? 'bg-gray-50 border-gray-200 opacity-60' 
-                        : 'bg-white border-gray-300 hover:border-blue-400 hover:shadow-md'
+                      notif.leida
+                        ? "bg-gray-50 border-gray-200 opacity-60"
+                        : "bg-white border-gray-300 hover:border-blue-400 hover:shadow-md"
                     }`}
                   >
                     <div className="flex items-start gap-3">
@@ -267,30 +270,28 @@ export default function Notificaciones({
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2">
-                          <h4 className={`text-sm mb-1 ${notif.leida ? 'text-gray-600' : 'text-gray-900'}`}>
+                          <h4 className={`text-sm mb-1 ${notif.leida ? "text-gray-600" : "text-gray-900"}`}>
                             {notif.titulo}
                           </h4>
-                          <Badge 
-                            variant="outline" 
+                          <Badge
+                            variant="outline"
                             className={`text-xs shrink-0 ${getColorPrioridad(notif.prioridad)}`}
                           >
                             {notif.prioridad.charAt(0).toUpperCase() + notif.prioridad.slice(1)}
                           </Badge>
                         </div>
-                        <p className={`text-xs ${notif.leida ? 'text-gray-500' : 'text-gray-600'} mb-2`}>
+                        <p className={`text-xs ${notif.leida ? "text-gray-500" : "text-gray-600"} mb-2`}>
                           {notif.descripcion}
                         </p>
                         <p className="text-xs text-gray-400">
-                          {new Date(notif.fecha).toLocaleDateString('es-CO', {
-                            day: '2-digit',
-                            month: 'short',
-                            year: 'numeric'
+                          {new Date(notif.fecha).toLocaleDateString("es-CO", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
                           })}
                         </p>
                       </div>
-                      {!notif.leida && (
-                        <div className="w-2 h-2 bg-blue-500 rounded-full shrink-0 mt-2" />
-                      )}
+                      {!notif.leida && <div className="w-2 h-2 bg-blue-500 rounded-full shrink-0 mt-2" />}
                     </div>
                   </div>
                 ))}

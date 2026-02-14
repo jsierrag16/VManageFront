@@ -6,8 +6,6 @@ import {
   ChevronDown, Warehouse, ArrowRightLeft, Shield
 } from "lucide-react";
 
-const { pathname } = useLocation();
-
 // Definición de ítems y funciones auxiliares
 const menuItems = [
   { id: "dashboard", name: "Dashboard", icon: Home },
@@ -33,18 +31,33 @@ interface SidebarProps {
   isOpen: boolean;
   isMobileOpen: boolean;
   currentUser: any;
+
+  // lo mantenemos para no romper tu layout, pero ya no es necesario
   activeSection: string;
-  onNavigate: (section: string) => void;
+
+  // ahora recibe PATHS, ejemplo: "/app/bodegas"
+  onNavigate: (path: string) => void;
+
   onCloseMobile: () => void;
+
   vManageLogo?: string;
   vManageLogoSmall?: string;
   gvmLogo?: string;
 }
 
 export function Sidebar({
-  isOpen, isMobileOpen, currentUser, activeSection, onNavigate, onCloseMobile, vManageLogo, vManageLogoSmall, gvmLogo
+  isOpen,
+  isMobileOpen,
+  currentUser,
+  onNavigate,
+  onCloseMobile,
+  vManageLogo,
+  vManageLogoSmall,
+  gvmLogo
 }: SidebarProps) {
-  
+
+  const { pathname } = useLocation();
+
   // Estados locales para los submenús
   const [expanded, setExpanded] = useState({
     inventario: false,
@@ -55,10 +68,9 @@ export function Sidebar({
 
   const toggleSubmenu = (key: keyof typeof expanded) => {
     setExpanded(prev => {
-        // Si queremos cerrar los demás al abrir uno:
-        const newState = { inventario: false, compras: false, ventas: false, configuracion: false };
-        newState[key] = !prev[key];
-        return newState;
+      const newState = { inventario: false, compras: false, ventas: false, configuracion: false };
+      newState[key] = !prev[key];
+      return newState;
     });
   };
 
@@ -68,16 +80,29 @@ export function Sidebar({
     else if (itemId === "ventas") toggleSubmenu("ventas");
     else if (itemId === "configuracion") toggleSubmenu("configuracion");
     else {
-      // Cerrar todo y navegar
       setExpanded({ inventario: false, compras: false, ventas: false, configuracion: false });
-      onNavigate(itemId);
+
+      // ✅ Navegación por URL
+      if (itemId === "dashboard") onNavigate("/app");
+      else if (itemId === "usuarios") onNavigate("/app/usuarios");
+      else if (itemId === "ventas") onNavigate("/app/ventas");
+      else if (itemId === "compras") onNavigate("/app/compras");
+      else if (itemId === "configuracion") onNavigate("/app/configuracion");
+      else onNavigate("/app");
+
       onCloseMobile();
     }
   };
 
-  const handleSubItemClick = (section: string) => {
-    onNavigate(section);
+  const handleSubItemClick = (path: string) => {
+    onNavigate(path);
     onCloseMobile();
+  };
+
+  // ✅ helpers para "active" por ruta
+  const isActive = (path: string) => {
+    if (path === "/app") return pathname === "/app" || pathname === "/app/";
+    return pathname.startsWith(path);
   };
 
   return (
@@ -104,9 +129,23 @@ export function Sidebar({
             {getAvailableMenus(currentUser.rol).map((item) => {
               const Icon = item.icon;
               const hasSubmenu = ["inventario", "compras", "ventas", "configuracion"].includes(item.id);
-              const isActive = activeSection === item.id;
-              // Verificar si el menú está expandido
               const isExpanded = expanded[item.id as keyof typeof expanded];
+
+              // ✅ Active de menús principales (solo dashboard por ahora)
+              const mainActive =
+                item.id === "dashboard"
+                  ? isActive("/app")
+                  : item.id === "inventario"
+                  ? isActive("/app/existencias") || isActive("/app/traslados") || isActive("/app/bodegas")
+                  : item.id === "compras"
+                  ? isActive("/app/proveedores") || isActive("/app/ordenescompra") || isActive("/app/remisionescompra")
+                  : item.id === "ventas"
+                  ? isActive("/app/clientes") || isActive("/app/cotizaciones") || isActive("/app/ordenes") || isActive("/app/remisiones") || isActive("/app/pagos")
+                  : item.id === "configuracion"
+                  ? isActive("/app/roles")
+                  : item.id === "usuarios"
+                  ? isActive("/app/usuarios")
+                  : false;
 
               return (
                 <div key={item.id}>
@@ -115,7 +154,7 @@ export function Sidebar({
                     whileTap={{ scale: 0.98 }}
                     onClick={() => handleMenuClick(item.id)}
                     className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg mb-1 transition-all duration-200 ${
-                      isActive ? "bg-blue-600 text-white shadow-md" : "text-gray-700 hover:bg-emerald-200 hover:text-gray-900"
+                      mainActive ? "bg-blue-600 text-white shadow-md" : "text-gray-700 hover:bg-emerald-200 hover:text-gray-900"
                     }`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
@@ -129,7 +168,7 @@ export function Sidebar({
                     )}
                   </motion.button>
 
-                  {/* Renderizado de Submenús (Ejemplo simplificado, repite lógica para otros) */}
+                  {/* Submenús */}
                   {isOpen && hasSubmenu && (
                     <AnimatePresence>
                       {isExpanded && (
@@ -139,33 +178,95 @@ export function Sidebar({
                           exit={{ height: 0, opacity: 0 }}
                           className="overflow-hidden ml-4"
                         >
-                          {/* Lógica específica de subítems según ID */}
                           {item.id === "inventario" && (
                             <>
-                                <SubMenuItem icon={Package} label="Productos" onClick={() => handleSubItemClick("existencias")} active={activeSection === "existencias"} />
-                                <SubMenuItem icon={ArrowRightLeft} label="Traslados" onClick={() => handleSubItemClick("traslados")} active={activeSection === "traslados"} />
-                                <SubMenuItem icon={Warehouse} label="Bodegas" onClick={() => handleSubItemClick("/app/bodegas")} active={activeSection === "bodegas"} />
+                              <SubMenuItem
+                                icon={Package}
+                                label="Productos"
+                                onClick={() => handleSubItemClick("/app/existencias")}
+                                active={isActive("/app/existencias")}
+                              />
+                              <SubMenuItem
+                                icon={ArrowRightLeft}
+                                label="Traslados"
+                                onClick={() => handleSubItemClick("/app/traslados")}
+                                active={isActive("/app/traslados")}
+                              />
+                              <SubMenuItem
+                                icon={Warehouse}
+                                label="Bodegas"
+                                onClick={() => handleSubItemClick("/app/bodegas")}
+                                active={isActive("/app/bodegas")}
+                              />
                             </>
                           )}
+
                           {item.id === "compras" && (
                             <>
-                                <SubMenuItem icon={Truck} label="Proveedores" onClick={() => handleSubItemClick("proveedores")} active={activeSection === "proveedores"} />
-                                <SubMenuItem icon={ShoppingCart} label="Ordenes Compra" onClick={() => handleSubItemClick("ordenescompra")} active={activeSection === "ordenescompra"} />
-                                <SubMenuItem icon={FileText} label="Remisiones Compra" onClick={() => handleSubItemClick("remisionescompra")} active={activeSection === "remisionescompra"} />
+                              <SubMenuItem
+                                icon={Truck}
+                                label="Proveedores"
+                                onClick={() => handleSubItemClick("/app/proveedores")}
+                                active={isActive("/app/proveedores")}
+                              />
+                              <SubMenuItem
+                                icon={ShoppingCart}
+                                label="Ordenes Compra"
+                                onClick={() => handleSubItemClick("/app/ordenescompra")}
+                                active={isActive("/app/ordenescompra")}
+                              />
+                              <SubMenuItem
+                                icon={FileText}
+                                label="Remisiones Compra"
+                                onClick={() => handleSubItemClick("/app/remisionescompra")}
+                                active={isActive("/app/remisionescompra")}
+                              />
                             </>
                           )}
+
                           {item.id === "ventas" && (
                             <>
-                                <SubMenuItem icon={Users} label="Clientes" onClick={() => handleSubItemClick("clientes")} active={activeSection === "clientes"} />
-                                <SubMenuItem icon={FileText} label="Cotizaciones" onClick={() => handleSubItemClick("cotizaciones")} active={activeSection === "cotizaciones"} />
-                                <SubMenuItem icon={FileText} label="Ordenes Venta" onClick={() => handleSubItemClick("ordenes")} active={activeSection === "ordenes"} />
-                                <SubMenuItem icon={FileText} label="Remisiones Venta" onClick={() => handleSubItemClick("remisiones")} active={activeSection === "remisiones"} />
-                                <SubMenuItem icon={Settings} label="Pagos" onClick={() => handleSubItemClick("pagos")} active={activeSection === "pagos"} />
+                              <SubMenuItem
+                                icon={Users}
+                                label="Clientes"
+                                onClick={() => handleSubItemClick("/app/clientes")}
+                                active={isActive("/app/clientes")}
+                              />
+                              <SubMenuItem
+                                icon={FileText}
+                                label="Cotizaciones"
+                                onClick={() => handleSubItemClick("/app/cotizaciones")}
+                                active={isActive("/app/cotizaciones")}
+                              />
+                              <SubMenuItem
+                                icon={FileText}
+                                label="Ordenes Venta"
+                                onClick={() => handleSubItemClick("/app/ordenes")}
+                                active={isActive("/app/ordenes")}
+                              />
+                              <SubMenuItem
+                                icon={FileText}
+                                label="Remisiones Venta"
+                                onClick={() => handleSubItemClick("/app/remisiones")}
+                                active={isActive("/app/remisiones")}
+                              />
+                              <SubMenuItem
+                                icon={Settings}
+                                label="Pagos"
+                                onClick={() => handleSubItemClick("/app/pagos")}
+                                active={isActive("/app/pagos")}
+                              />
                             </>
                           )}
-                           {item.id === "configuracion" && (
+
+                          {item.id === "configuracion" && (
                             <>
-                                <SubMenuItem icon={Shield} label="Roles" onClick={() => handleSubItemClick("roles")} active={activeSection === "roles"} />
+                              <SubMenuItem
+                                icon={Shield}
+                                label="Roles"
+                                onClick={() => handleSubItemClick("/app/roles")}
+                                active={isActive("/app/roles")}
+                              />
                             </>
                           )}
                         </motion.div>
@@ -176,11 +277,11 @@ export function Sidebar({
               );
             })}
           </nav>
-          
-           {/* Logo Inferior GVM */}
-           <div className="p-4 flex items-center justify-center">
-              <img src={gvmLogo} alt="GVM" className={`${isOpen ? 'h-14' : 'h-8'} w-auto opacity-70`} />
-           </div>
+
+          {/* Logo Inferior GVM */}
+          <div className="p-4 flex items-center justify-center">
+            <img src={gvmLogo} alt="GVM" className={`${isOpen ? "h-14" : "h-8"} w-auto opacity-70`} />
+          </div>
         </div>
       </motion.aside>
 
@@ -198,10 +299,15 @@ export function Sidebar({
 
 // Componente auxiliar pequeño
 function SubMenuItem({ icon: Icon, label, onClick, active }: any) {
-    return (
-        <div onClick={onClick} className={`px-4 py-2 rounded-lg mb-1 text-sm cursor-pointer flex items-center gap-3 ${active ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-emerald-100 hover:text-gray-900"}`}>
-            <Icon size={16} className="flex-shrink-0" />
-            <span className="truncate">{label}</span>
-        </div>
-    );
+  return (
+    <div
+      onClick={onClick}
+      className={`px-4 py-2 rounded-lg mb-1 text-sm cursor-pointer flex items-center gap-3 ${
+        active ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-emerald-100 hover:text-gray-900"
+      }`}
+    >
+      <Icon size={16} className="flex-shrink-0" />
+      <span className="truncate">{label}</span>
+    </div>
+  );
 }

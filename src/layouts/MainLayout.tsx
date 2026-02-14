@@ -4,39 +4,31 @@ import { Sidebar } from "./components/Sidebar";
 import { Navbar } from "./components/Navbar";
 import { Toaster } from "../shared/components/ui/sonner";
 
-interface MainLayoutProps {
+export type AppOutletContext = {
   currentUser: any;
   onLogout: () => void;
-
-  // Por ahora los dejamos (luego los hacemos automáticos por URL)
   activeSection: string;
   setActiveSection: (section: string) => void;
-
-  selectedBodega: string;
-  setSelectedBodega: (bodega: string) => void;
-
   vManageLogo?: string;
   vManageLogoSmall?: string;
   gvmLogo?: string;
-
   traslados?: any[];
   productos?: any[];
-}
+};
+
+interface MainLayoutProps extends AppOutletContext { }
 
 export default function MainLayout({
   currentUser,
   onLogout,
   activeSection,
   setActiveSection,
-  selectedBodega,
-  setSelectedBodega,
   vManageLogo,
   vManageLogoSmall,
   gvmLogo,
   traslados = [],
-  productos = []
+  productos = [],
 }: MainLayoutProps) {
-
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -60,12 +52,9 @@ export default function MainLayout({
 
         <div className="flex-1 flex flex-col min-h-screen">
           <Navbar
-            isSidebarOpen={isSidebarOpen}
             onSidebarToggle={() => setIsSidebarOpen(!isSidebarOpen)}
             onMobileMenuToggle={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             currentUser={currentUser}
-            selectedBodega={selectedBodega}
-            onBodegaChange={setSelectedBodega}
             onLogout={onLogout}
             onOpenProfile={() => navigate("/app/perfil")}
             traslados={traslados}
@@ -74,8 +63,21 @@ export default function MainLayout({
             onNavigateToExistencias={() => navigate("/app/existencias")}
           />
 
+
           <main className="flex-1 p-4 lg:p-8">
-            <Outlet />
+            <Outlet
+              context={{
+                currentUser,
+                onLogout,
+                activeSection,
+                setActiveSection,
+                vManageLogo,
+                vManageLogoSmall,
+                gvmLogo,
+                traslados,
+                productos,
+              }}
+            />
           </main>
         </div>
       </div>

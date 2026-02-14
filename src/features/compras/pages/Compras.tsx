@@ -26,7 +26,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { toast } from 'sonner';
 import { proveedoresData as initialProveedoresData, Proveedor } from '../../../data/proveedores';
 import { productosData, Producto } from '../../../data/productos';
-import { bodegasData, Bodega } from '../../../data/bodegas';
+import { bodegasData } from '../../../data/bodegas';
 
 interface Compra {
   id: number;
