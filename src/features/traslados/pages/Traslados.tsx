@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Plus, Eye, Package, ChevronLeft, ChevronRight, CheckCircle, Building2, X, Trash2, PlusCircle, Clock, Truck, XCircle, Ban } from 'lucide-react';
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { Search, Plus, Eye, Package, ChevronLeft, ChevronRight, CheckCircle, Building2, X, Trash2, PlusCircle, Truck, XCircle, Ban } from 'lucide-react';
 import { Button } from '../../../shared/components/ui/button';
 import { Input } from '../../../shared/components/ui/input';
 import {
@@ -30,7 +31,6 @@ import { Badge } from '../../../shared/components/ui/badge';
 import { Textarea } from '../../../shared/components/ui/textarea';
 import { toast } from 'sonner';
 import { Traslado, TrasladoItem } from '../../../data/traslados';
-import { productosData, Producto } from '../../../data/productos';
 import { bodegasData } from '../../../data/bodegas';
 import { usePermisos } from '../../../shared/hooks/usePermisos';
 import { useTraslados } from '../../../shared/context/TrasladosContext';
@@ -40,10 +40,9 @@ interface TrasladosProps {
   selectedBodega?: string;
   onTrasladoCreated?: () => void;
   triggerCreate?: number;
-  onInventoryUpdate?: (productos: Producto[]) => void;
 }
 
-export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasladoCreated, triggerCreate, onInventoryUpdate }: TrasladosProps) {
+export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasladoCreated, triggerCreate }: TrasladosProps) {
   const { usuario } = usePermisos();
   const { traslados, addTraslado, updateTraslado } = useTraslados();
   const { productos, updateProducto } = useProductos();
@@ -58,7 +57,121 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
   const [motivoCancelacion, setMotivoCancelacion] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-  
+
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { id } = useParams();
+
+  const path = location.pathname;
+
+  const isCrearRoute = path.endsWith("/traslados/crear");
+  const isVerRoute = Boolean(id) && path.endsWith("/ver");
+  const isEditarRoute = Boolean(id) && path.endsWith("/editar");
+  const isCancelarRoute = Boolean(id) && path.endsWith("/cancelar");
+
+  const trasladoByRoute = useMemo(() => {
+    if (!id) return null;
+    return traslados.find(t => t.id === id) || null;
+  }, [id, traslados]);
+
+  const goList = () => navigate("/app/traslados", { replace: true });
+
+  useEffect(() => {
+
+    // ✅ reset UI para evitar modales cruzados
+    setShowCreateModal(false);
+    setShowViewModal(false);
+    setShowCancelarModal(false);
+    setShowConfirmEstadoModal(false);
+    setSelectedTraslado(null);
+    setNuevoEstado(null);
+
+    // ✅ CREAR
+    if (isCrearRoute) {
+      const state = location.state as { bodegaOrigen?: string } | null;
+
+      const bodegaInicial =
+        usuario?.rol !== "Administrador"
+          ? selectedBodega
+          : (state?.bodegaOrigen ??
+            (selectedBodega === "Todas las bodegas" ? "" : selectedBodega));
+
+      setFormBodegaOrigen(bodegaInicial);
+      setFormBodegaDestino("");
+      setFormObservaciones("");
+      setTrasladoItems([]);
+      setCurrentProducto("");
+      setCurrentLote("");
+      setCurrentCantidad("");
+
+      setShowCreateModal(true);
+      return;
+    }
+
+    // ✅ VER
+    if (isVerRoute) {
+      if (!trasladoByRoute) {
+        toast.error("Traslado no encontrado");
+        goList();
+        return;
+      }
+      setSelectedTraslado(trasladoByRoute);
+      setShowViewModal(true);
+      return;
+    }
+
+    // ✅ EDITAR (solo si NO está Enviado)
+    if (isEditarRoute) {
+      if (!trasladoByRoute) {
+        toast.error("Traslado no encontrado");
+        goList();
+        return;
+      }
+      if (trasladoByRoute.estado === "Enviado") {
+        toast.error("No puedes editar un traslado en estado Enviado");
+        goList();
+        return;
+      }
+
+      // Aquí luego abrimos tu modal editar (si lo vas a implementar)
+      toast.info("Pendiente: modal editar");
+      goList();
+      return;
+    }
+
+    // ✅ CANCELAR (solo si está Enviado)
+    if (isCancelarRoute) {
+      if (!trasladoByRoute) {
+        toast.error("Traslado no encontrado");
+        goList();
+        return;
+      }
+      if (trasladoByRoute.estado !== "Enviado") {
+        toast.error("Solo puedes cancelar traslados en estado Enviado");
+        goList();
+        return;
+      }
+
+      setSelectedTraslado(trasladoByRoute);
+      setMotivoCancelacion("");
+      setShowCancelarModal(true);
+      return;
+    }
+  }, [
+    isCrearRoute,
+    isVerRoute,
+    isEditarRoute,
+    isCancelarRoute,
+    trasladoByRoute,
+    usuario?.rol,
+    selectedBodega,
+    location.state,
+  ]);
+
+  const goVer = (traslado: Traslado) => navigate(`./${traslado.id}/ver`);
+  const goCancelar = (traslado: Traslado) => navigate(`./${traslado.id}/cancelar`);
+
+
   // Filtros de fecha
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
@@ -67,10 +180,10 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
   const [formBodegaOrigen, setFormBodegaOrigen] = useState(selectedBodega);
   const [formBodegaDestino, setFormBodegaDestino] = useState('');
   const [formObservaciones, setFormObservaciones] = useState('');
-  
+
   // Items del traslado (líneas)
   const [trasladoItems, setTrasladoItems] = useState<TrasladoItem[]>([]);
-  
+
   // Form states para la línea actual
   const [currentProducto, setCurrentProducto] = useState('');
   const [currentLote, setCurrentLote] = useState('');
@@ -161,93 +274,100 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
   };
 
   // Handlers con validación en tiempo real
+
   const handleBodegaOrigenChange = (value: string) => {
     setFormBodegaOrigen(value);
-    if (touched.bodegaOrigen) {
-      setErrors({ ...errors, bodegaOrigen: validateBodegaOrigen(value) });
-    }
-    // Re-validar bodega destino si ya fue tocada
-    if (touched.bodegaDestino) {
-      setErrors(prev => ({ ...prev, bodegaDestino: validateBodegaDestino(formBodegaDestino, value) }));
-    }
+
+    // ✅ Select no maneja blur confiable, marcamos "touched" al seleccionar
+    setTouched((prev) => ({ ...prev, bodegaOrigen: true }));
+
+    // ✅ Validación inmediata
+    setErrors((prev) => ({
+      ...prev,
+      bodegaOrigen: validateBodegaOrigen(value),
+      // si destino ya se tocó, revalidarlo con la nueva bodega origen
+      bodegaDestino: prev.bodegaDestino
+        ? validateBodegaDestino(formBodegaDestino, value)
+        : prev.bodegaDestino,
+    }));
   };
 
   const handleBodegaDestinoChange = (value: string) => {
     setFormBodegaDestino(value);
-    if (touched.bodegaDestino) {
-      setErrors({ ...errors, bodegaDestino: validateBodegaDestino(value, formBodegaOrigen) });
-    }
+
+    setTouched((prev) => ({ ...prev, bodegaDestino: true }));
+
+    setErrors((prev) => ({
+      ...prev,
+      bodegaDestino: validateBodegaDestino(value, formBodegaOrigen),
+    }));
   };
 
   const handleObservacionesChange = (value: string) => {
     setFormObservaciones(value);
-    if (touched.observaciones) {
-      setErrors({ ...errors, observaciones: validateObservaciones(value) });
-    }
+
+    // si ya tocó observaciones, validar en vivo
+    setErrors((prev) => ({
+      ...prev,
+      observaciones: touched.observaciones ? validateObservaciones(value) : prev.observaciones,
+    }));
   };
 
   const handleCurrentProductoChange = (value: string) => {
     setCurrentProducto(value);
-    if (touched.currentProducto) {
-      setErrors({ ...errors, currentProducto: validateCurrentProducto(value) });
-    }
+
+    setErrors((prev) => ({
+      ...prev,
+      currentProducto: touched.currentProducto ? validateCurrentProducto(value) : prev.currentProducto,
+    }));
   };
 
   const handleCurrentLoteChange = (value: string) => {
     setCurrentLote(value);
-    if (touched.currentLote) {
-      setErrors({ ...errors, currentLote: validateCurrentLote(value) });
-    }
+
+    setErrors((prev) => ({
+      ...prev,
+      currentLote: touched.currentLote ? validateCurrentLote(value) : prev.currentLote,
+    }));
   };
 
   const handleCurrentCantidadChange = (value: string) => {
     setCurrentCantidad(value);
-    if (touched.currentCantidad) {
-      setErrors({ ...errors, currentCantidad: validateCurrentCantidad(value, cantidadMaxima) });
-    }
+
+    setErrors((prev) => ({
+      ...prev,
+      currentCantidad: touched.currentCantidad
+        ? validateCurrentCantidad(value, cantidadMaxima)
+        : prev.currentCantidad,
+    }));
   };
 
-  // Handlers onBlur
-  const handleBodegaOrigenBlur = () => {
-    setTouched({ ...touched, bodegaOrigen: true });
-    setErrors({ ...errors, bodegaOrigen: validateBodegaOrigen(formBodegaOrigen) });
-  };
-
-  const handleBodegaDestinoBlur = () => {
-    setTouched({ ...touched, bodegaDestino: true });
-    setErrors({ ...errors, bodegaDestino: validateBodegaDestino(formBodegaDestino, formBodegaOrigen) });
-  };
+  // Handlers onBlur (SOLO para Input/Textarea)
 
   const handleObservacionesBlur = () => {
-    setTouched({ ...touched, observaciones: true });
-    setErrors({ ...errors, observaciones: validateObservaciones(formObservaciones) });
-  };
-
-  const handleCurrentProductoBlur = () => {
-    setTouched({ ...touched, currentProducto: true });
-    setErrors({ ...errors, currentProducto: validateCurrentProducto(currentProducto) });
-  };
-
-  const handleCurrentLoteBlur = () => {
-    setTouched({ ...touched, currentLote: true });
-    setErrors({ ...errors, currentLote: validateCurrentLote(currentLote) });
+    setTouched((prev) => ({ ...prev, observaciones: true }));
+    setErrors((prev) => ({ ...prev, observaciones: validateObservaciones(formObservaciones) }));
   };
 
   const handleCurrentCantidadBlur = () => {
-    setTouched({ ...touched, currentCantidad: true });
-    setErrors({ ...errors, currentCantidad: validateCurrentCantidad(currentCantidad, cantidadMaxima) });
+    setTouched((prev) => ({ ...prev, currentCantidad: true }));
+    setErrors((prev) => ({
+      ...prev,
+      currentCantidad: validateCurrentCantidad(currentCantidad, cantidadMaxima),
+    }));
   };
+
 
   // Obtener productos únicos disponibles en la bodega de origen
   const productosDisponibles = useMemo(() => {
     if (!formBodegaOrigen) return [];
-    
-    const productosEnBodega = productos.filter(producto => 
-      producto.lotes.some(lote => 
+
+    const productosEnBodega = productos.filter(producto =>
+      producto.lotes.some(lote =>
         lote.bodega === formBodegaOrigen && lote.cantidadDisponible > 0
       )
     );
-    
+
     return productosEnBodega;
   }, [formBodegaOrigen, productos]);
 
@@ -256,7 +376,7 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
     if (!currentProducto || !formBodegaOrigen) return [];
     const producto = productos.find(p => p.id === currentProducto);
     if (!producto) return [];
-    return producto.lotes.filter(lote => 
+    return producto.lotes.filter(lote =>
       lote.bodega === formBodegaOrigen && lote.cantidadDisponible > 0
     );
   }, [currentProducto, formBodegaOrigen, productos]);
@@ -300,7 +420,7 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
   // Función para manejar el clic en el estado (clickeable)
   const handleEstadoClick = (traslado: Traslado) => {
     const siguienteEstado = getSiguienteEstado(traslado.estado);
-    
+
     if (!siguienteEstado) {
       if (traslado.estado === 'Recibido') {
         toast.info('Este traslado ya está en estado final (Recibido)');
@@ -319,7 +439,7 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
   const filteredTraslados = useMemo(() => {
     return traslados.filter((traslado) => {
       const searchLower = searchTerm.toLowerCase();
-      
+
       // Filtro por bodega
       if (usuario?.rol !== 'Administrador') {
         // Si el usuario no es Administrador, filtrar por su bodega asignada
@@ -335,7 +455,7 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
         }
         // Si es "Todas las bodegas", vacío o undefined, mostrar todos los traslados (no aplicar filtro)
       }
-      
+
       // Filtro por rango de fechas (incluyendo los días completos)
       if (fechaInicio) {
         const fechaTrasladoStr = traslado.fecha.split('T')[0]; // Asegurar solo fecha sin hora
@@ -349,14 +469,14 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
           return false;
         }
       }
-      
+
       // Búsqueda general en todos los campos
       const totalUnidades = calcularTotalItems(traslado.items);
       const itemsMatch = traslado.items.some(item =>
         item.productoNombre.toLowerCase().includes(searchLower) ||
         item.loteNumero.toLowerCase().includes(searchLower)
       );
-      
+
       return (
         traslado.codigo.toLowerCase().includes(searchLower) ||
         traslado.fecha.includes(searchLower) ||
@@ -392,52 +512,17 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
   // Abrir modal de creación desde trigger externo (desde Existencias)
   useEffect(() => {
     if (triggerCreate && triggerCreate > 0) {
-      // Si el usuario no es Administrador, pre-seleccionar su bodega asignada
-      const bodegaInicial = usuario?.rol !== 'Administrador' 
-        ? selectedBodega 
-        : (selectedBodega === 'Todas las bodegas' ? '' : selectedBodega);
-      setFormBodegaOrigen(bodegaInicial);
-      setFormBodegaDestino('');
-      setFormObservaciones('');
-      setTrasladoItems([]);
-      setCurrentProducto('');
-      setCurrentLote('');
-      setCurrentCantidad('');
-      setShowCreateModal(true);
+      if (!location.pathname.endsWith("/traslados/crear")) {
+        navigate("/app/traslados/crear", { state: { bodegaOrigen: selectedBodega } });
+      }
     }
-  }, [triggerCreate, selectedBodega, usuario]);
+  }, [triggerCreate, selectedBodega, navigate, location.pathname]);
+
+
 
   const handleNuevoTraslado = () => {
-    // Si el usuario no es Administrador, pre-seleccionar su bodega asignada
-    const bodegaInicial = usuario?.rol !== 'Administrador' 
-      ? selectedBodega 
-      : (selectedBodega === 'Todas las bodegas' ? '' : selectedBodega);
-    setFormBodegaOrigen(bodegaInicial);
-    setFormBodegaDestino('');
-    setFormObservaciones('');
-    setTrasladoItems([]);
-    setCurrentProducto('');
-    setCurrentLote('');
-    setCurrentCantidad('');
-    setErrors({
-      bodegaOrigen: '',
-      bodegaDestino: '',
-      observaciones: '',
-      currentProducto: '',
-      currentLote: '',
-      currentCantidad: ''
-    });
-    setTouched({
-      bodegaOrigen: false,
-      bodegaDestino: false,
-      observaciones: false,
-      currentProducto: false,
-      currentLote: false,
-      currentCantidad: false
-    });
-    setShowCreateModal(true);
+    navigate("/app/traslados/crear");
   };
-
   const handleAddItem = () => {
     if (!currentProducto || !currentLote || !currentCantidad) {
       toast.error('Completa todos los campos del producto');
@@ -491,11 +576,6 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
     toast.success('Producto eliminado del traslado');
   };
 
-  const handleView = (traslado: Traslado) => {
-    setSelectedTraslado(traslado);
-    setShowViewModal(true);
-  };
-
   const handleConfirmEstado = () => {
     if (!selectedTraslado || !nuevoEstado) return;
 
@@ -505,24 +585,24 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
         const producto = productos.find(p => p.id === item.productoId);
         if (producto) {
           const productoActualizado = { ...producto, lotes: [...producto.lotes] };
-          
+
           // Reducir cantidad en bodega origen
           const loteOrigenIndex = productoActualizado.lotes.findIndex(
             l => l.numeroLote === item.loteNumero && l.bodega === selectedTraslado.bodegaOrigen
           );
-          
+
           if (loteOrigenIndex !== -1) {
             productoActualizado.lotes[loteOrigenIndex] = {
               ...productoActualizado.lotes[loteOrigenIndex],
               cantidadDisponible: productoActualizado.lotes[loteOrigenIndex].cantidadDisponible - item.cantidad
             };
           }
-          
+
           // Aumentar cantidad en bodega destino (crear lote si no existe)
           const loteDestinoIndex = productoActualizado.lotes.findIndex(
             l => l.numeroLote === item.loteNumero && l.bodega === selectedTraslado.bodegaDestino
           );
-          
+
           if (loteDestinoIndex !== -1) {
             productoActualizado.lotes[loteDestinoIndex] = {
               ...productoActualizado.lotes[loteDestinoIndex],
@@ -540,7 +620,7 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
               });
             }
           }
-          
+
           // Actualizar el producto en el contexto
           updateProducto(producto.id, productoActualizado);
         }
@@ -554,12 +634,6 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
     setNuevoEstado(null);
   };
 
-  const openCancelarModal = (traslado: Traslado) => {
-    setSelectedTraslado(traslado);
-    setMotivoCancelacion('');
-    setShowCancelarModal(true);
-  };
-
   const handleConfirmCancelar = () => {
     if (!selectedTraslado) return;
 
@@ -568,15 +642,15 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
       return;
     }
 
-    const observacionesCancelacion = selectedTraslado.observaciones 
+    const observacionesCancelacion = selectedTraslado.observaciones
       ? `${selectedTraslado.observaciones}\n\n[CANCELADO] ${motivoCancelacion}`
       : `[CANCELADO] ${motivoCancelacion}`;
 
-    updateTraslado(selectedTraslado.id, { 
+    updateTraslado(selectedTraslado.id, {
       estado: 'Cancelado',
       observaciones: observacionesCancelacion
     });
-    
+
     toast.success('Traslado cancelado exitosamente');
     setShowCancelarModal(false);
     setSelectedTraslado(null);
@@ -612,7 +686,7 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
       bodegaOrigen: formBodegaOrigen,
       bodegaDestino: formBodegaDestino,
       items: [...trasladoItems],
-      responsable: usuario?.nombreCompleto || 'Usuario',
+      responsable: usuario?.nombre || 'Usuario',
       estado: 'Enviado',
       observaciones: formObservaciones.trim() || undefined,
     };
@@ -620,7 +694,7 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
     addTraslado(newTraslado);
     setShowCreateModal(false);
     setShowSuccessModal(true);
-    
+
     if (onTrasladoCreated) {
       onTrasladoCreated();
     }
@@ -632,16 +706,18 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
 
   const handleSuccessModalClose = () => {
     setShowSuccessModal(false);
+    goList();
   };
 
   const handleCloseCreateModal = () => {
     setShowCreateModal(false);
-    // Limpiar formulario
     setTrasladoItems([]);
-    setCurrentProducto('');
-    setCurrentLote('');
-    setCurrentCantidad('');
-    setFormObservaciones('');
+    setCurrentProducto("");
+    setCurrentLote("");
+    setCurrentCantidad("");
+    setFormObservaciones("");
+
+    goList(); // ✅ clave
   };
 
   return (
@@ -765,7 +841,7 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleView(traslado)}
+                            onClick={() => goVer(traslado)}
                             className="hover:bg-blue-50"
                           >
                             <Eye size={16} className="text-blue-600" />
@@ -774,7 +850,7 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => openCancelarModal(traslado)}
+                              onClick={() => goCancelar(traslado)}
                               className="hover:bg-red-50"
                             >
                               <Ban size={16} className="text-red-600" />
@@ -1001,17 +1077,27 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
             {/* Separador */}
             <div className="border-t pt-4">
               <h3 className="font-medium text-gray-900 mb-3">Agregar Productos al Traslado</h3>
-              
+
               {/* Formulario para agregar items */}
               <div className="bg-gray-50 p-4 rounded-lg space-y-4 mb-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <Label htmlFor="current-producto">Producto *</Label>
-                    <Select 
-                      value={currentProducto} 
-                      onValueChange={handleCurrentProductoChange}
-                      onBlur={handleCurrentProductoBlur}
+                    <Select
+                      value={currentProducto}
+                      onValueChange={(value: any) => {
+                        // ✅ marcar touched aquí
+                        setTouched((prev) => ({ ...prev, currentProducto: true }));
+                        handleCurrentProductoChange(value);
+
+                        // ✅ validar aquí mismo
+                        setErrors((prev) => ({
+                          ...prev,
+                          currentProducto: validateCurrentProducto(value),
+                        }));
+                      }}
                     >
+
                       <SelectTrigger id="current-producto">
                         <SelectValue placeholder="Selecciona un producto" />
                       </SelectTrigger>
@@ -1035,12 +1121,20 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
                   </div>
                   <div>
                     <Label htmlFor="current-lote">Lote *</Label>
-                    <Select 
-                      value={currentLote} 
-                      onValueChange={handleCurrentLoteChange}
+                    <Select
+                      value={currentLote}
+                      onValueChange={(value: any) => {
+                        setTouched((prev) => ({ ...prev, currentLote: true }));
+                        handleCurrentLoteChange(value);
+
+                        setErrors((prev) => ({
+                          ...prev,
+                          currentLote: validateCurrentLote(value),
+                        }));
+                      }}
                       disabled={!currentProducto}
-                      onBlur={handleCurrentLoteBlur}
                     >
+
                       <SelectTrigger id="current-lote">
                         <SelectValue placeholder="Selecciona un lote" />
                       </SelectTrigger>
@@ -1084,8 +1178,8 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
                     )}
                   </div>
                 </div>
-                <Button 
-                  onClick={handleAddItem} 
+                <Button
+                  onClick={handleAddItem}
                   className="w-full bg-green-600 hover:bg-green-700"
                   type="button"
                   disabled={!formBodegaOrigen}
@@ -1153,7 +1247,7 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
                 </div>
                 <div>
                   <Label className="text-sm text-blue-900">Responsable del Traslado</Label>
-                  <p className="font-medium text-blue-700">{usuario?.nombreCompleto || 'Usuario'}</p>
+                  <p className="font-medium text-blue-700">{usuario?.nombre || 'Usuario'}</p>
                   <p className="text-xs text-blue-600">El responsable se asigna automáticamente según tu sesión</p>
                 </div>
               </div>
@@ -1165,7 +1259,7 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
               <Textarea
                 id="traslado-observaciones"
                 value={formObservaciones}
-                onChange={handleObservacionesChange}
+                onChange={(e) => handleObservacionesChange(e.target.value)}
                 placeholder="Escribe cualquier observación sobre el traslado (opcional)"
                 rows={3}
                 onBlur={handleObservacionesBlur}
@@ -1260,8 +1354,8 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
             <Button variant="outline" onClick={() => setShowCancelarModal(false)}>
               Volver
             </Button>
-            <Button 
-              onClick={handleConfirmCancelar} 
+            <Button
+              onClick={handleConfirmCancelar}
               className="bg-red-600 hover:bg-red-700"
             >
               <Ban size={16} className="mr-2" />

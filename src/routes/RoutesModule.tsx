@@ -1,23 +1,27 @@
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { useState } from "react";
-import { useAuth } from "../shared/context/AuthContext";
+import { useAuth } from "@/shared/context/AuthContext";
 
 // Guards
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { PublicRoute } from "./components/PublicRoute";
 
 // Páginas
-import Login from "../features/auth/pages/login";
-import Dashboard from "../features/dashboard/pages/Dashboard";
-import Bodegas from "../features/bodegas/pages/Bodegas";
+import Login from "@/features/auth/pages/login";
+import Dashboard from "@/features/dashboard/pages/Dashboard";
+import Bodegas from "@/features/bodegas/pages/Bodegas";
+import Productos from "@/features/productos/pages/Productos";
+import Traslados from "@/features/traslados/pages/Traslados";
 
 // Layout
-import MainLayout from "../layouts/MainLayout";
+import MainLayout from "@/layouts/MainLayout";
 
 // Assets
-import vManageLogo from "../assets/images/VManageLogo.png";
-import vManageLogoSmall from "../assets/images/VLogo.png";
-import gvmLogo from "../assets/images/GVMLogo.png";
+import vManageLogo from "@/assets/images/VManageLogo.png";
+import vManageLogoSmall from "@/assets/images/VLogo.png";
+import gvmLogo from "@/assets/images/GVMLogo.png";
+import Perfil from "@/features/perfil/pages/Perfil";
+
 
 export default function RoutesModule() {
   const { usuario, logout } = useAuth();
@@ -58,10 +62,28 @@ export default function RoutesModule() {
           {/* ✅ Rutas hijas reales dentro de /app */}
           <Route index element={<Dashboard />} />
 
+          {/* PERFIL */}
+          <Route path="perfil" element={<Perfil />} />
+          
           {/* BODEGAS */}
           <Route path="bodegas" element={<Bodegas />} />
           <Route path="bodegas/crear" element={<Bodegas />} />
           <Route path="bodegas/:id/editar" element={<Bodegas />} />
+          <Route path="bodegas/:id/eliminar" element={<Bodegas />} />
+
+          {/* PRODUCTOS */}
+          <Route path="productos" element={<Productos />} />
+          <Route path="productos/crear" element={<Productos />} />
+          <Route path="productos/:id/editar" element={<Productos />} />
+          <Route path="productos/:id/ver" element={<Productos />} />
+
+          {/* TRASLADOS */}
+          <Route path="traslados" element={<Traslados />} />
+          <Route path="traslados/crear" element={<Traslados />} />
+          <Route path="traslados/:id/ver" element={<Traslados />} />
+          <Route path="traslados/:id/editar" element={<Traslados />} />
+          <Route path="traslados/:id/cancelar" element={<Traslados />} />
+
 
           {/* fallback dentro de /app */}
           <Route path="*" element={<Navigate to="/app" replace />} />

@@ -1,178 +1,242 @@
-import { useState } from 'react';
-import { Button } from '../../../shared/components/ui/button';
-import { Input } from '../../../shared/components/ui/input';
-import { Label } from '../../../shared/components/ui/label';
-import { Textarea } from '../../../shared/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../../../shared/components/ui/select';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '../../../shared/components/ui/alert-dialog';
-import { Avatar, AvatarFallback, AvatarImage } from '../../../shared/components/ui/avatar';
-import { Camera, Save, X, User, Mail, Phone, MapPin, Calendar, FileText, Shield } from 'lucide-react';
-import { toast } from 'sonner';
-import { UsuarioSistema } from '../../../data/usuarios-sistema';
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
-interface PerfilProps {
-  currentUser: UsuarioSistema;
-  onBack: () => void;
-  onUserUpdate?: (user: UsuarioSistema) => void;
-}
+import { Button } from "../../../shared/components/ui/button";
+import { Input } from "../../../shared/components/ui/input";
+import { Label } from "../../../shared/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../../shared/components/ui/dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "../../../shared/components/ui/avatar";
 
-export default function Perfil({ currentUser, onBack, onUserUpdate }: PerfilProps) {
-  // Estados del formulario
-  const [editNombre, setEditNombre] = useState(currentUser?.nombre || '');
-  const [editApellido, setEditApellido] = useState(currentUser?.apellido || '');
-  const [editEmail, setEditEmail] = useState(currentUser?.email || '');
-  const [editDocumento, setEditDocumento] = useState(currentUser?.documento || '');
-  const [editTelefono, setEditTelefono] = useState(currentUser?.telefono || '');
-  const [editDireccion, setEditDireccion] = useState(currentUser?.direccion || '');
-  const [editFechaNacimiento, setEditFechaNacimiento] = useState(currentUser?.fechaNacimiento || '');
-  const [editGenero, setEditGenero] = useState(currentUser?.genero || '');
-  const [editBio, setEditBio] = useState(currentUser?.bio || '');
-  const [avatarUrl, setAvatarUrl] = useState(currentUser?.avatarUrl || '');
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+import {
+  Camera,
+  Save,
+  X,
+  User,
+  Mail,
+  Phone,
+  FileText,
+  Shield,
+  Lock,
+  KeyRound,
+} from "lucide-react";
+
+import { toast } from "sonner";
+import { UsuarioSistema } from "../../../data/usuarios-sistema";
+
+const LS_USER_KEY = "usuario";
+
+export default function Perfil() {
+  const navigate = useNavigate();
+
+  const initialUser = useMemo<UsuarioSistema | null>(() => {
+    try {
+      const raw = localStorage.getItem(LS_USER_KEY);
+      return raw ? (JSON.parse(raw) as UsuarioSistema) : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const [currentUser, setCurrentUser] = useState<UsuarioSistema | null>(initialUser);
+
+  // Form states
+  const [editNombre, setEditNombre] = useState("");
+  const [editApellido, setEditApellido] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editDocumento, setEditDocumento] = useState("");
+  const [editTelefono, setEditTelefono] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
+
+  // Modals
+  const [isConfirmSave, setIsConfirmSave] = useState(false);
+  const [isConfirmReset, setIsConfirmReset] = useState(false);
+
+  const [sendingReset, setSendingReset] = useState(false);
+
+  useEffect(() => {
+    if (!currentUser) {
+      toast.error("No hay sesión activa. Inicia sesión nuevamente.");
+      navigate("/login", { replace: true });
+      return;
+    }
+
+    setEditNombre(currentUser.nombre ?? "");
+    setEditApellido(currentUser.apellido ?? "");
+    setEditEmail(currentUser.email ?? "");
+    setEditDocumento(currentUser.documento ?? "");
+    setEditTelefono(currentUser.telefono ?? "");
+    setAvatarUrl(currentUser.avatarUrl ?? "");
+  }, [currentUser, navigate]);
+
+  // Sync si cambia en otro tab
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === LS_USER_KEY) {
+        try {
+          const raw = localStorage.getItem(LS_USER_KEY);
+          setCurrentUser(raw ? (JSON.parse(raw) as UsuarioSistema) : null);
+        } catch {
+          setCurrentUser(null);
+        }
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  const handleBack = () => navigate(-1);
+
+  const getInitials = () => {
+    const nombre = (editNombre || "U").trim();
+    const apellido = (editApellido || "").trim();
+    return `${nombre.charAt(0)}${apellido.charAt(0)}`.toUpperCase();
+  };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      // Validar que sea una imagen
-      if (!file.type.startsWith('image/')) {
-        toast.error('Por favor selecciona un archivo de imagen válido');
-        return;
-      }
+    if (!file) return;
 
-      // Validar tamaño (máximo 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('La imagen debe ser menor a 5MB');
-        return;
-      }
-
-      // Crear URL temporal para preview
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAvatarUrl(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+    if (!file.type.startsWith("image/")) {
+      toast.error("Por favor selecciona un archivo de imagen válido");
+      return;
     }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("La imagen debe ser menor a 5MB");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => setAvatarUrl(reader.result as string);
+    reader.readAsDataURL(file);
   };
 
-  const handleSaveClick = () => {
-    // Validar campos obligatorios
+  const validateBeforeSave = () => {
+    if (!currentUser) return false;
+
     if (!editNombre.trim()) {
-      toast.error('El nombre es obligatorio');
-      return;
+      toast.error("El nombre es obligatorio");
+      return false;
     }
 
     if (!editEmail.trim()) {
-      toast.error('El correo electrónico es obligatorio');
-      return;
+      toast.error("El correo electrónico es obligatorio");
+      return false;
     }
 
-    // Validar nombre (solo letras y espacios)
     if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/.test(editNombre)) {
-      toast.error('El nombre solo puede contener letras');
-      return;
+      toast.error("El nombre solo puede contener letras");
+      return false;
     }
 
-    // Validar apellido si se ingresó
     if (editApellido && !/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/.test(editApellido)) {
-      toast.error('El apellido solo puede contener letras');
-      return;
+      toast.error("El apellido solo puede contener letras");
+      return false;
     }
 
-    // Validar email
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editEmail)) {
-      toast.error('Por favor ingresa un correo electrónico válido');
-      return;
+      toast.error("Por favor ingresa un correo electrónico válido");
+      return false;
     }
 
-    // Validar documento si se ingresó (solo números)
     if (editDocumento && !/^\d+$/.test(editDocumento)) {
-      toast.error('El documento solo puede contener números');
-      return;
+      toast.error("El documento solo puede contener números");
+      return false;
     }
 
-    // Validar teléfono si se ingresó (solo números, 10 dígitos)
     if (editTelefono && !/^\d{10}$/.test(editTelefono)) {
-      toast.error('El teléfono debe tener 10 dígitos numéricos');
-      return;
+      toast.error("El teléfono debe tener 10 dígitos numéricos");
+      return false;
     }
 
-    // Mostrar diálogo de confirmación
-    setShowConfirmDialog(true);
+    return true;
+  };
+
+  const handleSaveClick = () => {
+    if (!validateBeforeSave()) return;
+    setIsConfirmSave(true);
   };
 
   const handleConfirmSave = () => {
-    // Actualizar usuario con los nuevos datos
-    const updatedUser = {
+    if (!currentUser) return;
+
+    const updatedUser: UsuarioSistema = {
       ...currentUser,
       nombre: editNombre,
       apellido: editApellido,
       email: editEmail,
       documento: editDocumento,
       telefono: editTelefono,
-      direccion: editDireccion,
-      fechaNacimiento: editFechaNacimiento,
-      genero: editGenero,
-      bio: editBio,
       avatarUrl: avatarUrl,
     };
 
-    // Actualizar localStorage
-    localStorage.setItem('usuario', JSON.stringify(updatedUser));
+    localStorage.setItem(LS_USER_KEY, JSON.stringify(updatedUser));
+    setCurrentUser(updatedUser);
 
-    // Actualizar el estado en el componente padre
-    if (onUserUpdate) {
-      onUserUpdate(updatedUser);
+    setIsConfirmSave(false);
+    toast.success("Cambios realizados exitosamente");
+  };
+
+  const handleOpenResetDialog = () => {
+    if (!editEmail.trim()) {
+      toast.error("No hay correo para enviar el cambio de contraseña.");
+      return;
     }
-
-    // Cerrar diálogo
-    setShowConfirmDialog(false);
-
-    // Mostrar mensaje de éxito
-    toast.success('Cambios realizados exitosamente');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editEmail)) {
+      toast.error("El correo no es válido.");
+      return;
+    }
+    setIsConfirmReset(true);
   };
 
-  const getInitials = () => {
-    const nombre = editNombre || 'U';
-    const apellido = editApellido || '';
-    return `${nombre.charAt(0)}${apellido.charAt(0)}`.toUpperCase();
+  const handleSendPasswordReset = async () => {
+    try {
+      setSendingReset(true);
+
+      // ✅ Conecta aquí tu backend:
+      // await authService.sendPasswordReset({ email: editEmail });
+
+      await new Promise((r) => setTimeout(r, 700));
+
+      toast.success(`Se envió el correo de cambio de contraseña a ${editEmail}`);
+      setIsConfirmReset(false);
+    } catch {
+      toast.error("No se pudo enviar el correo. Intenta de nuevo.");
+    } finally {
+      setSendingReset(false);
+    }
   };
+
+  if (!currentUser) return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 p-6">
-      <div className="max-w-5xl mx-auto">
+    <div className="h-full bg-gradient-to-br from-gray-50 to-blue-50 p-1">
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between">
           <div>
             <h1 className="text-gray-900">Mi Perfil</h1>
             <p className="text-gray-500 mt-1">Actualiza tu información personal</p>
           </div>
-          <Button variant="outline" onClick={onBack} className="gap-2">
+          <Button variant="outline" onClick={handleBack} className="gap-2">
             <X size={18} />
             Volver
           </Button>
         </div>
 
         {/* Main Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column - Avatar & Info */}
-          <div className="lg:col-span-1 space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Left Column */}
+          <div className="lg:col-span-1 flex flex-col gap-4">
             {/* Avatar Card */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
               <div className="flex flex-col items-center">
                 <div className="relative">
                   <Avatar className="h-32 w-32 border-4 border-white shadow-lg">
@@ -181,9 +245,11 @@ export default function Perfil({ currentUser, onBack, onUserUpdate }: PerfilProp
                       {getInitials()}
                     </AvatarFallback>
                   </Avatar>
+
                   <label
                     htmlFor="avatar-upload"
                     className="absolute bottom-0 right-0 bg-blue-600 hover:bg-blue-700 text-white rounded-full p-2 cursor-pointer shadow-lg transition-colors"
+                    title="Cambiar foto"
                   >
                     <Camera size={18} />
                     <input
@@ -195,49 +261,34 @@ export default function Perfil({ currentUser, onBack, onUserUpdate }: PerfilProp
                     />
                   </label>
                 </div>
-                <h3 className="mt-4 text-gray-900">
+
+                <h3 className="mt-3 text-gray-900 text-center text-lg font-semibold">
                   {editNombre} {editApellido}
                 </h3>
-                <div className="mt-2 inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1 rounded-full border border-blue-200">
-                  <Shield size={14} />
-                  <span className="text-sm">{currentUser?.rol}</span>
+
+
+                {/* Rol: parejo y congruente */}
+                <div className="mt-4 w-full">
+                  <div className="w-full flex items-center justify-center gap-2 bg-blue-50 text-blue-700 px-4 py-3 rounded-lg border border-blue-200">
+                    <Shield size={16} />
+                    <span className="text-sm font-medium">{currentUser?.rol}</span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Quick Info Card */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h3 className="text-gray-900 mb-4">Información Rápida</h3>
-              <div className="space-y-3">
-                <div className="flex items-start gap-3 text-sm">
-                  <Mail size={16} className="text-gray-400 mt-0.5" />
-                  <div>
-                    <p className="text-gray-500">Correo electrónico</p>
-                    <p className="text-gray-900">{editEmail || 'No especificado'}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 text-sm">
-                  <Phone size={16} className="text-gray-400 mt-0.5" />
-                  <div>
-                    <p className="text-gray-500">Teléfono</p>
-                    <p className="text-gray-900">{editTelefono || 'No especificado'}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 text-sm">
-                  <FileText size={16} className="text-gray-400 mt-0.5" />
-                  <div>
-                    <p className="text-gray-500">Documento</p>
-                    <p className="text-gray-900">{editDocumento || 'No especificado'}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 text-sm">
-                  <MapPin size={16} className="text-gray-400 mt-0.5" />
-                  <div>
-                    <p className="text-gray-500">Dirección</p>
-                    <p className="text-gray-900">{editDireccion || 'No especificada'}</p>
-                  </div>
-                </div>
+            {/* Seguridad */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 text-center">
+              <div className="flex items-center justify-center gap-2 mb-3">
+
+                <Lock size={18} className="text-gray-700" />
+                <h3 className="text-gray-900">Seguridad</h3>
               </div>
+
+              <Button onClick={handleOpenResetDialog} variant="outline" className="w-full gap-2 h-11">
+                <KeyRound size={18} />
+                Enviar cambio de contraseña al correo
+              </Button>
             </div>
           </div>
 
@@ -305,7 +356,7 @@ export default function Perfil({ currentUser, onBack, onUserUpdate }: PerfilProp
                     <Input
                       id="telefono"
                       value={editTelefono}
-                      onChange={(e) => setEditTelefono(e.target.value.replace(/\D/g, ''))}
+                      onChange={(e) => setEditTelefono(e.target.value.replace(/\D/g, ""))}
                       placeholder="3001234567"
                       maxLength={10}
                       className="border-gray-300 focus:border-blue-500 focus:ring-blue-500"
@@ -313,121 +364,29 @@ export default function Perfil({ currentUser, onBack, onUserUpdate }: PerfilProp
                   </div>
                 </div>
 
-                {/* Documento y Género */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="documento" className="flex items-center gap-2">
-                      <FileText size={16} className="text-gray-400" />
-                      Documento de Identidad
-                    </Label>
-                    <Input
-                      id="documento"
-                      value={editDocumento}
-                      onChange={(e) => setEditDocumento(e.target.value.replace(/\D/g, ''))}
-                      placeholder="1234567890"
-                      maxLength={15}
-                      className="border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="genero" className="flex items-center gap-2">
-                      <User size={16} className="text-gray-400" />
-                      Género
-                    </Label>
-                    <Select value={editGenero} onValueChange={setEditGenero}>
-                      <SelectTrigger className="border-gray-300 focus:border-blue-500 focus:ring-blue-500">
-                        <SelectValue placeholder="Selecciona tu género" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="masculino">Masculino</SelectItem>
-                        <SelectItem value="femenino">Femenino</SelectItem>
-                        <SelectItem value="otro">Otro</SelectItem>
-                        <SelectItem value="prefiero-no-decir">Prefiero no decir</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {/* Fecha de Nacimiento */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="fechaNacimiento" className="flex items-center gap-2">
-                      <Calendar size={16} className="text-gray-400" />
-                      Fecha de Nacimiento
-                    </Label>
-                    <Input
-                      id="fechaNacimiento"
-                      type="date"
-                      value={editFechaNacimiento}
-                      onChange={(e) => setEditFechaNacimiento(e.target.value)}
-                      className="border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Dirección */}
+                {/* Documento */}
                 <div className="space-y-2">
-                  <Label htmlFor="direccion" className="flex items-center gap-2">
-                    <MapPin size={16} className="text-gray-400" />
-                    Dirección
+                  <Label htmlFor="documento" className="flex items-center gap-2">
+                    <FileText size={16} className="text-gray-400" />
+                    Documento de Identidad
                   </Label>
                   <Input
-                    id="direccion"
-                    value={editDireccion}
-                    onChange={(e) => setEditDireccion(e.target.value)}
-                    placeholder="Calle 123 #45-67, Bogotá"
-                    maxLength={100}
+                    id="documento"
+                    value={editDocumento}
+                    onChange={(e) => setEditDocumento(e.target.value.replace(/\D/g, ""))}
+                    placeholder="1234567890"
+                    maxLength={15}
                     className="border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                   />
                 </div>
 
-                {/* Biografía */}
-                <div className="space-y-2">
-                  <Label htmlFor="bio" className="flex items-center gap-2">
-                    <FileText size={16} className="text-gray-400" />
-                    Biografía / Descripción
-                  </Label>
-                  <Textarea
-                    id="bio"
-                    value={editBio}
-                    onChange={(e) => setEditBio(e.target.value)}
-                    placeholder="Cuéntanos un poco sobre ti..."
-                    rows={4}
-                    maxLength={500}
-                    className="border-gray-300 focus:border-blue-500 focus:ring-blue-500 resize-none"
-                  />
-                  <p className="text-xs text-gray-500 text-right">
-                    {editBio.length}/500 caracteres
-                  </p>
-                </div>
-
-                {/* Información del Rol */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <Shield size={20} className="text-blue-600 mt-0.5" />
-                    <div>
-                      <h4 className="text-blue-900">Información del Sistema</h4>
-                      <p className="text-sm text-blue-700 mt-1">
-                        <strong>Rol:</strong> {currentUser?.rol}
-                      </p>
-                      <p className="text-xs text-blue-600 mt-2">
-                        Los permisos y el rol son asignados por el administrador del sistema.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
                 {/* Action Buttons */}
                 <div className="flex gap-3 pt-4 border-t border-gray-200">
-                  <Button
-                    onClick={handleSaveClick}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 gap-2"
-                  >
+                  <Button onClick={handleSaveClick} className="flex-1 bg-blue-600 hover:bg-blue-700 gap-2 h-11">
                     <Save size={18} />
                     Guardar Cambios
                   </Button>
-                  <Button variant="outline" onClick={onBack} className="gap-2">
+                  <Button variant="outline" onClick={handleBack} className="gap-2 h-11">
                     <X size={18} />
                     Cancelar
                   </Button>
@@ -438,23 +397,79 @@ export default function Perfil({ currentUser, onBack, onUserUpdate }: PerfilProp
         </div>
       </div>
 
-      {/* Confirm Dialog */}
-      <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Estás seguro de realizar cambios?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Se actualizará tu información personal con los nuevos datos ingresados. Esta acción guardará los cambios de forma permanente.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmSave} className="bg-blue-600 hover:bg-blue-700">
-              Confirmar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* ✅ MODAL CONFIRMAR GUARDADO (igual a módulos) */}
+      <Dialog
+        open={isConfirmSave}
+        modal
+        onOpenChange={(open: boolean) => {
+          // no permitir cerrar por overlay/esc, solo con X o Cancelar o Confirmar
+          if (!open) setIsConfirmSave(false);
+        }}
+      >
+        <DialogContent
+          className="max-w-lg"
+          onInteractOutside={(e: any) => e.preventDefault()}
+          onEscapeKeyDown={(e: any) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>Confirmar cambios</DialogTitle>
+            <DialogDescription>
+              ¿Estás seguro de que deseas guardar los cambios en tu perfil? Esta acción actualizará tu información.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsConfirmSave(false)}>
+              Cancelar
+            </Button>
+            <Button className="bg-blue-600 hover:bg-blue-700" onClick={handleConfirmSave}>
+              Guardar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ✅ MODAL RESET PASSWORD (igual a módulos) */}
+      <Dialog
+        open={isConfirmReset}
+        modal
+        onOpenChange={(open: boolean) => {
+          if (!open && !sendingReset) setIsConfirmReset(false);
+        }}
+      >
+        <DialogContent
+          className="max-w-lg"
+          onInteractOutside={(e: any) => e.preventDefault()}
+          onEscapeKeyDown={(e: any) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>Enviar cambio de contraseña</DialogTitle>
+            <DialogDescription>
+              Se enviará un enlace de cambio de contraseña al correo:{" "}
+              <span className="font-semibold text-gray-900">{editEmail}</span>
+              <br />
+              ¿Deseas continuar?
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsConfirmReset(false)}
+              disabled={sendingReset}
+            >
+              Cancelar
+            </Button>
+            <Button
+              className="bg-blue-600 hover:bg-blue-700"
+              onClick={handleSendPasswordReset}
+              disabled={sendingReset}
+            >
+              {sendingReset ? "Enviando..." : "Enviar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

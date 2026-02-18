@@ -136,7 +136,7 @@ export function Sidebar({
                 item.id === "dashboard"
                   ? isActive("/app")
                   : item.id === "inventario"
-                  ? isActive("/app/existencias") || isActive("/app/traslados") || isActive("/app/bodegas")
+                  ? isActive("/app/productos") || isActive("/app/traslados") || isActive("/app/bodegas")
                   : item.id === "compras"
                   ? isActive("/app/proveedores") || isActive("/app/ordenescompra") || isActive("/app/remisionescompra")
                   : item.id === "ventas"
@@ -183,8 +183,8 @@ export function Sidebar({
                               <SubMenuItem
                                 icon={Package}
                                 label="Productos"
-                                onClick={() => handleSubItemClick("/app/existencias")}
-                                active={isActive("/app/existencias")}
+                                onClick={() => handleSubItemClick("/app/productos")}
+                                active={isActive("/app/productos")}
                               />
                               <SubMenuItem
                                 icon={ArrowRightLeft}

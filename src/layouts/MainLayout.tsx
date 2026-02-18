@@ -3,6 +3,8 @@ import { Outlet, useNavigate } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
 import { Navbar } from "./components/Navbar";
 import { Toaster } from "../shared/components/ui/sonner";
+import { useAuth } from "../shared/context/AuthContext";
+
 
 export type AppOutletContext = {
   currentUser: any;
@@ -14,9 +16,24 @@ export type AppOutletContext = {
   gvmLogo?: string;
   traslados?: any[];
   productos?: any[];
+  selectedBodegaId: number;
+  selectedBodegaNombre: string;
+  bodegasDisponibles: { id: number; nombre: string }[];
+  isBodegaFijada: boolean;
 };
 
-interface MainLayoutProps extends AppOutletContext { }
+
+type MainLayoutProps = {
+  currentUser: any;
+  onLogout: () => void;
+  activeSection: string;
+  setActiveSection: (section: string) => void;
+  vManageLogo?: string;
+  vManageLogoSmall?: string;
+  gvmLogo?: string;
+  traslados?: any[];
+  productos?: any[];
+};
 
 export default function MainLayout({
   currentUser,
@@ -33,6 +50,18 @@ export default function MainLayout({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const navigate = useNavigate();
+
+  const { bodegasDisponibles, selectedBodegaId, isBodegaFijada } = useAuth();
+
+  const tieneVariasBodegas = bodegasDisponibles.length >= 2;
+
+  const selectedBodegaNombre =
+    selectedBodegaId === 0 && tieneVariasBodegas
+      ? "Todas las bodegas"
+      : bodegasDisponibles.find((b) => b.id === selectedBodegaId)?.nombre ||
+      bodegasDisponibles[0]?.nombre ||
+      "Sin bodega";
+
 
   return (
     <>
@@ -60,7 +89,7 @@ export default function MainLayout({
             traslados={traslados}
             productos={productos}
             onNavigateToTraslados={() => navigate("/app/traslados")}
-            onNavigateToExistencias={() => navigate("/app/existencias")}
+            onNavigateToExistencias={() => navigate("/app/productos")}
           />
 
 
@@ -76,6 +105,10 @@ export default function MainLayout({
                 gvmLogo,
                 traslados,
                 productos,
+                selectedBodegaId,
+                selectedBodegaNombre,
+                bodegasDisponibles,
+                isBodegaFijada,
               }}
             />
           </main>

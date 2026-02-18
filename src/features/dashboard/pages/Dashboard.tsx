@@ -14,7 +14,7 @@ import { DashboardCharts } from "../components/DashboardCharts";
 // Páginas / Secciones
 import Clientes from "../../clientes/pages/Clientes";
 import Proveedores from "../../proveedores/pages/Proveedores";
-import Existencias from "../../existencias/pages/Existencias";
+import Existencias from "../../productos/pages/Productos";
 import Compras from "../../compras/pages/Compras";
 import RemisionesCompra from "../../remisiones/pages/RemisionesCompra";
 import Ordenes, { ordenesData } from "../../ordenes/pages/Ordenes";

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMatch, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Search, Plus, Edit, Trash2, CheckCircle, Filter } from "lucide-react";
 import { toast } from "sonner";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Button } from "../../../shared/components/ui/button";
 import { Input } from "../../../shared/components/ui/input";
@@ -51,30 +52,40 @@ type BodegaUpdatePayload = Omit<Bodega, "id">;
 
 export default function Bodegas({ triggerCreate }: BodegasProps) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const params = useParams<{ id: string }>();
 
   // ✅ rutas (modales por URL)
-  const isCreateRoute = !!useMatch("/app/bodegas/crear");
-  const isEditRoute = !!useMatch("/app/bodegas/:id/editar");
-  const params = useParams<{ id: string }>();
+  const isCrear = location.pathname.endsWith("/bodegas/crear");
+  const isEditar = location.pathname.endsWith("/editar");
+  const isEliminar = location.pathname.endsWith("/eliminar");
   const editId = params.id ? Number(params.id) : null;
 
-  const goList = () => navigate("/app/bodegas");
-  const goCreate = () => navigate("/app/bodegas/crear");
-  const goEdit = (id: number) => navigate(`/app/bodegas/${id}/editar`);
-
-  const [searchTerm, setSearchTerm] = useState("");
-  const [estadoFilter, setEstadoFilter] = useState<string>("todos");
-
+  // ✅ datos
   const [bodegas, setBodegas] = useState<Bodega[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  // ✅ bodega actual por URL
+  const bodegaActual = useMemo(() => {
+    if (!editId) return null;
+    return bodegas.find((b) => b.id === editId) ?? null;
+  }, [bodegas, editId]);
+
+  // ✅ navegación
+  const goList = () => navigate("/app/bodegas");
+  const goCreate = () => navigate("/app/bodegas/crear");
+  const goEdit = (id: number) => navigate(`/app/bodegas/${id}/editar`);
+  const goDelete = (id: number) => navigate(`/app/bodegas/${id}/eliminar`);
+
+  // filtros
+  const [searchTerm, setSearchTerm] = useState("");
+  const [estadoFilter, setEstadoFilter] = useState<string>("todos");
+
   // Modales que NO dependen de URL (confirmaciones)
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
-
-  const [selectedBodega, setSelectedBodega] = useState<Bodega | null>(null);
-  const [bodegaParaCambioEstado, setBodegaParaCambioEstado] = useState<Bodega | null>(null);
+  const [bodegaParaCambioEstado, setBodegaParaCambioEstado] =
+    useState<Bodega | null>(null);
 
   // Form
   const [formNombre, setFormNombre] = useState("");
@@ -111,75 +122,96 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
     })();
   }, []);
 
-  // ✅ si usas triggerCreate
-  useEffect(() => {
-    if (!triggerCreate) return;
-    resetForm();
-    setSelectedBodega(null);
-    goCreate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [triggerCreate]);
-
-  // ✅ cuando entras a /editar por URL, cargamos el form con la bodega
-  useEffect(() => {
-    if (!isEditRoute) return;
-    if (!editId) return;
-
-    const b = bodegas.find((x) => x.id === editId);
-    if (!b) {
-      // Si refrescan la página o no existe, volvemos a lista
-      toast.error("Bodega no encontrada");
-      goList();
-      return;
-    }
-
-    setSelectedBodega(b);
-    setFormNombre(b.nombre);
-    setFormDepartamento(b.departamento);
-    setFormMunicipio(b.municipio);
-    setFormDireccion(b.direccion);
-    setErrors({ nombre: "", departamento: "", municipio: "", direccion: "" });
-    setTouched({ nombre: false, departamento: false, municipio: false, direccion: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEditRoute, editId, bodegas]);
-
-  // ✅ si entras a /crear por URL, reseteamos
-  useEffect(() => {
-    if (!isCreateRoute) return;
-    resetForm();
-    setSelectedBodega(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCreateRoute]);
-
-  // Validaciones
-  const validateNombre = (value: string) => {
-    if (!value.trim()) return "El nombre de la bodega es requerido";
-    const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s\-]+$/;
-    if (!validPattern.test(value)) return "Solo se permiten letras, números, espacios y guiones";
-    if (value.trim().length < 3) return "Mínimo 3 caracteres";
-    if (value.trim().length > 100) return "Máximo 100 caracteres";
-    return "";
-  };
-
-  const validateDepartamento = (value: string) => (!value ? "El departamento es requerido" : "");
-  const validateMunicipio = (value: string) => (!value ? "El municipio es requerido" : "");
-
-  const validateDireccion = (value: string) => {
-    if (!value.trim()) return "La dirección es requerida";
-    const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s\-,#.]+$/;
-    if (!validPattern.test(value)) return "Solo se permiten letras, números, espacios, guiones, comas, puntos y #";
-    if (value.trim().length < 5) return "Mínimo 5 caracteres";
-    if (value.trim().length > 200) return "Máximo 200 caracteres";
-    return "";
-  };
-
   const resetForm = () => {
     setFormNombre("");
     setFormDepartamento("");
     setFormMunicipio("");
     setFormDireccion("");
     setErrors({ nombre: "", departamento: "", municipio: "", direccion: "" });
-    setTouched({ nombre: false, departamento: false, municipio: false, direccion: false });
+    setTouched({
+      nombre: false,
+      departamento: false,
+      municipio: false,
+      direccion: false,
+    });
+  };
+
+  // ✅ si usas triggerCreate
+  useEffect(() => {
+    if (!triggerCreate) return;
+    resetForm();
+    goCreate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [triggerCreate]);
+
+  // ✅ si entras a /crear por URL, reseteamos
+  useEffect(() => {
+    if (!isCrear) return;
+    resetForm();
+  }, [isCrear]);
+
+  // ✅ si entras a /editar por URL, cargamos el form con la bodegaActual
+  // ✅ /editar: si no existe, sí mostramos error
+  useEffect(() => {
+    if (!isEditar) return;
+
+    if (!bodegaActual) {
+      toast.error("Bodega no encontrada");
+      navigate("/app/bodegas"); // ✅ usa navigate directo
+      return;
+    }
+
+    setFormNombre(bodegaActual.nombre);
+    setFormDepartamento(bodegaActual.departamento);
+    setFormMunicipio(bodegaActual.municipio);
+    setFormDireccion(bodegaActual.direccion);
+
+    setErrors({ nombre: "", departamento: "", municipio: "", direccion: "" });
+    setTouched({
+      nombre: false,
+      departamento: false,
+      municipio: false,
+      direccion: false,
+    });
+  }, [isEditar, bodegaActual?.id]); // ✅ SOLO id
+
+
+  // ✅ /eliminar: si no existe, NO toast (evita superposición al eliminar)
+  useEffect(() => {
+    if (!isEliminar) return;
+
+    if (!bodegaActual) {
+      goList();
+      return;
+    }
+  }, [isEliminar, bodegaActual, goList]);
+
+
+  // Validaciones
+  const validateNombre = (value: string) => {
+    if (!value.trim()) return "El nombre de la bodega es requerido";
+    const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s\-]+$/;
+    if (!validPattern.test(value))
+      return "Solo se permiten letras, números, espacios y guiones";
+    if (value.trim().length < 3) return "Mínimo 3 caracteres";
+    if (value.trim().length > 100) return "Máximo 100 caracteres";
+    return "";
+  };
+
+  const validateDepartamento = (value: string) =>
+    !value ? "El departamento es requerido" : "";
+
+  const validateMunicipio = (value: string) =>
+    !value ? "El municipio es requerido" : "";
+
+  const validateDireccion = (value: string) => {
+    if (!value.trim()) return "La dirección es requerida";
+    const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s\-,#.]+$/;
+    if (!validPattern.test(value))
+      return "Solo se permiten letras, números, espacios, guiones, comas, puntos y #";
+    if (value.trim().length < 5) return "Mínimo 5 caracteres";
+    if (value.trim().length > 200) return "Máximo 200 caracteres";
+    return "";
   };
 
   // Municipios segun depto
@@ -193,10 +225,11 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
     setFormMunicipio("");
   }, [formDepartamento]);
 
-  // Filtrado
+  // 🔹 1. Filtrado
   const filteredBodegas = useMemo(() => {
     return bodegas.filter((bodega) => {
       const searchLower = searchTerm.toLowerCase();
+
       const matchesSearch =
         bodega.nombre.toLowerCase().includes(searchLower) ||
         bodega.departamento.toLowerCase().includes(searchLower) ||
@@ -211,22 +244,43 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
     });
   }, [bodegas, searchTerm, estadoFilter]);
 
+  // 🔹 2. Paginación (DEBE IR DESPUÉS)
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  const totalPages = Math.ceil(filteredBodegas.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentBodegas = filteredBodegas.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, estadoFilter]);
+
+
   // Handlers form con validación
   const handleNombreChange = (value: string) => {
     setFormNombre(value);
-    if (touched.nombre) setErrors((prev) => ({ ...prev, nombre: validateNombre(value) }));
+    if (touched.nombre)
+      setErrors((prev) => ({ ...prev, nombre: validateNombre(value) }));
   };
   const handleDepartamentoChange = (value: string) => {
     setFormDepartamento(value);
-    if (touched.departamento) setErrors((prev) => ({ ...prev, departamento: validateDepartamento(value) }));
+    if (touched.departamento)
+      setErrors((prev) => ({
+        ...prev,
+        departamento: validateDepartamento(value),
+      }));
   };
   const handleMunicipioChange = (value: string) => {
     setFormMunicipio(value);
-    if (touched.municipio) setErrors((prev) => ({ ...prev, municipio: validateMunicipio(value) }));
+    if (touched.municipio)
+      setErrors((prev) => ({ ...prev, municipio: validateMunicipio(value) }));
   };
   const handleDireccionChange = (value: string) => {
     setFormDireccion(value);
-    if (touched.direccion) setErrors((prev) => ({ ...prev, direccion: validateDireccion(value) }));
+    if (touched.direccion)
+      setErrors((prev) => ({ ...prev, direccion: validateDireccion(value) }));
   };
 
   const handleNombreBlur = () => {
@@ -235,7 +289,10 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
   };
   const handleDepartamentoBlur = () => {
     setTouched((prev) => ({ ...prev, departamento: true }));
-    setErrors((prev) => ({ ...prev, departamento: validateDepartamento(formDepartamento) }));
+    setErrors((prev) => ({
+      ...prev,
+      departamento: validateDepartamento(formDepartamento),
+    }));
   };
   const handleMunicipioBlur = () => {
     setTouched((prev) => ({ ...prev, municipio: true }));
@@ -247,7 +304,12 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
   };
 
   const validateForm = () => {
-    setTouched({ nombre: true, departamento: true, municipio: true, direccion: true });
+    setTouched({
+      nombre: true,
+      departamento: true,
+      municipio: true,
+      direccion: true,
+    });
 
     const nombreError = validateNombre(formNombre);
     const departamentoError = validateDepartamento(formDepartamento);
@@ -272,18 +334,11 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
   // ✅ acciones UI -> rutas
   const onClickCreate = () => {
     resetForm();
-    setSelectedBodega(null);
     goCreate();
   };
 
-  const onClickEdit = (bodega: Bodega) => {
-    goEdit(bodega.id);
-  };
-
-  const onClickDelete = (bodega: Bodega) => {
-    setSelectedBodega(bodega);
-    setShowDeleteModal(true);
-  };
+  const onClickEdit = (bodega: Bodega) => goEdit(bodega.id);
+  const onClickDelete = (bodega: Bodega) => goDelete(bodega.id);
 
   const onClickToggleEstado = (bodega: Bodega) => {
     setBodegaParaCambioEstado(bodega);
@@ -314,7 +369,7 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
   };
 
   const confirmEdit = async () => {
-    if (!selectedBodega) {
+    if (!bodegaActual) {
       toast.error("No hay bodega seleccionada para editar");
       return;
     }
@@ -326,10 +381,10 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
         departamento: formDepartamento,
         municipio: formMunicipio,
         direccion: formDireccion.trim(),
-        estado: selectedBodega.estado,
+        estado: bodegaActual.estado,
       };
 
-      const updated = await updateBodega(selectedBodega.id, payload);
+      const updated = await updateBodega(bodegaActual.id, payload);
       setBodegas((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
 
       toast.success("Bodega actualizada exitosamente");
@@ -340,13 +395,14 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
   };
 
   const confirmDelete = async () => {
-    if (!selectedBodega) return;
+    if (!bodegaActual) return;
 
     try {
-      await deleteBodega(selectedBodega.id);
-      setBodegas((prev) => prev.filter((b) => b.id !== selectedBodega.id));
-      setShowDeleteModal(false);
+      await deleteBodega(bodegaActual.id);
+      setBodegas((prev) => prev.filter((b) => b.id !== bodegaActual.id));
+
       toast.success("Bodega eliminada exitosamente");
+      goList(); // 🔥 vuelve a lista y quita /eliminar de la URL
     } catch {
       toast.error("No se pudo eliminar la bodega");
     }
@@ -359,7 +415,9 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
       const updated = await toggleEstadoBodega(bodegaParaCambioEstado.id);
       setBodegas((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
 
-      toast.success(`Bodega ${updated.estado ? "activada" : "desactivada"} exitosamente`);
+      toast.success(
+        `Bodega ${updated.estado ? "activada" : "desactivada"} exitosamente`
+      );
       setShowConfirmEstadoModal(false);
       setBodegaParaCambioEstado(null);
     } catch {
@@ -372,13 +430,18 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
       {/* Header */}
       <div>
         <h2 className="text-gray-900">Gestión de Bodegas</h2>
-        <p className="text-gray-600 mt-1">Administra las bodegas y centros de almacenamiento</p>
+        <p className="text-gray-600 mt-1">
+          Administra las bodegas y centros de almacenamiento
+        </p>
       </div>
 
       {/* Search + filtros + botón */}
       <div className="flex items-center gap-4">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+          <Search
+            className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+            size={20}
+          />
           <Input
             placeholder="Buscar bodegas..."
             value={searchTerm}
@@ -394,7 +457,10 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
             size="sm"
             variant={estadoFilter === "todos" ? "default" : "ghost"}
             onClick={() => setEstadoFilter("todos")}
-            className={`h-8 ${estadoFilter === "todos" ? "bg-blue-600 text-white hover:bg-blue-700" : "hover:bg-gray-200"}`}
+            className={`h-8 ${estadoFilter === "todos"
+              ? "bg-blue-600 text-white hover:bg-blue-700"
+              : "hover:bg-gray-200"
+              }`}
           >
             Todas
           </Button>
@@ -402,7 +468,10 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
             size="sm"
             variant={estadoFilter === "activas" ? "default" : "ghost"}
             onClick={() => setEstadoFilter("activas")}
-            className={`h-8 ${estadoFilter === "activas" ? "bg-green-600 text-white hover:bg-green-700" : "hover:bg-gray-200"}`}
+            className={`h-8 ${estadoFilter === "activas"
+              ? "bg-green-600 text-white hover:bg-green-700"
+              : "hover:bg-gray-200"
+              }`}
           >
             Activas
           </Button>
@@ -410,13 +479,20 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
             size="sm"
             variant={estadoFilter === "inactivas" ? "default" : "ghost"}
             onClick={() => setEstadoFilter("inactivas")}
-            className={`h-8 ${estadoFilter === "inactivas" ? "bg-red-600 text-white hover:bg-red-700" : "hover:bg-gray-200"}`}
+            className={`h-8 ${estadoFilter === "inactivas"
+              ? "bg-red-600 text-white hover:bg-red-700"
+              : "hover:bg-gray-200"
+              }`}
           >
             Inactivas
           </Button>
         </div>
 
-        <Button onClick={onClickCreate} className="bg-blue-600 hover:bg-blue-700" disabled={isLoading}>
+        <Button
+          onClick={onClickCreate}
+          className="bg-blue-600 hover:bg-blue-700"
+          disabled={isLoading}
+        >
           <Plus size={18} className="mr-2" />
           Nueva Bodega
         </Button>
@@ -428,6 +504,7 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50">
+                <TableHead className="w-16">#</TableHead>
                 <TableHead>Nombre</TableHead>
                 <TableHead>Municipio</TableHead>
                 <TableHead>Dirección</TableHead>
@@ -439,24 +516,31 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-10 text-gray-500">
+                  <TableCell colSpan={6} className="text-center py-10 text-gray-500">
                     Cargando bodegas...
                   </TableCell>
                 </TableRow>
-              ) : filteredBodegas.length === 0 ? (
+              ) : currentBodegas.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={6} className="text-center py-8 text-gray-500">
                     No se encontraron bodegas
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredBodegas.map((bodega) => (
+                currentBodegas.map((bodega, index) => (
                   <TableRow key={bodega.id} className="hover:bg-gray-50">
-                    <TableCell className="font-medium text-gray-900">{bodega.nombre}</TableCell>
+                    <TableCell>{startIndex + index + 1}</TableCell>
+
+                    <TableCell className="font-medium text-gray-900">
+                      {bodega.nombre}
+                    </TableCell>
+
                     <TableCell className="text-gray-700">
                       {bodega.municipio}, {bodega.departamento}
                     </TableCell>
+
                     <TableCell className="text-gray-700">{bodega.direccion}</TableCell>
+
                     <TableCell className="text-center">
                       <Button
                         size="sm"
@@ -471,6 +555,7 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                         {bodega.estado ? "Activa" : "Inactiva"}
                       </Button>
                     </TableCell>
+
                     <TableCell>
                       <div className="flex items-center justify-end gap-2">
                         <Button
@@ -482,6 +567,7 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                         >
                           <Edit size={16} />
                         </Button>
+
                         <Button
                           variant="ghost"
                           size="icon"
@@ -499,19 +585,75 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
             </TableBody>
           </Table>
         </div>
+
+        {/* ✅ Paginación */}
+        {!isLoading && filteredBodegas.length > 0 && (
+          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
+            <div className="text-sm text-gray-600">
+              Mostrando {startIndex + 1} -{" "}
+              {Math.min(endIndex, filteredBodegas.length)} de{" "}
+              {filteredBodegas.length} bodegas
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="h-8"
+              >
+                <ChevronLeft size={16} />
+                Anterior
+              </Button>
+
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                  <Button
+                    key={page}
+                    variant={currentPage === page ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setCurrentPage(page)}
+                    className="h-8 w-8 p-0"
+                  >
+                    {page}
+                  </Button>
+                ))}
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="h-8"
+              >
+                Siguiente
+                <ChevronRight size={16} />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ✅ MODAL CREAR (por ruta) */}
       <Dialog
-        open={isCreateRoute}
-        onOpenChange={(open:boolean) => {
+        open={isCrear}
+        modal
+        onOpenChange={(open: boolean) => {
           if (!open) goList();
         }}
       >
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" onInteractOutside={(e: Event) => e.preventDefault()}>
+        <DialogContent
+          className="max-w-2xl max-h-[90vh] overflow-y-auto"
+          onInteractOutside={(e: any) => e.preventDefault()}
+          onEscapeKeyDown={(e: any) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>Crear Nueva Bodega</DialogTitle>
-            <DialogDescription>Completa la información para registrar una nueva bodega en el sistema</DialogDescription>
+            <DialogDescription>
+              Completa la información para registrar una nueva bodega en el sistema
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
@@ -525,7 +667,9 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                 placeholder="Ej: Bodega Principal"
                 className={errors.nombre ? "border-red-500" : ""}
               />
-              {errors.nombre && <p className="text-red-500 text-sm mt-1">{errors.nombre}</p>}
+              {errors.nombre && (
+                <p className="text-red-500 text-sm mt-1">{errors.nombre}</p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -538,7 +682,11 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                 >
                   <SelectTrigger
                     id="create-departamento"
-                    className={errors.departamento && touched.departamento ? "border-red-500" : ""}
+                    className={
+                      errors.departamento && touched.departamento
+                        ? "border-red-500"
+                        : ""
+                    }
                   >
                     <SelectValue placeholder="Selecciona un departamento" />
                   </SelectTrigger>
@@ -550,7 +698,9 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                     ))}
                   </SelectContent>
                 </Select>
-                {errors.departamento && touched.departamento && <p className="text-red-500 text-sm mt-1">{errors.departamento}</p>}
+                {errors.departamento && touched.departamento && (
+                  <p className="text-red-500 text-sm mt-1">{errors.departamento}</p>
+                )}
               </div>
 
               <div>
@@ -563,7 +713,9 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                 >
                   <SelectTrigger
                     id="create-municipio"
-                    className={errors.municipio && touched.municipio ? "border-red-500" : ""}
+                    className={
+                      errors.municipio && touched.municipio ? "border-red-500" : ""
+                    }
                   >
                     <SelectValue placeholder="Selecciona un municipio" />
                   </SelectTrigger>
@@ -575,7 +727,9 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                     ))}
                   </SelectContent>
                 </Select>
-                {errors.municipio && touched.municipio && <p className="text-red-500 text-sm mt-1">{errors.municipio}</p>}
+                {errors.municipio && touched.municipio && (
+                  <p className="text-red-500 text-sm mt-1">{errors.municipio}</p>
+                )}
               </div>
             </div>
 
@@ -589,7 +743,9 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                 placeholder="Ej: Calle 80 #45-23"
                 className={errors.direccion ? "border-red-500" : ""}
               />
-              {errors.direccion && <p className="text-red-500 text-sm mt-1">{errors.direccion}</p>}
+              {errors.direccion && (
+                <p className="text-red-500 text-sm mt-1">{errors.direccion}</p>
+              )}
             </div>
           </div>
 
@@ -606,12 +762,17 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
 
       {/* ✅ MODAL EDITAR (por ruta) */}
       <Dialog
-        open={isEditRoute}
+        open={isEditar}
+        modal
         onOpenChange={(open: boolean) => {
           if (!open) goList();
         }}
       >
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" onInteractOutside={(e : Event) => e.preventDefault()}>
+        <DialogContent
+          className="max-w-2xl max-h-[90vh] overflow-y-auto"
+          onInteractOutside={(e: any) => e.preventDefault()}
+          onEscapeKeyDown={(e: any) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>Editar Bodega</DialogTitle>
             <DialogDescription>Modifica la información de la bodega</DialogDescription>
@@ -628,7 +789,9 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                 placeholder="Ej: Bodega Principal"
                 className={errors.nombre ? "border-red-500" : ""}
               />
-              {errors.nombre && <p className="text-red-500 text-sm mt-1">{errors.nombre}</p>}
+              {errors.nombre && (
+                <p className="text-red-500 text-sm mt-1">{errors.nombre}</p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -641,7 +804,11 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                 >
                   <SelectTrigger
                     id="edit-departamento"
-                    className={errors.departamento && touched.departamento ? "border-red-500" : ""}
+                    className={
+                      errors.departamento && touched.departamento
+                        ? "border-red-500"
+                        : ""
+                    }
                   >
                     <SelectValue placeholder="Selecciona un departamento" />
                   </SelectTrigger>
@@ -653,7 +820,9 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                     ))}
                   </SelectContent>
                 </Select>
-                {errors.departamento && touched.departamento && <p className="text-red-500 text-sm mt-1">{errors.departamento}</p>}
+                {errors.departamento && touched.departamento && (
+                  <p className="text-red-500 text-sm mt-1">{errors.departamento}</p>
+                )}
               </div>
 
               <div>
@@ -666,7 +835,9 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                 >
                   <SelectTrigger
                     id="edit-municipio"
-                    className={errors.municipio && touched.municipio ? "border-red-500" : ""}
+                    className={
+                      errors.municipio && touched.municipio ? "border-red-500" : ""
+                    }
                   >
                     <SelectValue placeholder="Selecciona un municipio" />
                   </SelectTrigger>
@@ -678,7 +849,9 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                     ))}
                   </SelectContent>
                 </Select>
-                {errors.municipio && touched.municipio && <p className="text-red-500 text-sm mt-1">{errors.municipio}</p>}
+                {errors.municipio && touched.municipio && (
+                  <p className="text-red-500 text-sm mt-1">{errors.municipio}</p>
+                )}
               </div>
             </div>
 
@@ -692,7 +865,9 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                 placeholder="Ej: Calle 80 #45-23"
                 className={errors.direccion ? "border-red-500" : ""}
               />
-              {errors.direccion && <p className="text-red-500 text-sm mt-1">{errors.direccion}</p>}
+              {errors.direccion && (
+                <p className="text-red-500 text-sm mt-1">{errors.direccion}</p>
+              )}
             </div>
           </div>
 
@@ -707,27 +882,40 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL ELIMINAR */}
-      <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
-        <DialogContent>
+      {/* ✅ MODAL ELIMINAR (por ruta) */}
+      <Dialog
+        open={isEliminar}
+        modal
+        onOpenChange={(open: boolean) => {
+          if (!open) goList();
+        }}
+      >
+        <DialogContent
+          className="max-w-lg"
+          onInteractOutside={(e: any) => e.preventDefault()}
+          onEscapeKeyDown={(e: any) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>Eliminar Bodega</DialogTitle>
-            <DialogDescription>¿Estás seguro de que deseas eliminar esta bodega? Esta acción no se puede deshacer.</DialogDescription>
+            <DialogDescription>
+              ¿Estás seguro de que deseas eliminar esta bodega? Esta acción no se puede
+              deshacer.
+            </DialogDescription>
           </DialogHeader>
 
-          {selectedBodega && (
+          {bodegaActual && (
             <div className="py-4">
               <p className="text-gray-700">
-                Bodega: <span className="font-semibold">{selectedBodega.nombre}</span>
+                Bodega: <span className="font-semibold">{bodegaActual.nombre}</span>
               </p>
               <p className="text-gray-600 text-sm mt-1">
-                Ubicación: {selectedBodega.municipio}, {selectedBodega.departamento}
+                Ubicación: {bodegaActual.municipio}, {bodegaActual.departamento}
               </p>
             </div>
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDeleteModal(false)}>
+            <Button variant="outline" onClick={goList}>
               Cancelar
             </Button>
             <Button variant="destructive" onClick={confirmDelete}>
@@ -737,12 +925,14 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL CONFIRMAR ESTADO */}
+      {/* MODAL CONFIRMAR ESTADO (no ruta) */}
       <Dialog open={showConfirmEstadoModal} onOpenChange={setShowConfirmEstadoModal}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Confirmar Cambio de Estado</DialogTitle>
-            <DialogDescription>¿Estás seguro de que deseas cambiar el estado de esta bodega?</DialogDescription>
+            <DialogDescription>
+              ¿Estás seguro de que deseas cambiar el estado de esta bodega?
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3 py-4">
@@ -752,13 +942,19 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Estado Actual:</span>
-              <span className={`font-medium ${bodegaParaCambioEstado?.estado ? "text-green-700" : "text-red-700"}`}>
+              <span
+                className={`font-medium ${bodegaParaCambioEstado?.estado ? "text-green-700" : "text-red-700"
+                  }`}
+              >
                 {bodegaParaCambioEstado?.estado ? "Activa" : "Inactiva"}
               </span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Nuevo Estado:</span>
-              <span className={`font-medium ${!bodegaParaCambioEstado?.estado ? "text-green-700" : "text-red-700"}`}>
+              <span
+                className={`font-medium ${!bodegaParaCambioEstado?.estado ? "text-green-700" : "text-red-700"
+                  }`}
+              >
                 {!bodegaParaCambioEstado?.estado ? "Activa" : "Inactiva"}
               </span>
             </div>
@@ -780,7 +976,9 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="sr-only">Registro Exitoso</DialogTitle>
-            <DialogDescription className="sr-only">La bodega se ha registrado correctamente</DialogDescription>
+            <DialogDescription className="sr-only">
+              La bodega se ha registrado correctamente
+            </DialogDescription>
 
             <div className="flex justify-center mb-4">
               <div className="rounded-full bg-green-100 p-3">
@@ -789,11 +987,16 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
             </div>
 
             <DialogTitle className="text-center">¡Registro Exitoso!</DialogTitle>
-            <DialogDescription className="text-center">La bodega ha sido creada correctamente en el sistema</DialogDescription>
+            <DialogDescription className="text-center">
+              La bodega ha sido creada correctamente en el sistema
+            </DialogDescription>
           </DialogHeader>
 
           <DialogFooter className="flex justify-center">
-            <Button onClick={() => setShowSuccessModal(false)} className="bg-green-600 hover:bg-green-700">
+            <Button
+              onClick={() => setShowSuccessModal(false)}
+              className="bg-green-600 hover:bg-green-700"
+            >
               Aceptar
             </Button>
           </DialogFooter>
