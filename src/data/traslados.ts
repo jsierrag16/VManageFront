@@ -15,7 +15,7 @@ export interface Traslado {
   bodegaDestino: string;
   items: TrasladoItem[];
   responsable: string;
-  estado: 'Enviado' | 'Recibido' | 'Cancelado';
+  estado: 'Pendiente' | 'Enviado' | 'Recibido' | 'Cancelado';
   observaciones?: string;
 }
 

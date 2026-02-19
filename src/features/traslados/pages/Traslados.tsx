@@ -1,8 +1,31 @@
-import { useState, useMemo, useEffect } from 'react';
-import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { Search, Plus, Eye, Package, ChevronLeft, ChevronRight, CheckCircle, Building2, X, Trash2, PlusCircle, Truck, XCircle, Ban } from 'lucide-react';
-import { Button } from '../../../shared/components/ui/button';
-import { Input } from '../../../shared/components/ui/input';
+import { useState, useMemo, useEffect } from "react";
+import {
+  useLocation,
+  useNavigate,
+  useParams,
+  useOutletContext,
+} from "react-router-dom";
+
+import {
+  Search,
+  Plus,
+  Eye,
+  Package,
+  ChevronLeft,
+  ChevronRight,
+  CheckCircle,
+  Building2,
+  X,
+  Clock,
+  Trash2,
+  PlusCircle,
+  Truck,
+  XCircle,
+  Ban,
+} from "lucide-react";
+
+import { Button } from "../../../shared/components/ui/button";
+import { Input } from "../../../shared/components/ui/input";
 import {
   Table,
   TableBody,
@@ -10,7 +33,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '../../../shared/components/ui/table';
+} from "../../../shared/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -18,49 +41,74 @@ import {
   DialogTitle,
   DialogFooter,
   DialogDescription,
-} from '../../../shared/components/ui/dialog';
+} from "../../../shared/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../../../shared/components/ui/select';
-import { Label } from '../../../shared/components/ui/label';
-import { Badge } from '../../../shared/components/ui/badge';
-import { Textarea } from '../../../shared/components/ui/textarea';
-import { toast } from 'sonner';
-import { Traslado, TrasladoItem } from '../../../data/traslados';
-import { bodegasData } from '../../../data/bodegas';
-import { usePermisos } from '../../../shared/hooks/usePermisos';
-import { useTraslados } from '../../../shared/context/TrasladosContext';
-import { useProductos } from '../../../shared/context/ProductosContext';
+} from "../../../shared/components/ui/select";
+import { Label } from "../../../shared/components/ui/label";
+import { Badge } from "../../../shared/components/ui/badge";
+import { Textarea } from "../../../shared/components/ui/textarea";
+
+import { toast } from "sonner";
+import { Traslado, TrasladoItem } from "../../../data/traslados";
+import { bodegasData } from "../../../data/bodegas";
+import { usePermisos } from "../../../shared/hooks/usePermisos";
+import { useTraslados } from "../../../shared/context/TrasladosContext";
+import { useProductos } from "../../../shared/context/ProductosContext";
+
+/**
+ * ✅ IMPORTANTE:
+ * - Si ya tienes AppOutletContext definido (como en Productos), cambia este type por el import real.
+ * - Ej: import type { AppOutletContext } from "../../../layouts/MainLayout";
+ */
+type AppOutletContext = {
+  selectedBodegaNombre: string;
+};
 
 interface TrasladosProps {
-  selectedBodega?: string;
   onTrasladoCreated?: () => void;
   triggerCreate?: number;
 }
 
-export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasladoCreated, triggerCreate }: TrasladosProps) {
+export default function Traslados({
+  onTrasladoCreated,
+  triggerCreate,
+}: TrasladosProps) {
   const { usuario } = usePermisos();
   const { traslados, addTraslado, updateTraslado } = useTraslados();
   const { productos, updateProducto } = useProductos();
-  const [searchTerm, setSearchTerm] = useState('');
+
+  // ✅ Bodega desde MainLayout (igual que Productos)
+  const { selectedBodegaNombre } = useOutletContext<AppOutletContext>();
+  const selectedBodega = selectedBodegaNombre;
+
+  const [searchTerm, setSearchTerm] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
   const [showCancelarModal, setShowCancelarModal] = useState(false);
-  const [selectedTraslado, setSelectedTraslado] = useState<Traslado | null>(null);
-  const [nuevoEstado, setNuevoEstado] = useState<'Enviado' | 'Recibido' | 'Cancelado' | null>(null);
-  const [motivoCancelacion, setMotivoCancelacion] = useState('');
+
+  const [selectedTraslado, setSelectedTraslado] = useState<Traslado | null>(
+    null
+  );
+
+
+
+  type EstadoTraslado = "Pendiente" | "Enviado" | "Recibido" | "Cancelado";
+  const [nuevoEstado, setNuevoEstado] = useState<EstadoTraslado | null>(null);
+
+  const [motivoCancelacion, setMotivoCancelacion] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
   const navigate = useNavigate();
   const location = useLocation();
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
 
   const path = location.pathname;
 
@@ -71,13 +119,12 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
 
   const trasladoByRoute = useMemo(() => {
     if (!id) return null;
-    return traslados.find(t => t.id === id) || null;
+    return traslados.find((t) => t.id === id) || null;
   }, [id, traslados]);
 
   const goList = () => navigate("/app/traslados", { replace: true });
 
   useEffect(() => {
-
     // ✅ reset UI para evitar modales cruzados
     setShowCreateModal(false);
     setShowViewModal(false);
@@ -93,8 +140,8 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
       const bodegaInicial =
         usuario?.rol !== "Administrador"
           ? selectedBodega
-          : (state?.bodegaOrigen ??
-            (selectedBodega === "Todas las bodegas" ? "" : selectedBodega));
+          : state?.bodegaOrigen ??
+          (selectedBodega === "Todas las bodegas" ? "" : selectedBodega);
 
       setFormBodegaOrigen(bodegaInicial);
       setFormBodegaDestino("");
@@ -120,34 +167,33 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
       return;
     }
 
-    // ✅ EDITAR (solo si NO está Enviado)
+    // ✅ EDITAR (tu lógica actual)
     if (isEditarRoute) {
       if (!trasladoByRoute) {
         toast.error("Traslado no encontrado");
         goList();
         return;
       }
-      if (trasladoByRoute.estado === "Enviado") {
-        toast.error("No puedes editar un traslado en estado Enviado");
+      if (trasladoByRoute.estado === "Pendiente") {
+        toast.error("No puedes editar un traslado en estado Pendiente");
         goList();
         return;
       }
 
-      // Aquí luego abrimos tu modal editar (si lo vas a implementar)
       toast.info("Pendiente: modal editar");
       goList();
       return;
     }
 
-    // ✅ CANCELAR (solo si está Enviado)
+    // ✅ CANCELAR (solo si está Pendiente)
     if (isCancelarRoute) {
       if (!trasladoByRoute) {
         toast.error("Traslado no encontrado");
         goList();
         return;
       }
-      if (trasladoByRoute.estado !== "Enviado") {
-        toast.error("Solo puedes cancelar traslados en estado Enviado");
+      if (trasladoByRoute.estado !== "Pendiente") {
+        toast.error("Solo puedes cancelar traslados en estado Pendiente");
         goList();
         return;
       }
@@ -168,124 +214,103 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
     location.state,
   ]);
 
-  const goVer = (traslado: Traslado) => navigate(`./${traslado.id}/ver`);
-  const goCancelar = (traslado: Traslado) => navigate(`./${traslado.id}/cancelar`);
 
+  const goVer = (traslado: Traslado) =>
+    navigate(`/app/traslados/${traslado.id}/ver`);
+
+  const goCancelar = (traslado: Traslado) =>
+    navigate(`/app/traslados/${traslado.id}/cancelar`);
 
   // Filtros de fecha
-  const [fechaInicio, setFechaInicio] = useState('');
-  const [fechaFin, setFechaFin] = useState('');
+  const [fechaInicio, setFechaInicio] = useState("");
+  const [fechaFin, setFechaFin] = useState("");
 
   // Form states
   const [formBodegaOrigen, setFormBodegaOrigen] = useState(selectedBodega);
-  const [formBodegaDestino, setFormBodegaDestino] = useState('');
-  const [formObservaciones, setFormObservaciones] = useState('');
+  const [formBodegaDestino, setFormBodegaDestino] = useState("");
+  const [formObservaciones, setFormObservaciones] = useState("");
 
   // Items del traslado (líneas)
   const [trasladoItems, setTrasladoItems] = useState<TrasladoItem[]>([]);
 
+  const bodegasBloqueadas = trasladoItems.length > 0;
+
+
   // Form states para la línea actual
-  const [currentProducto, setCurrentProducto] = useState('');
-  const [currentLote, setCurrentLote] = useState('');
-  const [currentCantidad, setCurrentCantidad] = useState('');
+  const [currentProducto, setCurrentProducto] = useState("");
+  const [currentLote, setCurrentLote] = useState("");
+  const [currentCantidad, setCurrentCantidad] = useState("");
 
   // Estados para validaciones en tiempo real
   const [errors, setErrors] = useState({
-    bodegaOrigen: '',
-    bodegaDestino: '',
-    observaciones: '',
-    currentProducto: '',
-    currentLote: '',
-    currentCantidad: ''
+    bodegaOrigen: "",
+    bodegaDestino: "",
+    observaciones: "",
+    currentProducto: "",
+    currentLote: "",
+    currentCantidad: "",
   });
+
   const [touched, setTouched] = useState({
     bodegaOrigen: false,
     bodegaDestino: false,
     observaciones: false,
     currentProducto: false,
     currentLote: false,
-    currentCantidad: false
+    currentCantidad: false,
   });
 
-  // Funciones de validación individuales
+  // Validaciones
   const validateBodegaOrigen = (value: string) => {
-    if (!value || value === '') {
-      return 'La bodega de origen es requerida';
-    }
-    return '';
+    if (!value || value === "") return "La bodega de origen es requerida";
+    return "";
   };
 
   const validateBodegaDestino = (value: string, bodegaOrigen: string) => {
-    if (!value || value === '') {
-      return 'La bodega de destino es requerida';
-    }
-    if (value === bodegaOrigen) {
-      return 'La bodega de destino debe ser diferente a la de origen';
-    }
-    return '';
+    if (!value || value === "") return "La bodega de destino es requerida";
+    if (value === bodegaOrigen)
+      return "La bodega de destino debe ser diferente a la de origen";
+    return "";
   };
 
   const validateObservaciones = (value: string) => {
-    if (!value.trim()) {
-      return ''; // Las observaciones son opcionales
-    }
-    // Permitir letras, números, espacios y puntuación común
+    if (!value.trim()) return "";
     const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s.,;:()\-¿?¡!]+$/;
-    if (!validPattern.test(value)) {
-      return 'Solo se permiten letras, números, espacios y puntuación básica';
-    }
-    if (value.trim().length > 500) {
-      return 'Máximo 500 caracteres';
-    }
-    return '';
+    if (!validPattern.test(value))
+      return "Solo se permiten letras, números, espacios y puntuación básica";
+    if (value.trim().length > 500) return "Máximo 500 caracteres";
+    return "";
   };
 
   const validateCurrentProducto = (value: string) => {
-    if (!value) {
-      return 'El producto es requerido';
-    }
-    return '';
+    if (!value) return "El producto es requerido";
+    return "";
   };
 
   const validateCurrentLote = (value: string) => {
-    if (!value) {
-      return 'El lote es requerido';
-    }
-    return '';
+    if (!value) return "El lote es requerido";
+    return "";
   };
 
   const validateCurrentCantidad = (value: string, maxCantidad: number) => {
-    if (!value.trim()) {
-      return 'La cantidad es requerida';
-    }
-    // Solo números enteros
+    if (!value.trim()) return "La cantidad es requerida";
     const soloNumeros = /^[0-9]+$/;
-    if (!soloNumeros.test(value)) {
-      return 'Solo se permiten números enteros';
-    }
+    if (!soloNumeros.test(value)) return "Solo se permiten números enteros";
     const cantidad = parseInt(value);
-    if (cantidad <= 0) {
-      return 'La cantidad debe ser mayor a 0';
-    }
-    if (cantidad > maxCantidad) {
+    if (cantidad <= 0) return "La cantidad debe ser mayor a 0";
+    if (cantidad > maxCantidad)
       return `Máximo ${maxCantidad} unidades disponibles`;
-    }
-    return '';
+    return "";
   };
 
-  // Handlers con validación en tiempo real
-
+  // Handlers
   const handleBodegaOrigenChange = (value: string) => {
     setFormBodegaOrigen(value);
-
-    // ✅ Select no maneja blur confiable, marcamos "touched" al seleccionar
     setTouched((prev) => ({ ...prev, bodegaOrigen: true }));
 
-    // ✅ Validación inmediata
     setErrors((prev) => ({
       ...prev,
       bodegaOrigen: validateBodegaOrigen(value),
-      // si destino ya se tocó, revalidarlo con la nueva bodega origen
       bodegaDestino: prev.bodegaDestino
         ? validateBodegaDestino(formBodegaDestino, value)
         : prev.bodegaDestino,
@@ -294,7 +319,6 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
 
   const handleBodegaDestinoChange = (value: string) => {
     setFormBodegaDestino(value);
-
     setTouched((prev) => ({ ...prev, bodegaDestino: true }));
 
     setErrors((prev) => ({
@@ -305,35 +329,36 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
 
   const handleObservacionesChange = (value: string) => {
     setFormObservaciones(value);
-
-    // si ya tocó observaciones, validar en vivo
     setErrors((prev) => ({
       ...prev,
-      observaciones: touched.observaciones ? validateObservaciones(value) : prev.observaciones,
+      observaciones: touched.observaciones
+        ? validateObservaciones(value)
+        : prev.observaciones,
     }));
   };
 
   const handleCurrentProductoChange = (value: string) => {
     setCurrentProducto(value);
-
     setErrors((prev) => ({
       ...prev,
-      currentProducto: touched.currentProducto ? validateCurrentProducto(value) : prev.currentProducto,
+      currentProducto: touched.currentProducto
+        ? validateCurrentProducto(value)
+        : prev.currentProducto,
     }));
   };
 
   const handleCurrentLoteChange = (value: string) => {
     setCurrentLote(value);
-
     setErrors((prev) => ({
       ...prev,
-      currentLote: touched.currentLote ? validateCurrentLote(value) : prev.currentLote,
+      currentLote: touched.currentLote
+        ? validateCurrentLote(value)
+        : prev.currentLote,
     }));
   };
 
   const handleCurrentCantidadChange = (value: string) => {
     setCurrentCantidad(value);
-
     setErrors((prev) => ({
       ...prev,
       currentCantidad: touched.currentCantidad
@@ -342,11 +367,12 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
     }));
   };
 
-  // Handlers onBlur (SOLO para Input/Textarea)
-
   const handleObservacionesBlur = () => {
     setTouched((prev) => ({ ...prev, observaciones: true }));
-    setErrors((prev) => ({ ...prev, observaciones: validateObservaciones(formObservaciones) }));
+    setErrors((prev) => ({
+      ...prev,
+      observaciones: validateObservaciones(formObservaciones),
+    }));
   };
 
   const handleCurrentCantidadBlur = () => {
@@ -357,75 +383,90 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
     }));
   };
 
-
-  // Obtener productos únicos disponibles en la bodega de origen
+  // Productos disponibles en bodega origen
   const productosDisponibles = useMemo(() => {
     if (!formBodegaOrigen) return [];
-
-    const productosEnBodega = productos.filter(producto =>
-      producto.lotes.some(lote =>
-        lote.bodega === formBodegaOrigen && lote.cantidadDisponible > 0
+    return productos.filter((producto) =>
+      producto.lotes.some(
+        (lote) =>
+          lote.bodega === formBodegaOrigen && lote.cantidadDisponible > 0
       )
     );
-
-    return productosEnBodega;
   }, [formBodegaOrigen, productos]);
 
-  // Obtener lotes disponibles del producto seleccionado en la bodega de origen
+  // Lotes disponibles del producto en la bodega origen
   const lotesDisponibles = useMemo(() => {
     if (!currentProducto || !formBodegaOrigen) return [];
-    const producto = productos.find(p => p.id === currentProducto);
+    const producto = productos.find((p) => p.id === currentProducto);
     if (!producto) return [];
-    return producto.lotes.filter(lote =>
-      lote.bodega === formBodegaOrigen && lote.cantidadDisponible > 0
+    return producto.lotes.filter(
+      (lote) =>
+        lote.bodega === formBodegaOrigen && lote.cantidadDisponible > 0
     );
   }, [currentProducto, formBodegaOrigen, productos]);
 
-  // Obtener cantidad máxima disponible del lote seleccionado
+  // Cantidad máxima del lote seleccionado
   const cantidadMaxima = useMemo(() => {
     if (!currentLote) return 0;
-    const lote = lotesDisponibles.find(l => l.numeroLote === currentLote);
+    const lote = lotesDisponibles.find((l) => l.numeroLote === currentLote);
     return lote?.cantidadDisponible || 0;
   }, [currentLote, lotesDisponibles]);
 
-  // Funciones auxiliares
+  // Auxiliares
   const formatFecha = (fecha: string) => {
     const date = new Date(fecha);
-    return date.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    return date.toLocaleDateString("es-CO", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
   };
 
-  const calcularTotalItems = (items: TrasladoItem[]) => {
-    return items.reduce((sum, item) => sum + item.cantidad, 0);
-  };
+  const calcularTotalItems = (items: TrasladoItem[]) =>
+    items.reduce((sum, item) => sum + item.cantidad, 0);
 
   const getEstadoBadge = (estado: string) => {
-    const badges = {
-      'Enviado': { class: 'bg-blue-100 text-blue-800 border-blue-200', icon: Truck },
-      'Recibido': { class: 'bg-green-100 text-green-800 border-green-200', icon: CheckCircle },
-      'Cancelado': { class: 'bg-red-100 text-red-800 border-red-200', icon: XCircle },
+    const badges: Record<string, { class: string; icon: any }> = {
+      Pendiente: {
+        class: "bg-yellow-100 text-yellow-800 border-yellow-200",
+        icon: Clock,
+      },
+      Enviado: {
+        class: "bg-blue-100 text-blue-800 border-blue-200",
+        icon: Truck,
+      },
+      Recibido: {
+        class: "bg-green-100 text-green-800 border-green-200",
+        icon: CheckCircle,
+      },
+      Cancelado: {
+        class: "bg-red-100 text-red-800 border-red-200",
+        icon: XCircle,
+      },
     };
-    return badges[estado as keyof typeof badges] || badges['Enviado'];
+    return badges[estado] || badges.Pendiente;
   };
 
-  // Función para obtener el siguiente estado permitido
-  const getSiguienteEstado = (estadoActual: 'Enviado' | 'Recibido' | 'Cancelado'): 'Enviado' | 'Recibido' | 'Cancelado' | null => {
-    const flujoEstados: { [key: string]: 'Enviado' | 'Recibido' | 'Cancelado' | null } = {
-      'Enviado': 'Recibido',
-      'Recibido': null,  // Estado final
-      'Cancelado': null  // Estado final
+  const getSiguienteEstado = (
+    estadoActual: EstadoTraslado
+  ): EstadoTraslado | null => {
+    const flujo: Record<EstadoTraslado, EstadoTraslado | null> = {
+      Pendiente: "Enviado",
+      Enviado: "Recibido",
+      Recibido: null,
+      Cancelado: null,
     };
-    return flujoEstados[estadoActual] || null;
+    return flujo[estadoActual];
   };
 
-  // Función para manejar el clic en el estado (clickeable)
   const handleEstadoClick = (traslado: Traslado) => {
     const siguienteEstado = getSiguienteEstado(traslado.estado);
 
     if (!siguienteEstado) {
-      if (traslado.estado === 'Recibido') {
-        toast.info('Este traslado ya está en estado final (Recibido)');
-      } else if (traslado.estado === 'Cancelado') {
-        toast.info('Los traslados cancelados no pueden cambiar de estado');
+      if (traslado.estado === "Recibido") {
+        toast.info("Este traslado ya está en estado final (Recibido)");
+      } else if (traslado.estado === "Cancelado") {
+        toast.info("Los traslados cancelados no pueden cambiar de estado");
       }
       return;
     }
@@ -435,46 +476,41 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
     setShowConfirmEstadoModal(true);
   };
 
-  // Filtrar traslados por bodega, búsqueda y fechas
+  // ✅ FILTRO PRINCIPAL (bodega + fechas + búsqueda)
   const filteredTraslados = useMemo(() => {
     return traslados.filter((traslado) => {
-      const searchLower = searchTerm.toLowerCase();
+      const searchLower = searchTerm.toLowerCase().trim();
 
-      // Filtro por bodega
-      if (usuario?.rol !== 'Administrador') {
-        // Si el usuario no es Administrador, filtrar por su bodega asignada
-        if (traslado.bodegaOrigen !== selectedBodega && traslado.bodegaDestino !== selectedBodega) {
-          return false;
-        }
-      } else {
-        // Si es Administrador y selectedBodega NO es "Todas las bodegas" (o vacío/undefined), filtrar por bodega seleccionada
-        if (selectedBodega && selectedBodega !== 'Todas las bodegas' && selectedBodega !== '') {
-          if (traslado.bodegaOrigen !== selectedBodega && traslado.bodegaDestino !== selectedBodega) {
-            return false;
-          }
-        }
-        // Si es "Todas las bodegas", vacío o undefined, mostrar todos los traslados (no aplicar filtro)
+      // 🔥 FILTRO POR BODEGA (si no es "Todas las bodegas")
+      const debeFiltrarPorBodega =
+        selectedBodega && selectedBodega !== "Todas las bodegas";
+
+      if (debeFiltrarPorBodega) {
+        const coincideBodega =
+          traslado.bodegaOrigen === selectedBodega ||
+          traslado.bodegaDestino === selectedBodega;
+        if (!coincideBodega) return false;
       }
 
-      // Filtro por rango de fechas (incluyendo los días completos)
+      // 📅 Fechas
       if (fechaInicio) {
-        const fechaTrasladoStr = traslado.fecha.split('T')[0]; // Asegurar solo fecha sin hora
-        if (fechaTrasladoStr < fechaInicio) {
-          return false;
-        }
+        const fechaTrasladoStr = traslado.fecha.split("T")[0];
+        if (fechaTrasladoStr < fechaInicio) return false;
       }
       if (fechaFin) {
-        const fechaTrasladoStr = traslado.fecha.split('T')[0]; // Asegurar solo fecha sin hora
-        if (fechaTrasladoStr > fechaFin) {
-          return false;
-        }
+        const fechaTrasladoStr = traslado.fecha.split("T")[0];
+        if (fechaTrasladoStr > fechaFin) return false;
       }
 
-      // Búsqueda general en todos los campos
+      // 🔎 Búsqueda
+      if (!searchLower) return true;
+
       const totalUnidades = calcularTotalItems(traslado.items);
-      const itemsMatch = traslado.items.some(item =>
-        item.productoNombre.toLowerCase().includes(searchLower) ||
-        item.loteNumero.toLowerCase().includes(searchLower)
+
+      const itemsMatch = traslado.items.some(
+        (item) =>
+          item.productoNombre.toLowerCase().includes(searchLower) ||
+          item.loteNumero.toLowerCase().includes(searchLower)
       );
 
       return (
@@ -489,10 +525,15 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
         itemsMatch
       );
     });
-  }, [traslados, searchTerm, selectedBodega, usuario?.rol, fechaInicio, fechaFin]);
+  }, [traslados, searchTerm, selectedBodega, fechaInicio, fechaFin]);
 
   // Paginación
   const totalPages = Math.ceil(filteredTraslados.length / itemsPerPage);
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages || 1);
+  }, [currentPage, totalPages]);
+
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const currentTraslados = filteredTraslados.slice(startIndex, endIndex);
@@ -500,135 +541,149 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
   // Resetear a página 1 cuando cambia el filtro
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, fechaInicio, fechaFin]);
+  }, [searchTerm, fechaInicio, fechaFin, selectedBodega, usuario?.rol]);
 
-  // Sincronizar bodega origen cuando cambia selectedBodega
+  // Sincronizar bodega origen cuando cambia selectedBodega (si NO estás creando)
   useEffect(() => {
     if (!showCreateModal) {
-      setFormBodegaOrigen(selectedBodega === 'Todas las bodegas' ? 'Bodega Principal' : selectedBodega);
+      setFormBodegaOrigen(
+        selectedBodega === "Todas las bodegas"
+          ? "Bodega Principal"
+          : selectedBodega
+      );
     }
   }, [selectedBodega, showCreateModal]);
 
-  // Abrir modal de creación desde trigger externo (desde Existencias)
+  // Abrir modal creación desde trigger externo
   useEffect(() => {
     if (triggerCreate && triggerCreate > 0) {
       if (!location.pathname.endsWith("/traslados/crear")) {
-        navigate("/app/traslados/crear", { state: { bodegaOrigen: selectedBodega } });
+        navigate("/app/traslados/crear", {
+          state: { bodegaOrigen: selectedBodega },
+        });
       }
     }
   }, [triggerCreate, selectedBodega, navigate, location.pathname]);
 
-
-
   const handleNuevoTraslado = () => {
     navigate("/app/traslados/crear");
   };
+
   const handleAddItem = () => {
     if (!currentProducto || !currentLote || !currentCantidad) {
-      toast.error('Completa todos los campos del producto');
+      toast.error("Completa todos los campos del producto");
       return;
     }
 
     if (!/^[0-9]+$/.test(currentCantidad)) {
-      toast.error('La cantidad debe ser un número entero positivo');
+      toast.error("La cantidad debe ser un número entero positivo");
       return;
     }
 
     const cantidad = parseInt(currentCantidad);
     if (cantidad <= 0) {
-      toast.error('La cantidad debe ser mayor a cero');
+      toast.error("La cantidad debe ser mayor a cero");
       return;
     }
 
     if (cantidad > cantidadMaxima) {
-      toast.error(`La cantidad no puede exceder ${cantidadMaxima} unidades disponibles`);
+      toast.error(
+        `La cantidad no puede exceder ${cantidadMaxima} unidades disponibles`
+      );
       return;
     }
 
-    // Verificar si ya existe este producto/lote en la lista
     const existingItem = trasladoItems.find(
-      item => item.productoId === currentProducto && item.loteNumero === currentLote
+      (item) =>
+        item.productoId === currentProducto && item.loteNumero === currentLote
     );
 
     if (existingItem) {
-      toast.error('Este producto/lote ya fue agregado. Elimínalo primero si deseas modificarlo.');
+      toast.error(
+        "Este producto/lote ya fue agregado. Elimínalo primero si deseas modificarlo."
+      );
       return;
     }
 
-    const producto = productos.find(p => p.id === currentProducto);
+    const producto = productos.find((p) => p.id === currentProducto);
+
     const newItem: TrasladoItem = {
       productoId: currentProducto,
-      productoNombre: producto?.nombre || '',
+      productoNombre: producto?.nombre || "",
       loteNumero: currentLote,
-      cantidad: cantidad,
+      cantidad,
     };
 
     setTrasladoItems([...trasladoItems, newItem]);
-    setCurrentProducto('');
-    setCurrentLote('');
-    setCurrentCantidad('');
-    toast.success('Producto agregado al traslado');
+    setCurrentProducto("");
+    setCurrentLote("");
+    setCurrentCantidad("");
+    toast.success("Producto agregado al traslado");
   };
 
   const handleRemoveItem = (index: number) => {
     const newItems = trasladoItems.filter((_, i) => i !== index);
     setTrasladoItems(newItems);
-    toast.success('Producto eliminado del traslado');
+    toast.success("Producto eliminado del traslado");
   };
 
   const handleConfirmEstado = () => {
     if (!selectedTraslado || !nuevoEstado) return;
 
-    // Si el estado es "Recibido", actualizar inventario
-    if (nuevoEstado === 'Recibido') {
-      selectedTraslado.items.forEach(item => {
-        const producto = productos.find(p => p.id === item.productoId);
-        if (producto) {
-          const productoActualizado = { ...producto, lotes: [...producto.lotes] };
+    if (nuevoEstado === "Recibido") {
+      selectedTraslado.items.forEach((item) => {
+        const producto = productos.find((p) => p.id === item.productoId);
+        if (!producto) return;
 
-          // Reducir cantidad en bodega origen
-          const loteOrigenIndex = productoActualizado.lotes.findIndex(
-            l => l.numeroLote === item.loteNumero && l.bodega === selectedTraslado.bodegaOrigen
-          );
+        const productoActualizado = { ...producto, lotes: [...producto.lotes] };
 
-          if (loteOrigenIndex !== -1) {
-            productoActualizado.lotes[loteOrigenIndex] = {
-              ...productoActualizado.lotes[loteOrigenIndex],
-              cantidadDisponible: productoActualizado.lotes[loteOrigenIndex].cantidadDisponible - item.cantidad
-            };
-          }
+        const loteOrigenIndex = productoActualizado.lotes.findIndex(
+          (l) =>
+            l.numeroLote === item.loteNumero &&
+            l.bodega === selectedTraslado.bodegaOrigen
+        );
 
-          // Aumentar cantidad en bodega destino (crear lote si no existe)
-          const loteDestinoIndex = productoActualizado.lotes.findIndex(
-            l => l.numeroLote === item.loteNumero && l.bodega === selectedTraslado.bodegaDestino
-          );
-
-          if (loteDestinoIndex !== -1) {
-            productoActualizado.lotes[loteDestinoIndex] = {
-              ...productoActualizado.lotes[loteDestinoIndex],
-              cantidadDisponible: productoActualizado.lotes[loteDestinoIndex].cantidadDisponible + item.cantidad
-            };
-          } else {
-            // Copiar información del lote de origen para crear el lote en destino
-            const loteOrigen = productoActualizado.lotes[loteOrigenIndex];
-            if (loteOrigen) {
-              productoActualizado.lotes.push({
-                ...loteOrigen,
-                id: `${producto.id}-${item.loteNumero}-${selectedTraslado.bodegaDestino}`,
-                bodega: selectedTraslado.bodegaDestino,
-                cantidadDisponible: item.cantidad,
-              });
-            }
-          }
-
-          // Actualizar el producto en el contexto
-          updateProducto(producto.id, productoActualizado);
+        if (loteOrigenIndex !== -1) {
+          productoActualizado.lotes[loteOrigenIndex] = {
+            ...productoActualizado.lotes[loteOrigenIndex],
+            cantidadDisponible:
+              productoActualizado.lotes[loteOrigenIndex].cantidadDisponible -
+              item.cantidad,
+          };
         }
+
+        const loteDestinoIndex = productoActualizado.lotes.findIndex(
+          (l) =>
+            l.numeroLote === item.loteNumero &&
+            l.bodega === selectedTraslado.bodegaDestino
+        );
+
+        if (loteDestinoIndex !== -1) {
+          productoActualizado.lotes[loteDestinoIndex] = {
+            ...productoActualizado.lotes[loteDestinoIndex],
+            cantidadDisponible:
+              productoActualizado.lotes[loteDestinoIndex].cantidadDisponible +
+              item.cantidad,
+          };
+        } else {
+          const loteOrigen = productoActualizado.lotes[loteOrigenIndex];
+          if (loteOrigen) {
+            productoActualizado.lotes.push({
+              ...loteOrigen,
+              id: `${producto.id}-${item.loteNumero}-${selectedTraslado.bodegaDestino}`,
+              bodega: selectedTraslado.bodegaDestino,
+              cantidadDisponible: item.cantidad,
+            });
+          }
+        }
+
+        updateProducto(producto.id, productoActualizado);
       });
     }
 
     updateTraslado(selectedTraslado.id, { estado: nuevoEstado });
     toast.success(`Estado actualizado a: ${nuevoEstado}`);
+
     setShowConfirmEstadoModal(false);
     setSelectedTraslado(null);
     setNuevoEstado(null);
@@ -638,7 +693,7 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
     if (!selectedTraslado) return;
 
     if (!motivoCancelacion.trim()) {
-      toast.error('Debes indicar el motivo de la cancelación');
+      toast.error("Debes indicar el motivo de la cancelación");
       return;
     }
 
@@ -647,32 +702,31 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
       : `[CANCELADO] ${motivoCancelacion}`;
 
     updateTraslado(selectedTraslado.id, {
-      estado: 'Cancelado',
-      observaciones: observacionesCancelacion
+      estado: "Cancelado",
+      observaciones: observacionesCancelacion,
     });
 
-    toast.success('Traslado cancelado exitosamente');
+    toast.success("Traslado cancelado exitosamente");
+
     setShowCancelarModal(false);
     setSelectedTraslado(null);
-    setMotivoCancelacion('');
+    setMotivoCancelacion("");
+    goList();
   };
 
   const validateForm = () => {
     if (!formBodegaOrigen || !formBodegaDestino) {
-      toast.error('Por favor completa las bodegas de origen y destino');
+      toast.error("Por favor completa las bodegas de origen y destino");
       return false;
     }
-
     if (formBodegaOrigen === formBodegaDestino) {
-      toast.error('La bodega de origen y destino no pueden ser la misma');
+      toast.error("La bodega de origen y destino no pueden ser la misma");
       return false;
     }
-
     if (trasladoItems.length === 0) {
-      toast.error('Debes agregar al menos un producto al traslado');
+      toast.error("Debes agregar al menos un producto al traslado");
       return false;
     }
-
     return true;
   };
 
@@ -680,14 +734,17 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
     if (!validateForm()) return;
 
     const newTraslado: Traslado = {
-      id: `TRS-${String(traslados.length + 1).padStart(3, '0')}`,
-      codigo: `TRD-${String(traslados.length + 1).padStart(3, '0')}`,
-      fecha: new Date().toISOString().split('T')[0],
+      id:
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `TRS-${Date.now()}`,
+      codigo: `TRD-${Date.now()}`,
+      fecha: new Date().toISOString().split("T")[0],
       bodegaOrigen: formBodegaOrigen,
       bodegaDestino: formBodegaDestino,
       items: [...trasladoItems],
-      responsable: usuario?.nombre || 'Usuario',
-      estado: 'Enviado',
+      responsable: usuario?.nombre || "Usuario",
+      estado: "Pendiente",
       observaciones: formObservaciones.trim() || undefined,
     };
 
@@ -695,14 +752,10 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
     setShowCreateModal(false);
     setShowSuccessModal(true);
 
-    if (onTrasladoCreated) {
-      onTrasladoCreated();
-    }
+    onTrasladoCreated?.();
   };
 
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-  };
+  const handlePageChange = (page: number) => setCurrentPage(page);
 
   const handleSuccessModalClose = () => {
     setShowSuccessModal(false);
@@ -716,10 +769,10 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
     setCurrentLote("");
     setCurrentCantidad("");
     setFormObservaciones("");
-
-    goList(); // ✅ clave
+    goList();
   };
 
+  //⛔️ aquí continúa tu return(...)
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -846,7 +899,7 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
                           >
                             <Eye size={16} className="text-blue-600" />
                           </Button>
-                          {traslado.estado === 'Enviado' && (
+                          {traslado.estado === 'Pendiente' && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -867,51 +920,54 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
         </div>
 
         {/* Paginación */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
-            <div className="text-sm text-gray-600">
-              Mostrando {startIndex + 1} a {Math.min(endIndex, filteredTraslados.length)} de {filteredTraslados.length} traslados
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1}
-              >
-                <ChevronLeft size={16} />
-                Anterior
-              </Button>
-              <div className="flex items-center gap-1">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                  <Button
-                    key={page}
-                    variant={currentPage === page ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => handlePageChange(page)}
-                    className={currentPage === page ? 'bg-purple-600 hover:bg-purple-700' : ''}
-                  >
-                    {page}
-                  </Button>
-                ))}
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}
-              >
-                Siguiente
-                <ChevronRight size={16} />
-              </Button>
-            </div>
+        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
+          <div className="text-sm text-gray-600">
+            Mostrando {startIndex + 1} a {Math.min(endIndex, filteredTraslados.length)} de {filteredTraslados.length} traslados
           </div>
-        )}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1 || totalPages === 0}
+            >
+              <ChevronLeft size={16} />
+              Anterior
+            </Button>
+            <div className="flex items-center gap-1">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <Button
+                  key={page}
+                  variant={currentPage === page ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => handlePageChange(page)}
+                  className={currentPage === page ? 'bg-purple-600 hover:bg-purple-700' : ''}
+                >
+                  {page}
+                </Button>
+              ))}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages || totalPages === 0}
+            >
+              Siguiente
+              <ChevronRight size={16} />
+            </Button>
+          </div>
+        </div>
       </div>
 
       {/* Modal Ver Detalles */}
-      <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
-        <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto" aria-describedby="traslado-details-description">
+      <Dialog
+        open={showViewModal}
+        onOpenChange={(open) => {
+          if (!open) goList();
+        }}
+      >
+        <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()} aria-describedby="traslado-details-description">
           <DialogHeader>
             <DialogTitle>Detalles del Traslado</DialogTitle>
             <DialogDescription id="traslado-details-description">
@@ -1004,7 +1060,7 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowViewModal(false)}>
+            <Button variant="outline" onClick={goList}>
               Cerrar
             </Button>
           </DialogFooter>
@@ -1012,10 +1068,15 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
       </Dialog>
 
       {/* Modal Crear Traslado */}
-      <Dialog open={showCreateModal} onOpenChange={(open) => {
-        if (!open) handleCloseCreateModal();
-      }}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()} aria-describedby="traslado-create-description">
+      <Dialog
+        open={showCreateModal}
+        onOpenChange={(open) => {
+          // NO permitir cerrar automáticamente
+          if (!open) return;
+          setShowCreateModal(true);
+        }}
+      >
+        <DialogContent className="w-[96vw] max-w-7xl max-h-[92vh] overflow-y-auto" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()} aria-describedby="traslado-create-description">
           <button
             onClick={handleCloseCreateModal}
             className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground z-10"
@@ -1031,10 +1092,19 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
           </DialogHeader>
           <div className="space-y-6">
             {/* Bodegas */}
+            {trasladoItems.length > 0 && (
+              <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">
+                Ya agregaste productos. Para cambiar la bodega de origen o destino, primero elimina los productos del traslado.
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="traslado-origen">Bodega Origen *</Label>
-                <Select value={formBodegaOrigen} onValueChange={handleBodegaOrigenChange}>
+                <Select
+                  value={formBodegaOrigen}
+                  onValueChange={handleBodegaOrigenChange}
+                  disabled={trasladoItems.length > 0}
+                >
                   <SelectTrigger id="traslado-origen">
                     <SelectValue placeholder="Selecciona bodega origen" />
                   </SelectTrigger>
@@ -1054,7 +1124,11 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
               </div>
               <div>
                 <Label htmlFor="traslado-destino">Bodega Destino *</Label>
-                <Select value={formBodegaDestino} onValueChange={handleBodegaDestinoChange}>
+                <Select
+                  value={formBodegaDestino}
+                  onValueChange={handleBodegaDestinoChange}
+                  disabled={trasladoItems.length > 0}
+                >
                   <SelectTrigger id="traslado-destino">
                     <SelectValue placeholder="Selecciona bodega destino" />
                   </SelectTrigger>
@@ -1240,18 +1314,18 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
             </div>
 
             {/* Responsable */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-center gap-2">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <div className="flex items-center gap-3">
                 <div className="bg-blue-100 p-2 rounded-full">
-                  <Package size={20} className="text-blue-600" />
+                  <Package size={18} className="text-blue-600" />
                 </div>
-                <div>
-                  <Label className="text-sm text-blue-900">Responsable del Traslado</Label>
-                  <p className="font-medium text-blue-700">{usuario?.nombre || 'Usuario'}</p>
-                  <p className="text-xs text-blue-600">El responsable se asigna automáticamente según tu sesión</p>
+                <div className="leading-tight">
+                  <p className="text-xs text-blue-900">Responsable</p>
+                  <p className="font-medium text-blue-700 text-sm">{usuario?.nombre || "Usuario"}</p>
                 </div>
               </div>
             </div>
+
 
             {/* Observaciones */}
             <div>
@@ -1323,7 +1397,12 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
       </Dialog>
 
       {/* Modal Cancelar Traslado */}
-      <Dialog open={showCancelarModal} onOpenChange={setShowCancelarModal}>
+      <Dialog
+        open={showCancelarModal}
+        onOpenChange={(open) => {
+          if (!open) goList();
+        }}
+      >
         <DialogContent className="max-w-md" aria-describedby="cancelar-description">
           <DialogHeader>
             <DialogTitle>Cancelar Traslado</DialogTitle>
@@ -1351,7 +1430,7 @@ export default function Traslados({ selectedBodega = 'Bodega Principal', onTrasl
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCancelarModal(false)}>
+            <Button variant="outline" onClick={goList}>
               Volver
             </Button>
             <Button
