@@ -382,9 +382,6 @@ export default function Productos({
 
     // ✅ Solo mostramos éxito
     setShowSuccessModal(true);
-
-    // ❌ ELIMINAR ESTA LÍNEA
-    // setShowCreateProductModal(false);
   };
 
 

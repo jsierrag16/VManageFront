@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useAuth } from "@/shared/context/AuthContext";
 import { Search, Plus, Edit, Trash2, CheckCircle, Filter } from "lucide-react";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -64,6 +65,8 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
   // ✅ datos
   const [bodegas, setBodegas] = useState<Bodega[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  const { selectedBodegaId } = useAuth();
 
   // ✅ bodega actual por URL
   const bodegaActual = useMemo(() => {
@@ -230,19 +233,26 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
     return bodegas.filter((bodega) => {
       const searchLower = searchTerm.toLowerCase();
 
+      // 🔹 Filtro por bodega seleccionada en navbar
+      // 0 = Todas
+      const matchesSelectedBodega =
+        selectedBodegaId === 0 || bodega.id === selectedBodegaId;
+
+      // 🔹 Filtro búsqueda
       const matchesSearch =
         bodega.nombre.toLowerCase().includes(searchLower) ||
         bodega.departamento.toLowerCase().includes(searchLower) ||
         bodega.municipio.toLowerCase().includes(searchLower) ||
         bodega.direccion.toLowerCase().includes(searchLower);
 
+      // 🔹 Filtro estado
       let matchesEstado = true;
       if (estadoFilter === "activas") matchesEstado = bodega.estado === true;
       else if (estadoFilter === "inactivas") matchesEstado = bodega.estado === false;
 
-      return matchesSearch && matchesEstado;
+      return matchesSelectedBodega && matchesSearch && matchesEstado;
     });
-  }, [bodegas, searchTerm, estadoFilter]);
+  }, [bodegas, searchTerm, estadoFilter, selectedBodegaId]);
 
   // 🔹 2. Paginación (DEBE IR DESPUÉS)
   const [currentPage, setCurrentPage] = useState(1);

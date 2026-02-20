@@ -59,16 +59,7 @@ import { bodegasData } from "../../../data/bodegas";
 import { usePermisos } from "../../../shared/hooks/usePermisos";
 import { useTraslados } from "../../../shared/context/TrasladosContext";
 import { useProductos } from "../../../shared/context/ProductosContext";
-
-/**
- * ✅ IMPORTANTE:
- * - Si ya tienes AppOutletContext definido (como en Productos), cambia este type por el import real.
- * - Ej: import type { AppOutletContext } from "../../../layouts/MainLayout";
- */
-type AppOutletContext = {
-  selectedBodegaNombre: string;
-};
-
+import type { AppOutletContext } from "../../../layouts/MainLayout";
 interface TrasladosProps {
   onTrasladoCreated?: () => void;
   triggerCreate?: number;
@@ -192,8 +183,10 @@ export default function Traslados({
         goList();
         return;
       }
+
+      // ✅ Si ya no está pendiente (por ejemplo, acabas de cancelarlo),
+      // NO muestres toast de error: solo vuelve a la lista.
       if (trasladoByRoute.estado !== "Pendiente") {
-        toast.error("Solo puedes cancelar traslados en estado Pendiente");
         goList();
         return;
       }
@@ -232,9 +225,6 @@ export default function Traslados({
 
   // Items del traslado (líneas)
   const [trasladoItems, setTrasladoItems] = useState<TrasladoItem[]>([]);
-
-  const bodegasBloqueadas = trasladoItems.length > 0;
-
 
   // Form states para la línea actual
   const [currentProducto, setCurrentProducto] = useState("");
@@ -967,13 +957,19 @@ export default function Traslados({
           if (!open) goList();
         }}
       >
-        <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()} aria-describedby="traslado-details-description">
+        <DialogContent
+          className="w-[96vw] max-w-5xl max-h-[92vh] overflow-y-auto"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+          aria-describedby="traslado-details-description"
+        >
           <DialogHeader>
             <DialogTitle>Detalles del Traslado</DialogTitle>
             <DialogDescription id="traslado-details-description">
               Información completa del traslado de productos entre bodegas
             </DialogDescription>
           </DialogHeader>
+
           {selectedTraslado && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -1018,7 +1014,9 @@ export default function Traslados({
               {selectedTraslado.observaciones && (
                 <div>
                   <Label className="text-gray-600">Observaciones</Label>
-                  <p className="text-sm bg-gray-50 p-3 rounded-lg whitespace-pre-wrap">{selectedTraslado.observaciones}</p>
+                  <p className="text-sm bg-gray-50 p-3 rounded-lg whitespace-pre-wrap">
+                    {selectedTraslado.observaciones}
+                  </p>
                 </div>
               )}
 
@@ -1048,6 +1046,7 @@ export default function Traslados({
                     ))}
                   </TableBody>
                 </Table>
+
                 <div className="flex justify-end mt-4 pt-4 border-t">
                   <div className="text-right">
                     <Label className="text-gray-600">Total de Unidades</Label>
@@ -1059,6 +1058,7 @@ export default function Traslados({
               </div>
             </div>
           )}
+
           <DialogFooter>
             <Button variant="outline" onClick={goList}>
               Cerrar
@@ -1071,25 +1071,26 @@ export default function Traslados({
       <Dialog
         open={showCreateModal}
         onOpenChange={(open) => {
-          // NO permitir cerrar automáticamente
-          if (!open) return;
+          if (!open) {
+            handleCloseCreateModal(); // ✅ cierra, limpia, y hace goList()
+            return;
+          }
           setShowCreateModal(true);
         }}
       >
-        <DialogContent className="w-[96vw] max-w-7xl max-h-[92vh] overflow-y-auto" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()} aria-describedby="traslado-create-description">
-          <button
-            onClick={handleCloseCreateModal}
-            className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground z-10"
-          >
-            <X className="h-4 w-4" />
-            <span className="sr-only">Cerrar</span>
-          </button>
+        <DialogContent
+          className="w-[96vw] max-w-5xl max-h-[92vh] overflow-y-auto"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+          aria-describedby="traslado-create-description"
+        >
           <DialogHeader>
             <DialogTitle>Nuevo Traslado</DialogTitle>
             <DialogDescription id="traslado-create-description">
               Completa la información para trasladar productos entre bodegas
             </DialogDescription>
           </DialogHeader>
+
           <div className="space-y-6">
             {/* Bodegas */}
             {trasladoItems.length > 0 && (
@@ -1097,6 +1098,7 @@ export default function Traslados({
                 Ya agregaste productos. Para cambiar la bodega de origen o destino, primero elimina los productos del traslado.
               </div>
             )}
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="traslado-origen">Bodega Origen *</Label>
@@ -1110,7 +1112,7 @@ export default function Traslados({
                   </SelectTrigger>
                   <SelectContent>
                     {bodegasData
-                      .filter(b => b.estado)
+                      .filter((b) => b.estado)
                       .map((bodega) => (
                         <SelectItem key={bodega.id} value={bodega.nombre}>
                           {bodega.nombre}
@@ -1122,6 +1124,7 @@ export default function Traslados({
                   <p className="text-sm text-red-500 mt-1">{errors.bodegaOrigen}</p>
                 )}
               </div>
+
               <div>
                 <Label htmlFor="traslado-destino">Bodega Destino *</Label>
                 <Select
@@ -1134,7 +1137,7 @@ export default function Traslados({
                   </SelectTrigger>
                   <SelectContent>
                     {bodegasData
-                      .filter(bodega => bodega.nombre !== formBodegaOrigen && bodega.estado)
+                      .filter((bodega) => bodega.nombre !== formBodegaOrigen && bodega.estado)
                       .map((bodega) => (
                         <SelectItem key={bodega.id} value={bodega.nombre}>
                           {bodega.nombre}
@@ -1160,18 +1163,14 @@ export default function Traslados({
                     <Select
                       value={currentProducto}
                       onValueChange={(value: any) => {
-                        // ✅ marcar touched aquí
                         setTouched((prev) => ({ ...prev, currentProducto: true }));
                         handleCurrentProductoChange(value);
-
-                        // ✅ validar aquí mismo
                         setErrors((prev) => ({
                           ...prev,
                           currentProducto: validateCurrentProducto(value),
                         }));
                       }}
                     >
-
                       <SelectTrigger id="current-producto">
                         <SelectValue placeholder="Selecciona un producto" />
                       </SelectTrigger>
@@ -1193,6 +1192,7 @@ export default function Traslados({
                       <p className="text-sm text-red-500 mt-1">{errors.currentProducto}</p>
                     )}
                   </div>
+
                   <div>
                     <Label htmlFor="current-lote">Lote *</Label>
                     <Select
@@ -1200,7 +1200,6 @@ export default function Traslados({
                       onValueChange={(value: any) => {
                         setTouched((prev) => ({ ...prev, currentLote: true }));
                         handleCurrentLoteChange(value);
-
                         setErrors((prev) => ({
                           ...prev,
                           currentLote: validateCurrentLote(value),
@@ -1208,15 +1207,12 @@ export default function Traslados({
                       }}
                       disabled={!currentProducto}
                     >
-
                       <SelectTrigger id="current-lote">
                         <SelectValue placeholder="Selecciona un lote" />
                       </SelectTrigger>
                       <SelectContent>
                         {lotesDisponibles.length === 0 ? (
-                          <div className="px-2 py-2 text-sm text-gray-500">
-                            No hay lotes disponibles
-                          </div>
+                          <div className="px-2 py-2 text-sm text-gray-500">No hay lotes disponibles</div>
                         ) : (
                           lotesDisponibles.map((lote) => (
                             <SelectItem key={lote.id} value={lote.numeroLote}>
@@ -1230,6 +1226,7 @@ export default function Traslados({
                       <p className="text-sm text-red-500 mt-1">{errors.currentLote}</p>
                     )}
                   </div>
+
                   <div>
                     <Label htmlFor="current-cantidad">Cantidad *</Label>
                     <Input
@@ -1243,15 +1240,14 @@ export default function Traslados({
                       className={errors.currentCantidad && touched.currentCantidad ? "border-red-500" : ""}
                     />
                     {currentLote && !errors.currentCantidad && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        Máx: {cantidadMaxima}
-                      </p>
+                      <p className="text-xs text-gray-500 mt-1">Máx: {cantidadMaxima}</p>
                     )}
                     {errors.currentCantidad && touched.currentCantidad && (
                       <p className="text-sm text-red-500 mt-1">{errors.currentCantidad}</p>
                     )}
                   </div>
                 </div>
+
                 <Button
                   onClick={handleAddItem}
                   className="w-full bg-green-600 hover:bg-green-700"
@@ -1301,31 +1297,33 @@ export default function Traslados({
                       ))}
                     </TableBody>
                   </Table>
-                  <div className="bg-gray-50 px-4 py-3 border-t flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Total de productos:</span>
-                    <span className="font-bold text-purple-600">{trasladoItems.length}</span>
+
+                  <div className="bg-gray-50 px-4 py-2 border-t flex justify-between items-center">
+                    <span className="text-xs text-gray-600">Total de productos:</span>
+                    <span className="font-bold text-purple-600 text-sm">{trasladoItems.length}</span>
                   </div>
-                  <div className="bg-gray-50 px-4 py-3 border-t flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Total de unidades:</span>
-                    <span className="font-bold text-purple-600">{calcularTotalItems(trasladoItems)}</span>
+                  <div className="bg-gray-50 px-4 py-2 border-t flex justify-between items-center">
+                    <span className="text-xs text-gray-600">Total de unidades:</span>
+                    <span className="font-bold text-purple-600 text-sm">{calcularTotalItems(trasladoItems)}</span>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Responsable */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <div className="flex items-center gap-3">
-                <div className="bg-blue-100 p-2 rounded-full">
-                  <Package size={18} className="text-blue-600" />
+            {/* Responsable (más pequeño) */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-2">
+              <div className="flex items-center gap-2">
+                <div className="bg-blue-100 p-1.5 rounded-full">
+                  <Package size={16} className="text-blue-600" />
                 </div>
                 <div className="leading-tight">
-                  <p className="text-xs text-blue-900">Responsable</p>
-                  <p className="font-medium text-blue-700 text-sm">{usuario?.nombre || "Usuario"}</p>
+                  <p className="text-[11px] text-blue-900">Responsable</p>
+                  <p className="font-medium text-blue-700 text-xs">
+                    {usuario?.nombre || "Usuario"}
+                  </p>
                 </div>
               </div>
             </div>
-
 
             {/* Observaciones */}
             <div>
@@ -1343,6 +1341,7 @@ export default function Traslados({
               )}
             </div>
           </div>
+
           <DialogFooter>
             <Button variant="outline" onClick={handleCloseCreateModal}>
               Cancelar

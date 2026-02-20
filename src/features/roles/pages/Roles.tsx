@@ -1,3 +1,4 @@
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useState, useMemo, useEffect } from "react";
 import {
   Search,
@@ -40,15 +41,7 @@ import {
 } from "../../../data/roles";
 import { PermisosForm } from "../components/PermisosForm";
 import { useAuth } from "../../../shared/context/AuthContext";
-import { 
-  validateTexto, 
-  validateTextarea 
-} from "../../../utils/validations";
-import { useFormValidation } from "../../../shared/hooks/useFormValidation";
-  
-interface RolesProps {
-  triggerCreate?: number;
-}
+
 
 // Función para obtener el color del rol
 const getRolColor = (nombre: string) => {
@@ -62,33 +55,71 @@ const getRolColor = (nombre: string) => {
   return colors[nombre] || "bg-gray-100 text-gray-800";
 };
 
-export default function Roles({ triggerCreate }: RolesProps) {
+export default function Roles() {
   const { tienePermiso } = useAuth();
+
+
+  const navigate = useNavigate();
+  const location = useLocation();
+  const params = useParams<{ id: string }>();
+
   const [searchTerm, setSearchTerm] = useState("");
   const [estadoFilter, setEstadoFilter] = useState<string>("todos");
   const [roles, setRoles] = useState<Rol[]>(initialRolesData);
-  const [showViewModal, setShowViewModal] = useState(false);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
-  const [selectedRol, setSelectedRol] = useState<Rol | null>(
-    null,
-  );
   const [rolParaCambioEstado, setRolParaCambioEstado] = useState<Rol | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  // Form states
   const [formNombre, setFormNombre] = useState("");
   const [formDescripcion, setFormDescripcion] = useState("");
-  const [formPermisos, setFormPermisos] = useState<Permisos>(
-    createEmptyPermisos(),
-  );
+  const [formPermisos, setFormPermisos] = useState<Permisos>(createEmptyPermisos());
 
-  // Estados para validaciones en tiempo real
   const [errors, setErrors] = useState({ nombre: '', descripcion: '' });
   const [touched, setTouched] = useState({ nombre: false, descripcion: false });
+
+  // ✅ ID desde la URL
+  const id = params.id;
+
+  // ✅ flags por URL (igual que Productos/Usuarios)
+  const isCrear = location.pathname.endsWith("/roles/crear");
+  const isVer = location.pathname.endsWith("/ver");
+  const isEditar = location.pathname.endsWith("/editar");
+  const isEliminar = location.pathname.endsWith("/eliminar");
+
+  const rolSeleccionado = useMemo(() => {
+    if (!id) return null;
+    const numericId = Number(id);
+    if (!Number.isFinite(numericId)) return null;
+    return roles.find((r) => r.id === numericId) ?? null;
+  }, [roles, id]);
+  // ✅ volver al listado
+  const closeToList = () => navigate("/app/roles");
+
+  useEffect(() => {
+    if (!isEditar) return;
+
+    if (!rolSeleccionado) {
+      closeToList();
+      return;
+    }
+
+    setFormNombre(rolSeleccionado.nombre);
+    setFormDescripcion(rolSeleccionado.descripcion);
+    setFormPermisos(rolSeleccionado.permisos);
+    setErrors({ nombre: "", descripcion: "" });
+    setTouched({ nombre: false, descripcion: false });
+  }, [isEditar, rolSeleccionado]);
+
+  useEffect(() => {
+    if (!isCrear) return;
+
+    setFormNombre("");
+    setFormDescripcion("");
+    setFormPermisos(createEmptyPermisos());
+    setErrors({ nombre: "", descripcion: "" });
+    setTouched({ nombre: false, descripcion: false });
+  }, [isCrear]);
 
   // Función para validar caracteres inapropiados
   const hasInvalidCharacters = (value: string) => {
@@ -166,7 +197,7 @@ export default function Roles({ triggerCreate }: RolesProps) {
       const matchesSearch =
         rol.nombre.toLowerCase().includes(searchLower) ||
         rol.descripcion.toLowerCase().includes(searchLower);
-      
+
       // Filtrar por estado
       let matchesEstado = true;
       if (estadoFilter === "activo") {
@@ -175,7 +206,7 @@ export default function Roles({ triggerCreate }: RolesProps) {
         matchesEstado = rol.estado === false;
       }
       // Si es "todos", no filtramos por estado
-      
+
       return matchesSearch && matchesEstado;
     });
   }, [roles, searchTerm, estadoFilter]);
@@ -201,36 +232,29 @@ export default function Roles({ triggerCreate }: RolesProps) {
   };
 
   const handleView = (rol: Rol) => {
-    setSelectedRol(rol);
-    setShowViewModal(true);
+    navigate(`/app/roles/${rol.id}/ver`);
   };
 
   const handleCreate = () => {
+    // limpiar form (igual que antes)
     setFormNombre("");
     setFormDescripcion("");
     setFormPermisos(createEmptyPermisos());
-    setErrors({ nombre: '', descripcion: '' });
+    setErrors({ nombre: "", descripcion: "" });
     setTouched({ nombre: false, descripcion: false });
-    setShowCreateModal(true);
+
+    navigate("/app/roles/crear");
   };
 
   const handleEdit = (rol: Rol) => {
-    setSelectedRol(rol);
-    setFormNombre(rol.nombre);
-    setFormDescripcion(rol.descripcion);
-    setFormPermisos(rol.permisos);
-    setErrors({ nombre: '', descripcion: '' });
-    setTouched({ nombre: false, descripcion: false });
-    setShowEditModal(true);
+    navigate(`/app/roles/${rol.id}/editar`);
   };
 
   const handleDelete = (rol: Rol) => {
-    setSelectedRol(rol);
-    setShowDeleteModal(true);
+    navigate(`/app/roles/${rol.id}/eliminar`);
   };
 
   const confirmCreate = () => {
-    // Marcar todos los campos como tocados
     setTouched({ nombre: true, descripcion: true });
 
     const nombreError = validateNombre(formNombre);
@@ -239,7 +263,7 @@ export default function Roles({ triggerCreate }: RolesProps) {
     setErrors({ nombre: nombreError, descripcion: descripcionError });
 
     if (nombreError || descripcionError) {
-      toast.error('Por favor corrige los errores en el formulario');
+      toast.error("Por favor corrige los errores en el formulario");
       return;
     }
 
@@ -253,20 +277,13 @@ export default function Roles({ triggerCreate }: RolesProps) {
     };
 
     setRoles([...roles, newRol]);
-    setShowCreateModal(false);
-    // Resetear formulario
-    setFormNombre('');
-    setFormDescripcion('');
-    setFormPermisos(createEmptyPermisos());
-    setErrors({ nombre: '', descripcion: '' });
-    setTouched({ nombre: false, descripcion: false });
     toast.success("Rol creado exitosamente");
+    closeToList();
   };
 
   const confirmEdit = () => {
-    if (!selectedRol) return;
+    if (!rolSeleccionado) return;
 
-    // Marcar todos los campos como tocados
     setTouched({ nombre: true, descripcion: true });
 
     const nombreError = validateNombre(formNombre);
@@ -275,45 +292,33 @@ export default function Roles({ triggerCreate }: RolesProps) {
     setErrors({ nombre: nombreError, descripcion: descripcionError });
 
     if (nombreError || descripcionError) {
-      toast.error('Por favor corrige los errores en el formulario');
+      toast.error("Por favor corrige los errores en el formulario");
       return;
     }
 
     setRoles(
       roles.map((rol) =>
-        rol.id === selectedRol.id
-          ? {
-              ...rol,
-              nombre: formNombre,
-              descripcion: formDescripcion,
-              permisos: formPermisos,
-            }
-          : rol,
-      ),
+        rol.id === rolSeleccionado.id
+          ? { ...rol, nombre: formNombre, descripcion: formDescripcion, permisos: formPermisos }
+          : rol
+      )
     );
-    setShowEditModal(false);
-    // Resetear formulario
-    setFormNombre('');
-    setFormDescripcion('');
-    setFormPermisos(createEmptyPermisos());
-    setErrors({ nombre: '', descripcion: '' });
-    setTouched({ nombre: false, descripcion: false });
+
     toast.success("Rol actualizado exitosamente");
+    closeToList();
   };
 
   const confirmDelete = () => {
-    if (!selectedRol) return;
+    if (!rolSeleccionado) return;
 
-    if (selectedRol.usuariosAsignados > 0) {
-      toast.error(
-        "No se puede eliminar un rol que tiene usuarios asignados",
-      );
+    if (rolSeleccionado.usuariosAsignados > 0) {
+      toast.error("No se puede eliminar un rol que tiene usuarios asignados");
       return;
     }
 
-    setRoles(roles.filter((rol) => rol.id !== selectedRol.id));
-    setShowDeleteModal(false);
+    setRoles(roles.filter((rol) => rol.id !== rolSeleccionado.id));
     toast.success("Rol eliminado exitosamente");
+    closeToList();
   };
 
   // Función para cambiar el estado del rol
@@ -353,10 +358,10 @@ export default function Roles({ triggerCreate }: RolesProps) {
   // Función para seleccionar/deseleccionar todos los permisos de un módulo
   const toggleModulePermissions = (module: string) => {
     const newPermisos = JSON.parse(JSON.stringify(formPermisos));
-    
+
     // Verificar si todos los permisos del módulo están activos
     const allChecked = isModuleFullyChecked(module);
-    
+
     // Alternar todos los permisos del módulo
     if (module === "dashboard") {
       newPermisos.dashboard.acceder = !allChecked;
@@ -403,7 +408,7 @@ export default function Roles({ triggerCreate }: RolesProps) {
       newPermisos.usuarios.eliminar = !allChecked;
       newPermisos.usuarios.cambiarEstado = !allChecked;
     }
-    
+
     setFormPermisos(newPermisos);
   };
 
@@ -461,7 +466,7 @@ export default function Roles({ triggerCreate }: RolesProps) {
         formPermisos.usuarios.crear &&
         formPermisos.usuarios.editar &&
         formPermisos.usuarios.eliminar &&
-        formPermisos.usuarios.cambiarEstado
+        formPermisos.usuarios.inhabilitar
       );
     }
     return false;
@@ -491,7 +496,7 @@ export default function Roles({ triggerCreate }: RolesProps) {
             className="pl-10"
           />
         </div>
-        
+
         {/* Filtro de Estado */}
         <div className="flex items-center gap-2 border border-gray-300 rounded-lg p-1 bg-gray-50">
           <Filter size={16} className="text-gray-500 ml-2" />
@@ -499,11 +504,10 @@ export default function Roles({ triggerCreate }: RolesProps) {
             size="sm"
             variant={estadoFilter === "todos" ? "default" : "ghost"}
             onClick={() => setEstadoFilter("todos")}
-            className={`h-8 ${
-              estadoFilter === "todos"
-                ? "bg-blue-600 text-white hover:bg-blue-700"
-                : "hover:bg-gray-200"
-            }`}
+            className={`h-8 ${estadoFilter === "todos"
+              ? "bg-blue-600 text-white hover:bg-blue-700"
+              : "hover:bg-gray-200"
+              }`}
           >
             Todos
           </Button>
@@ -511,11 +515,10 @@ export default function Roles({ triggerCreate }: RolesProps) {
             size="sm"
             variant={estadoFilter === "activo" ? "default" : "ghost"}
             onClick={() => setEstadoFilter("activo")}
-            className={`h-8 ${
-              estadoFilter === "activo"
-                ? "bg-green-600 text-white hover:bg-green-700"
-                : "hover:bg-gray-200"
-            }`}
+            className={`h-8 ${estadoFilter === "activo"
+              ? "bg-green-600 text-white hover:bg-green-700"
+              : "hover:bg-gray-200"
+              }`}
           >
             Activos
           </Button>
@@ -523,11 +526,10 @@ export default function Roles({ triggerCreate }: RolesProps) {
             size="sm"
             variant={estadoFilter === "inactivo" ? "default" : "ghost"}
             onClick={() => setEstadoFilter("inactivo")}
-            className={`h-8 ${
-              estadoFilter === "inactivo"
-                ? "bg-red-600 text-white hover:bg-red-700"
-                : "hover:bg-gray-200"
-            }`}
+            className={`h-8 ${estadoFilter === "inactivo"
+              ? "bg-red-600 text-white hover:bg-red-700"
+              : "hover:bg-gray-200"
+              }`}
           >
             Inactivos
           </Button>
@@ -600,11 +602,11 @@ export default function Roles({ triggerCreate }: RolesProps) {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleToggleEstado(rol)}
-                        className={`h-7 ${
-                          rol.estado
-                            ? "bg-green-100 text-green-800 hover:bg-green-200"
-                            : "bg-red-100 text-red-800 hover:bg-red-200"
-                        }`}
+                        disabled={!puedeInhabilitar}
+                        className={`h-7 ${rol.estado
+                          ? "bg-green-100 text-green-800 hover:bg-green-200"
+                          : "bg-red-100 text-red-800 hover:bg-red-200"
+                          }`}
                       >
                         {rol.estado ? "Activo" : "Inactivo"}
                       </Button>
@@ -709,408 +711,272 @@ export default function Roles({ triggerCreate }: RolesProps) {
 
       {/* Modal Ver Detalles */}
       <Dialog
-        open={showViewModal}
-        onOpenChange={setShowViewModal}
+        open={isVer}
+        onOpenChange={(open) => {
+          if (!open) closeToList();
+        }}
       >
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto" aria-describedby="view-rol-description">
+        <DialogContent
+          className="max-w-6xl max-h-[90vh] overflow-y-auto"
+          aria-describedby="view-rol-description"
+          onInteractOutside={(e) => e.preventDefault()}   // ✅ no cerrar por fuera
+        >
           <DialogHeader>
             <DialogTitle>Detalles del Rol</DialogTitle>
             <DialogDescription id="view-rol-description">
               Información completa del rol y sus permisos
             </DialogDescription>
           </DialogHeader>
-          {selectedRol && (
+
+          {rolSeleccionado && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-gray-500">
-                    Nombre del Rol
-                  </Label>
+                  <Label className="text-gray-500">Nombre del Rol</Label>
                   <div className="mt-1">
                     <Badge
-                      className={`${getRolColor(selectedRol.nombre)} hover:${getRolColor(selectedRol.nombre)}`}
+                      className={`${getRolColor(rolSeleccionado.nombre)} hover:${getRolColor(
+                        rolSeleccionado.nombre
+                      )}`}
                     >
-                      {selectedRol.nombre}
+                      {rolSeleccionado.nombre}
                     </Badge>
                   </div>
                 </div>
+
                 <div>
-                  <Label className="text-gray-500">
-                    Estado
-                  </Label>
+                  <Label className="text-gray-500">Estado</Label>
                   <div className="mt-1">
                     <Badge
                       className={
-                        selectedRol.estado
+                        rolSeleccionado.estado
                           ? "bg-green-100 text-green-800 hover:bg-green-100"
                           : "bg-red-100 text-red-800 hover:bg-red-100"
                       }
                     >
-                      {selectedRol.estado
-                        ? "Activo"
-                        : "Inactivo"}
+                      {rolSeleccionado.estado ? "Activo" : "Inactivo"}
                     </Badge>
                   </div>
                 </div>
               </div>
+
               <div>
-                <Label className="text-gray-500">
-                  Descripción
-                </Label>
-                <p className="text-gray-700">
-                  {selectedRol.descripcion}
-                </p>
+                <Label className="text-gray-500">Descripción</Label>
+                <p className="text-gray-700">{rolSeleccionado.descripcion}</p>
               </div>
+
               <div>
-                <Label className="text-gray-500">
-                  Usuarios Asignados
-                </Label>
-                <p className="font-semibold text-lg">
-                  {selectedRol.usuariosAsignados}
-                </p>
+                <Label className="text-gray-500">Usuarios Asignados</Label>
+                <p className="font-semibold text-lg">{rolSeleccionado.usuariosAsignados}</p>
               </div>
 
               <div className="pt-4 border-t">
                 <Label className="text-gray-700 text-base mb-4 block">
                   Permisos Asignados
                 </Label>
+
                 <div className="grid grid-cols-2 gap-4">
                   {/* Dashboard */}
                   <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                    <h5 className="font-semibold text-sm mb-2">
-                      Dashboard
-                    </h5>
+                    <h5 className="font-semibold text-sm mb-2">Dashboard</h5>
                     <div className="text-sm text-gray-700 space-y-1">
                       <p>
                         • Acceder:{" "}
-                        {selectedRol.permisos.dashboard.acceder
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.dashboard.acceder ? "✓" : "✗"}
                       </p>
                     </div>
                   </div>
 
                   {/* Inventario */}
                   <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                    <h5 className="font-semibold text-sm mb-2">
-                      Inventario
-                    </h5>
+                    <h5 className="font-semibold text-sm mb-2">Inventario</h5>
                     <div className="text-sm text-gray-700 space-y-1">
-                      <p className="font-medium">
-                        Existencias:
-                      </p>
+                      <p className="font-medium">Existencias:</p>
                       <p className="pl-2">
                         • Crear:{" "}
-                        {selectedRol.permisos.inventario
-                          .existencias.crear
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.inventario.existencias.crear ? "✓" : "✗"}
                       </p>
+
                       <p className="font-medium">Productos:</p>
                       <p className="pl-2">
                         • Crear:{" "}
-                        {selectedRol.permisos.inventario
-                          .productos.crear
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.inventario.productos.crear ? "✓" : "✗"}
                       </p>
                       <p className="pl-2">
                         • Dar de Baja:{" "}
-                        {selectedRol.permisos.inventario
-                          .productos.darDeBaja
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.inventario.productos.darDeBaja ? "✓" : "✗"}
                       </p>
+
                       <p className="font-medium">Traslados:</p>
                       <p className="pl-2">
                         • Crear:{" "}
-                        {selectedRol.permisos.inventario
-                          .traslados.crear
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.inventario.traslados.crear ? "✓" : "✗"}
                       </p>
+
                       <p className="font-medium">Bodegas:</p>
                       <p className="pl-2">
                         • Crear:{" "}
-                        {selectedRol.permisos.inventario.bodegas
-                          .crear
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.inventario.bodegas.crear ? "✓" : "✗"}
                       </p>
                       <p className="pl-2">
                         • Editar:{" "}
-                        {selectedRol.permisos.inventario.bodegas
-                          .editar
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.inventario.bodegas.editar ? "✓" : "✗"}
                       </p>
                       <p className="pl-2">
                         • Eliminar:{" "}
-                        {selectedRol.permisos.inventario.bodegas
-                          .eliminar
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.inventario.bodegas.eliminar ? "✓" : "✗"}
                       </p>
                     </div>
                   </div>
 
                   {/* Compras */}
                   <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                    <h5 className="font-semibold text-sm mb-2">
-                      Compras
-                    </h5>
+                    <h5 className="font-semibold text-sm mb-2">Compras</h5>
                     <div className="text-sm text-gray-700 space-y-1">
-                      <p className="font-medium">
-                        Proveedores:
-                      </p>
+                      <p className="font-medium">Proveedores:</p>
                       <p className="pl-2">
                         • Crear:{" "}
-                        {selectedRol.permisos.compras
-                          .proveedores.crear
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.compras.proveedores.crear ? "✓" : "✗"}
                       </p>
                       <p className="pl-2">
                         • Editar:{" "}
-                        {selectedRol.permisos.compras
-                          .proveedores.editar
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.compras.proveedores.editar ? "✓" : "✗"}
                       </p>
                       <p className="pl-2">
                         • Eliminar:{" "}
-                        {selectedRol.permisos.compras
-                          .proveedores.eliminar
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.compras.proveedores.eliminar ? "✓" : "✗"}
                       </p>
-                      <p className="font-medium">
-                        Órdenes de Compra:
-                      </p>
+
+                      <p className="font-medium">Órdenes de Compra:</p>
                       <p className="pl-2">
                         • Crear:{" "}
-                        {selectedRol.permisos.compras
-                          .ordenesCompra.crear
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.compras.ordenesCompra.crear ? "✓" : "✗"}
                       </p>
                       <p className="pl-2">
                         • Editar:{" "}
-                        {selectedRol.permisos.compras
-                          .ordenesCompra.editar
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.compras.ordenesCompra.editar ? "✓" : "✗"}
                       </p>
                       <p className="pl-2">
                         • Eliminar:{" "}
-                        {selectedRol.permisos.compras
-                          .ordenesCompra.eliminar
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.compras.ordenesCompra.eliminar ? "✓" : "✗"}
                       </p>
                       <p className="pl-2">
                         • Cambiar Estado:{" "}
-                        {selectedRol.permisos.compras
-                          .ordenesCompra.cambiarEstado
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.compras.ordenesCompra.cambiarEstado ? "✓" : "✗"}
                       </p>
-                      <p className="font-medium">
-                        Remisiones de Compra:
-                      </p>
+
+                      <p className="font-medium">Remisiones de Compra:</p>
                       <p className="pl-2">
                         • Crear:{" "}
-                        {selectedRol.permisos.compras
-                          .remisionesCompra.crear
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.compras.remisionesCompra.crear ? "✓" : "✗"}
                       </p>
                       <p className="pl-2">
                         • Editar:{" "}
-                        {selectedRol.permisos.compras
-                          .remisionesCompra.editar
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.compras.remisionesCompra.editar ? "✓" : "✗"}
                       </p>
                       <p className="pl-2">
                         • Eliminar:{" "}
-                        {selectedRol.permisos.compras
-                          .remisionesCompra.eliminar
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.compras.remisionesCompra.eliminar ? "✓" : "✗"}
                       </p>
                       <p className="pl-2">
                         • Cambiar Estado:{" "}
-                        {selectedRol.permisos.compras
-                          .remisionesCompra.cambiarEstado
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.compras.remisionesCompra.cambiarEstado ? "✓" : "✗"}
                       </p>
                     </div>
                   </div>
 
                   {/* Ventas */}
                   <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                    <h5 className="font-semibold text-sm mb-2">
-                      Ventas
-                    </h5>
+                    <h5 className="font-semibold text-sm mb-2">Ventas</h5>
                     <div className="text-sm text-gray-700 space-y-1">
                       <p className="font-medium">Clientes:</p>
                       <p className="pl-2">
                         • Crear:{" "}
-                        {selectedRol.permisos.ventas.clientes
-                          .crear
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.ventas.clientes.crear ? "✓" : "✗"}
                       </p>
                       <p className="pl-2">
                         • Editar:{" "}
-                        {selectedRol.permisos.ventas.clientes
-                          .editar
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.ventas.clientes.editar ? "✓" : "✗"}
                       </p>
                       <p className="pl-2">
                         • Eliminar:{" "}
-                        {selectedRol.permisos.ventas.clientes
-                          .eliminar
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.ventas.clientes.eliminar ? "✓" : "✗"}
                       </p>
+
                       <p className="font-medium">Órdenes:</p>
                       <p className="pl-2">
                         • Crear:{" "}
-                        {selectedRol.permisos.ventas.ordenes
-                          .crear
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.ventas.ordenes.crear ? "✓" : "✗"}
                       </p>
                       <p className="pl-2">
                         • Editar:{" "}
-                        {selectedRol.permisos.ventas.ordenes
-                          .editar
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.ventas.ordenes.editar ? "✓" : "✗"}
                       </p>
                       <p className="pl-2">
                         • Eliminar:{" "}
-                        {selectedRol.permisos.ventas.ordenes
-                          .eliminar
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.ventas.ordenes.eliminar ? "✓" : "✗"}
                       </p>
-                      <p className="font-medium">
-                        Remisiones de Venta:
-                      </p>
+
+                      <p className="font-medium">Remisiones de Venta:</p>
                       <p className="pl-2">
                         • Crear:{" "}
-                        {selectedRol.permisos.ventas
-                          .remisionesVenta.crear
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.ventas.remisionesVenta.crear ? "✓" : "✗"}
                       </p>
                       <p className="pl-2">
                         • Editar:{" "}
-                        {selectedRol.permisos.ventas
-                          .remisionesVenta.editar
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.ventas.remisionesVenta.editar ? "✓" : "✗"}
                       </p>
                       <p className="pl-2">
                         • Eliminar:{" "}
-                        {selectedRol.permisos.ventas
-                          .remisionesVenta.eliminar
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.ventas.remisionesVenta.eliminar ? "✓" : "✗"}
                       </p>
-                      <p className="font-medium">
-                        Pagos y Abonos:
-                      </p>
+
+                      <p className="font-medium">Pagos y Abonos:</p>
                       <p className="pl-2">
                         • Crear:{" "}
-                        {selectedRol.permisos.ventas.pagosAbonos
-                          .crear
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.ventas.pagosAbonos.crear ? "✓" : "✗"}
                       </p>
                       <p className="pl-2">
                         • Editar:{" "}
-                        {selectedRol.permisos.ventas.pagosAbonos
-                          .editar
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.ventas.pagosAbonos.editar ? "✓" : "✗"}
                       </p>
                       <p className="pl-2">
                         • Eliminar:{" "}
-                        {selectedRol.permisos.ventas.pagosAbonos
-                          .eliminar
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.ventas.pagosAbonos.eliminar ? "✓" : "✗"}
                       </p>
                     </div>
                   </div>
 
                   {/* Configuración */}
                   <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                    <h5 className="font-semibold text-sm mb-2">
-                      Configuración
-                    </h5>
+                    <h5 className="font-semibold text-sm mb-2">Configuración</h5>
                     <div className="text-sm text-gray-700 space-y-1">
                       <p className="font-medium">Roles:</p>
                       <p className="pl-2">
                         • Crear:{" "}
-                        {selectedRol.permisos.configuracion
-                          .roles.crear
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.configuracion.roles.crear ? "✓" : "✗"}
                       </p>
                       <p className="pl-2">
                         • Editar:{" "}
-                        {selectedRol.permisos.configuracion
-                          .roles.editar
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.configuracion.roles.editar ? "✓" : "✗"}
                       </p>
                       <p className="pl-2">
                         • Inhabilitar:{" "}
-                        {selectedRol.permisos.configuracion
-                          .roles.inhabilitar
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.configuracion.roles.inhabilitar ? "✓" : "✗"}
                       </p>
                     </div>
                   </div>
 
                   {/* Usuarios */}
                   <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                    <h5 className="font-semibold text-sm mb-2">
-                      Usuarios
-                    </h5>
+                    <h5 className="font-semibold text-sm mb-2">Usuarios</h5>
                     <div className="text-sm text-gray-700 space-y-1">
-                      <p>
-                        • Crear:{" "}
-                        {selectedRol.permisos.usuarios.crear
-                          ? "✓"
-                          : "✗"}
-                      </p>
-                      <p>
-                        • Editar:{" "}
-                        {selectedRol.permisos.usuarios.editar
-                          ? "✓"
-                          : "✗"}
-                      </p>
-                      <p>
-                        • Eliminar:{" "}
-                        {selectedRol.permisos.usuarios.eliminar
-                          ? "✓"
-                          : "✗"}
-                      </p>
+                      <p>• Crear: {rolSeleccionado.permisos.usuarios.crear ? "✓" : "✗"}</p>
+                      <p>• Editar: {rolSeleccionado.permisos.usuarios.editar ? "✓" : "✗"}</p>
+                      <p>• Eliminar: {rolSeleccionado.permisos.usuarios.eliminar ? "✓" : "✗"}</p>
                       <p>
                         • Cambiar Estado:{" "}
-                        {selectedRol.permisos.usuarios
-                          .cambiarEstado
-                          ? "✓"
-                          : "✗"}
+                        {rolSeleccionado.permisos.usuarios.inhabilitar ? "✓" : "✗"}
                       </p>
                     </div>
                   </div>
@@ -1118,11 +984,9 @@ export default function Roles({ triggerCreate }: RolesProps) {
               </div>
             </div>
           )}
+
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowViewModal(false)}
-            >
+            <Button variant="outline" onClick={closeToList}>
               Cerrar
             </Button>
           </DialogFooter>
@@ -1131,25 +995,24 @@ export default function Roles({ triggerCreate }: RolesProps) {
 
       {/* Modal Crear Rol */}
       <Dialog
-        open={showCreateModal}
+        open={isCrear}
         onOpenChange={(open) => {
-          // Permitir cerrar solo con el botón X o Cancelar
-          if (!open) {
-            setShowCreateModal(false);
-          }
+          if (!open) closeToList();
         }}
       >
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto" onPointerDownOutside={(e) => e.preventDefault()} aria-describedby="rol-create-description">
+        <DialogContent
+          className="max-w-6xl max-h-[90vh] overflow-y-auto"
+          aria-describedby="rol-create-description"
+          onInteractOutside={(e) => e.preventDefault()} // ✅ no cerrar por fuera
+        >
           <DialogHeader>
             <DialogTitle>Crear Nuevo Rol</DialogTitle>
             <DialogDescription id="rol-create-description">
-              Completa la información del nuevo rol y asigna los
-              permisos correspondientes
+              Completa la información del nuevo rol y asigna los permisos correspondientes
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Nombre y Descripción del Rol */}
             <div>
               <Label htmlFor="nombre">Nombre del Rol *</Label>
               <Input
@@ -1160,11 +1023,7 @@ export default function Roles({ triggerCreate }: RolesProps) {
                 className={errors.nombre ? "border-red-500" : ""}
                 onBlur={handleNombreBlur}
               />
-              {errors.nombre && (
-                <p className="text-red-500 text-sm mt-1">
-                  {errors.nombre}
-                </p>
-              )}
+              {errors.nombre && <p className="text-red-500 text-sm mt-1">{errors.nombre}</p>}
             </div>
 
             <div>
@@ -1172,26 +1031,19 @@ export default function Roles({ triggerCreate }: RolesProps) {
               <Textarea
                 id="descripcion"
                 value={formDescripcion}
-                onChange={(e) =>
-                  handleDescripcionChange(e.target.value)
-                }
+                onChange={(e) => handleDescripcionChange(e.target.value)}
                 placeholder="Describe las responsabilidades de este rol"
                 rows={3}
                 className={errors.descripcion ? "border-red-500" : ""}
                 onBlur={handleDescripcionBlur}
               />
               {errors.descripcion && (
-                <p className="text-red-500 text-sm mt-1">
-                  {errors.descripcion}
-                </p>
+                <p className="text-red-500 text-sm mt-1">{errors.descripcion}</p>
               )}
             </div>
 
-            {/* Configuración de Permisos */}
             <div className="pt-4 border-t">
-              <Label className="text-base mb-4 block">
-                Configuración de Permisos
-              </Label>
+              <Label className="text-base mb-4 block">Configuración de Permisos</Label>
 
               <PermisosForm
                 formPermisos={formPermisos}
@@ -1203,16 +1055,10 @@ export default function Roles({ triggerCreate }: RolesProps) {
           </div>
 
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowCreateModal(false)}
-            >
+            <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
-            <Button
-              onClick={confirmCreate}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
+            <Button onClick={confirmCreate} className="bg-blue-600 hover:bg-blue-700">
               Crear Rol
             </Button>
           </DialogFooter>
@@ -1221,25 +1067,24 @@ export default function Roles({ triggerCreate }: RolesProps) {
 
       {/* Modal Editar Rol */}
       <Dialog
-        open={showEditModal}
+        open={isEditar}
         onOpenChange={(open) => {
-          // Permitir cerrar solo con el botón X o Cancelar
-          if (!open) {
-            setShowEditModal(false);
-          }
+          if (!open) closeToList();
         }}
       >
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto" onPointerDownOutside={(e) => e.preventDefault()} aria-describedby="rol-edit-description">
+        <DialogContent
+          className="max-w-6xl max-h-[90vh] overflow-y-auto"
+          aria-describedby="rol-edit-description"
+          onInteractOutside={(e) => e.preventDefault()} // ✅ no cerrar por fuera
+        >
           <DialogHeader>
             <DialogTitle>Editar Rol</DialogTitle>
             <DialogDescription id="rol-edit-description">
-              Modifica la información del rol y actualiza los
-              permisos según sea necesario
+              Modifica la información del rol y actualiza los permisos según sea necesario
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Nombre y Descripción del Rol */}
             <div>
               <Label htmlFor="edit-nombre">Nombre del Rol *</Label>
               <Input
@@ -1250,11 +1095,7 @@ export default function Roles({ triggerCreate }: RolesProps) {
                 className={errors.nombre ? "border-red-500" : ""}
                 onBlur={handleNombreBlur}
               />
-              {errors.nombre && (
-                <p className="text-red-500 text-sm mt-1">
-                  {errors.nombre}
-                </p>
-              )}
+              {errors.nombre && <p className="text-red-500 text-sm mt-1">{errors.nombre}</p>}
             </div>
 
             <div>
@@ -1262,26 +1103,19 @@ export default function Roles({ triggerCreate }: RolesProps) {
               <Textarea
                 id="edit-descripcion"
                 value={formDescripcion}
-                onChange={(e) =>
-                  handleDescripcionChange(e.target.value)
-                }
+                onChange={(e) => handleDescripcionChange(e.target.value)}
                 placeholder="Describe las responsabilidades de este rol"
                 rows={3}
                 className={errors.descripcion ? "border-red-500" : ""}
                 onBlur={handleDescripcionBlur}
               />
               {errors.descripcion && (
-                <p className="text-red-500 text-sm mt-1">
-                  {errors.descripcion}
-                </p>
+                <p className="text-red-500 text-sm mt-1">{errors.descripcion}</p>
               )}
             </div>
 
-            {/* Configuración de Permisos */}
             <div className="pt-4 border-t">
-              <Label className="text-base mb-4 block">
-                Configuración de Permisos
-              </Label>
+              <Label className="text-base mb-4 block">Configuración de Permisos</Label>
 
               <PermisosForm
                 formPermisos={formPermisos}
@@ -1293,16 +1127,10 @@ export default function Roles({ triggerCreate }: RolesProps) {
           </div>
 
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowEditModal(false)}
-            >
+            <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
-            <Button
-              onClick={confirmEdit}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
+            <Button onClick={confirmEdit} className="bg-blue-600 hover:bg-blue-700">
               Guardar Cambios
             </Button>
           </DialogFooter>
@@ -1311,49 +1139,48 @@ export default function Roles({ triggerCreate }: RolesProps) {
 
       {/* Modal Eliminar Rol */}
       <Dialog
-        open={showDeleteModal}
-        onOpenChange={setShowDeleteModal}
+        open={isEliminar}
+        onOpenChange={(open) => {
+          if (!open) closeToList();
+        }}
       >
-        <DialogContent aria-describedby="delete-rol-description">
+        <DialogContent
+          aria-describedby="delete-rol-description"
+          onInteractOutside={(e) => e.preventDefault()} // ✅ no cerrar por fuera
+        >
           <DialogHeader>
             <DialogTitle>Eliminar Rol</DialogTitle>
             <DialogDescription id="delete-rol-description">
-              ¿Estás seguro de que deseas eliminar este rol?
-              Esta acción no se puede deshacer.
+              ¿Estás seguro de que deseas eliminar este rol? Esta acción no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
-          {selectedRol && (
+
+          {rolSeleccionado && (
             <div className="py-4">
               <p className="text-gray-700">
-                Rol:{" "}
-                <span className="font-semibold">
-                  {selectedRol.nombre}
-                </span>
+                Rol: <span className="font-semibold">{rolSeleccionado.nombre}</span>
               </p>
-              {selectedRol.usuariosAsignados > 0 && (
+
+              {rolSeleccionado.usuariosAsignados > 0 && (
                 <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded">
                   <p className="text-sm text-red-800">
-                    <strong>⚠️ No se puede eliminar:</strong>{" "}
-                    Este rol tiene{" "}
-                    {selectedRol.usuariosAsignados} usuario(s)
-                    asignado(s). Debes reasignar los usuarios
-                    antes de eliminar el rol.
+                    <strong>⚠️ No se puede eliminar:</strong> Este rol tiene{" "}
+                    {rolSeleccionado.usuariosAsignados} usuario(s) asignado(s). Debes reasignar los
+                    usuarios antes de eliminar el rol.
                   </p>
                 </div>
               )}
             </div>
           )}
+
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowDeleteModal(false)}
-            >
+            <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
             <Button
               variant="destructive"
               onClick={confirmDelete}
-              disabled={selectedRol?.usuariosAsignados! > 0 || !puedeEliminar}
+              disabled={!!rolSeleccionado && (rolSeleccionado.usuariosAsignados > 0 || !puedeEliminar)}
             >
               Eliminar
             </Button>
@@ -1392,10 +1219,15 @@ export default function Roles({ triggerCreate }: RolesProps) {
               Cancelar
             </Button>
             <Button
-              variant="destructive"
               onClick={confirmToggleEstado}
+              disabled={!rolParaCambioEstado || !puedeInhabilitar}
+              className={
+                rolParaCambioEstado && rolParaCambioEstado.estado
+                  ? "bg-red-600 hover:bg-red-700"     // si está activo, vas a DESACTIVAR
+                  : "bg-green-600 hover:bg-green-700" // si está inactivo, vas a ACTIVAR
+              }
             >
-              Cambiar Estado
+              {rolParaCambioEstado && rolParaCambioEstado.estado ? "Desactivar" : "Activar"}
             </Button>
           </DialogFooter>
         </DialogContent>

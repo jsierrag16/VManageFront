@@ -1,13 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useAuth } from "@/shared/context/AuthContext";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useOutletContext } from "react-router-dom";
+import type { AppOutletContext } from "@/layouts/MainLayout";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from 'sonner';
-import {
-  validateNumeroConGuiones,
-  validateTexto,
-  validateEmail,
-  validateTelefono,
-  validateSelect,
-} from '../../../utils/validations';
-import { useFormValidation } from '../../../shared/hooks/useFormValidation';
 import { Search, Plus, Eye, Edit, Trash2, ChevronLeft, ChevronRight, User as UserIcon, Mail, Building2, CheckCircle, Filter } from 'lucide-react';
 import { Button } from '../../../shared/components/ui/button';
 import { Input } from '../../../shared/components/ui/input';
@@ -47,7 +43,7 @@ export const usuariosDataInitial = [
     nombre: 'Admin',
     apellido: 'Principal',
     email: 'administrador@gmail.com',
-    telefono: '300-123-4567',
+    telefono: '3001234567',
     bodegas: ['Bodega Principal', 'Bodega Secundaria'],
     rol: 'Administrador',
     estado: true,
@@ -59,7 +55,7 @@ export const usuariosDataInitial = [
     nombre: 'Juan',
     apellido: 'Vendedor',
     email: 'vendedor@gmail.com',
-    telefono: '310-234-5678',
+    telefono: '3102345678',
     bodegas: ['Bodega Secundaria'],
     rol: 'Vendedor',
     estado: true,
@@ -71,7 +67,7 @@ export const usuariosDataInitial = [
     nombre: 'María',
     apellido: 'Bodeguero',
     email: 'bodeguero@gmail.com',
-    telefono: '320-345-6789',
+    telefono: '3203456789',
     bodegas: ['Bodega Principal'],
     rol: 'Auxiliar de Bodega',
     estado: true,
@@ -83,7 +79,7 @@ export const usuariosDataInitial = [
     nombre: 'Carlos',
     apellido: 'Pérez',
     email: 'carlos.perez@gmail.com',
-    telefono: '315-555-1234',
+    telefono: '3155551234',
     bodegas: ['Bodega Medellín'],
     rol: 'Vendedor',
     estado: true,
@@ -95,7 +91,7 @@ export const usuariosDataInitial = [
     nombre: 'Ana',
     apellido: 'Gómez',
     email: 'ana.gomez@gmail.com',
-    telefono: '312-777-9999',
+    telefono: '3127779999',
     bodegas: ['Bodega Secundaria'],
     rol: 'Auxiliar de Bodega',
     estado: true,
@@ -107,7 +103,7 @@ export const usuariosDataInitial = [
     nombre: 'Pedro',
     apellido: 'López',
     email: 'pedro.lopez@gmail.com',
-    telefono: '318-222-3333',
+    telefono: '3182223333',
     bodegas: ['Bodega Medellín'],
     rol: 'Auxiliar Administrativo',
     estado: false,
@@ -129,23 +125,21 @@ interface Usuario {
 
 interface UsuariosProps {
   triggerCreate?: number;
-  selectedBodega?: string;
 }
 
-export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Principal' }: UsuariosProps) {
+export default function Usuarios({ }: UsuariosProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [estadoFilter, setEstadoFilter] = useState<string>('todos');
   const [usuarios, setUsuarios] = useState<Usuario[]>(usuariosDataInitial);
-  const [showViewModal, setShowViewModal] = useState(false);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
-  const [selectedUsuario, setSelectedUsuario] = useState<Usuario | null>(null);
   const [usuarioParaCambioEstado, setUsuarioParaCambioEstado] = useState<Usuario | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const [isConfirmReset, setIsConfirmReset] = useState(false);
+  const [sendingReset, setSendingReset] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+
 
   // Form states
   const [formTipoDoc, setFormTipoDoc] = useState('CC');
@@ -176,6 +170,113 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
     bodegas: false,
     rol: false
   });
+
+  const { usuario } = useAuth();
+  const loggedUserId = usuario?.id ?? null;
+
+  const navigate = useNavigate();
+  const location = useLocation();
+  const params = useParams<{ id: string }>();
+
+  // ✅ Bodega desde MainLayout (igual que Productos)
+  const { selectedBodegaNombre } = useOutletContext<AppOutletContext>();
+  const selectedBodega = selectedBodegaNombre;
+
+  // ✅ flags por URL (igual que Productos)
+  const isCrear = location.pathname.endsWith("/usuarios/crear");
+  const isVer = location.pathname.endsWith("/ver");
+  const isEditar = location.pathname.endsWith("/editar");
+  const isEliminar = location.pathname.endsWith("/eliminar");
+
+  const usuarioSeleccionado = useMemo(() => {
+    if (!params.id) return null;
+    const numericId = Number(params.id);
+    if (!Number.isFinite(numericId)) return null;
+    return usuarios.find((u) => u.id === numericId) ?? null;
+  }, [usuarios, params.id]);
+
+  const isSelfEdit = !!loggedUserId && usuarioSeleccionado?.id === loggedUserId;
+
+  // ✅ volver al listado (igual que Productos)
+  const closeToList = () => navigate("/app/usuarios");
+
+  // ✅ Si entran a /ver, /editar o /eliminar con un id inválido, volvemos al listado
+  useEffect(() => {
+    if (!isVer && !isEditar && !isEliminar) return;
+
+    if (!usuarioSeleccionado) {
+      closeToList();
+      return;
+    }
+  }, [isVer, isEditar, isEliminar, usuarioSeleccionado, closeToList]);
+
+  // ✅ Cuando estoy en /editar, precargar el formulario con el usuario seleccionado
+  useEffect(() => {
+    if (!isEditar) return;
+    if (!usuarioSeleccionado) return;
+
+    setFormTipoDoc(usuarioSeleccionado.tipoDocumento);
+    setFormNumeroDoc(usuarioSeleccionado.numeroDocumento);
+    setFormNombre(usuarioSeleccionado.nombre);
+    setFormApellido(usuarioSeleccionado.apellido);
+    setFormEmail(usuarioSeleccionado.email);
+    setFormTelefono(usuarioSeleccionado.telefono);
+    setFormBodegas(usuarioSeleccionado.bodegas);
+    setFormRol(usuarioSeleccionado.rol);
+
+    // (opcional pero recomendado) limpiar validaciones al abrir editar
+    setErrors({
+      numeroDoc: "",
+      nombre: "",
+      apellido: "",
+      email: "",
+      telefono: "",
+      bodegas: "",
+      rol: "",
+    });
+    setTouched({
+      numeroDoc: false,
+      nombre: false,
+      apellido: false,
+      email: false,
+      telefono: false,
+      bodegas: false,
+      rol: false,
+    });
+  }, [isEditar, usuarioSeleccionado]);
+
+  // ✅ Al entrar a /crear, dejar el form limpio
+  useEffect(() => {
+    if (!isCrear) return;
+
+    setFormTipoDoc("CC");
+    setFormNumeroDoc("");
+    setFormNombre("");
+    setFormApellido("");
+    setFormEmail("");
+    setFormTelefono("");
+    setFormBodegas([]);
+    setFormRol("");
+
+    setErrors({
+      numeroDoc: "",
+      nombre: "",
+      apellido: "",
+      email: "",
+      telefono: "",
+      bodegas: "",
+      rol: "",
+    });
+    setTouched({
+      numeroDoc: false,
+      nombre: false,
+      apellido: false,
+      email: false,
+      telefono: false,
+      bodegas: false,
+      rol: false,
+    });
+  }, [isCrear]);
 
   // Funciones de validación individuales
   const validateNumeroDocumento = (value: string) => {
@@ -275,6 +376,40 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
   };
 
   // Handlers con validación en tiempo real
+  const handleOpenResetDialog = (u: Usuario) => {
+    const email = (u.email ?? "").trim();
+
+    if (!email) {
+      toast.error("No hay correo para enviar el cambio de contraseña.");
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error("El correo no es válido.");
+      return;
+    }
+
+    setResetEmail(email);
+    setIsConfirmReset(true);
+  };
+
+  const handleSendPasswordReset = async () => {
+    try {
+      setSendingReset(true);
+
+      // ✅ Aquí conectas tu backend:
+      // await authService.sendPasswordReset({ email: resetEmail });
+
+      await new Promise((r) => setTimeout(r, 700));
+
+      toast.success(`Se envió el correo de cambio de contraseña a ${resetEmail}`);
+      setIsConfirmReset(false);
+    } catch {
+      toast.error("No se pudo enviar el correo. Intenta de nuevo.");
+    } finally {
+      setSendingReset(false);
+    }
+  };
   const handleNumeroDocChange = (value: string) => {
     setFormNumeroDoc(value);
     if (touched.numeroDoc) {
@@ -307,13 +442,6 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
     setFormTelefono(value);
     if (touched.telefono) {
       setErrors({ ...errors, telefono: validateTelefonoField(value) });
-    }
-  };
-
-  const handleBodegasChange = (value: string[]) => {
-    setFormBodegas(value);
-    if (touched.bodegas) {
-      setErrors({ ...errors, bodegas: validateBodegasField(value) });
     }
   };
 
@@ -350,11 +478,6 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
     setErrors({ ...errors, telefono: validateTelefonoField(formTelefono) });
   };
 
-  const handleBodegasBlur = () => {
-    setTouched({ ...touched, bodegas: true });
-    setErrors({ ...errors, bodegas: validateBodegasField(formBodegas) });
-  };
-
   const handleRolBlur = () => {
     setTouched({ ...touched, rol: true });
     setErrors({ ...errors, rol: validateRolField(formRol) });
@@ -372,37 +495,35 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
     'Conductor',
   ];
 
-  // Filtrar usuarios - por bodega Y por búsqueda
   const filteredUsuarios = useMemo(() => {
     return usuarios
-      .filter((usuario) => {
-        // Si es "Todas las bodegas", mostrar todos los usuarios
-        if (selectedBodega === 'Todas las bodegas') {
-          return true;
-        }
-        // Si no, filtrar por la bodega específica (usuario debe tener esa bodega en su array)
-        return usuario.bodegas.includes(selectedBodega);
+      .filter((u) => {
+        // ✅ Si es "Todas las bodegas" (cuando exista), no filtramos por bodega
+        if (selectedBodega === "Todas las bodegas") return true;
+
+        // ✅ Si no, el usuario debe tener esa bodega asignada
+        return u.bodegas.includes(selectedBodega);
       })
-      .filter((usuario) => {
+      .filter((u) => {
         const searchLower = searchTerm.toLowerCase();
+
         return (
-          usuario.nombre.toLowerCase().includes(searchLower) ||
-          usuario.apellido.toLowerCase().includes(searchLower) ||
-          usuario.email.toLowerCase().includes(searchLower) ||
-          usuario.tipoDocumento.toLowerCase().includes(searchLower) ||
-          usuario.numeroDocumento.toLowerCase().includes(searchLower) ||
-          usuario.telefono.toLowerCase().includes(searchLower) ||
-          usuario.bodegas.some((b) => b.toLowerCase().includes(searchLower)) ||
-          usuario.rol.toLowerCase().includes(searchLower)
+          u.nombre.toLowerCase().includes(searchLower) ||
+          u.apellido.toLowerCase().includes(searchLower) ||
+          u.email.toLowerCase().includes(searchLower) ||
+          u.tipoDocumento.toLowerCase().includes(searchLower) ||
+          u.numeroDocumento.toLowerCase().includes(searchLower) ||
+          u.telefono.toLowerCase().includes(searchLower) ||
+          u.bodegas.some((b) => b.toLowerCase().includes(searchLower)) ||
+          u.rol.toLowerCase().includes(searchLower)
         );
       })
-      .filter((usuario) => {
-        if (estadoFilter === 'todos') {
-          return true;
-        }
-        return usuario.estado === (estadoFilter === 'activos');
+      .filter((u) => {
+        if (estadoFilter === "todos") return true;
+        return u.estado === (estadoFilter === "activos");
       });
-  }, [usuarios, searchTerm, selectedBodega, estadoFilter]);
+  }, [usuarios, selectedBodega, searchTerm, estadoFilter]);
+
 
   // Paginación
   const totalPages = Math.ceil(filteredUsuarios.length / itemsPerPage);
@@ -411,32 +532,31 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
   const currentUsuarios = filteredUsuarios.slice(startIndex, endIndex);
 
   // Resetear a página 1 cuando cambia el filtro
-  useMemo(() => {
+  useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm]);
+  }, [searchTerm, estadoFilter, selectedBodega]);
 
-  const handleView = (usuario: Usuario) => {
-    setSelectedUsuario(usuario);
-    setShowViewModal(true);
+  const handleView = (u: Usuario) => {
+    navigate(`/app/usuarios/${u.id}/ver`);
   };
 
   const handleCreate = () => {
-    setFormTipoDoc('CC');
-    setFormNumeroDoc('');
-    setFormNombre('');
-    setFormApellido('');
-    setFormEmail('');
-    setFormTelefono('');
+    setFormTipoDoc("CC");
+    setFormNumeroDoc("");
+    setFormNombre("");
+    setFormApellido("");
+    setFormEmail("");
+    setFormTelefono("");
     setFormBodegas([]);
-    setFormRol('');
+    setFormRol("");
     setErrors({
-      numeroDoc: '',
-      nombre: '',
-      apellido: '',
-      email: '',
-      telefono: '',
-      bodegas: '',
-      rol: ''
+      numeroDoc: "",
+      nombre: "",
+      apellido: "",
+      email: "",
+      telefono: "",
+      bodegas: "",
+      rol: "",
     });
     setTouched({
       numeroDoc: false,
@@ -445,47 +565,24 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
       email: false,
       telefono: false,
       bodegas: false,
-      rol: false
+      rol: false,
     });
-    setShowCreateModal(true);
+
+    navigate("/app/usuarios/crear");
   };
 
-  const handleEdit = (usuario: Usuario) => {
-    setSelectedUsuario(usuario);
-    setFormTipoDoc(usuario.tipoDocumento);
-    setFormNumeroDoc(usuario.numeroDocumento);
-    setFormNombre(usuario.nombre);
-    setFormApellido(usuario.apellido);
-    setFormEmail(usuario.email);
-    setFormTelefono(usuario.telefono);
-    setFormBodegas(usuario.bodegas);
-    setFormRol(usuario.rol);
-    setErrors({
-      numeroDoc: '',
-      nombre: '',
-      apellido: '',
-      email: '',
-      telefono: '',
-      bodegas: '',
-      rol: ''
-    });
-    setTouched({
-      numeroDoc: false,
-      nombre: false,
-      apellido: false,
-      email: false,
-      telefono: false,
-      bodegas: false,
-      rol: false
-    });
-    setShowEditModal(true);
+  const handleEdit = (u: Usuario) => {
+    navigate(`/app/usuarios/${u.id}/editar`);
   };
 
-  const handleDelete = (usuario: Usuario) => {
-    setSelectedUsuario(usuario);
-    setShowDeleteModal(true);
-  };
+  const handleDelete = (u: Usuario) => {
+    if (loggedUserId && u.id === loggedUserId) {
+      toast.error("No puedes eliminar tu propio usuario");
+      return;
+    }
 
+    navigate(`/app/usuarios/${u.id}/eliminar`);
+  };
   const validateForm = () => {
     // Marcar todos los campos como tocados
     setTouched({
@@ -543,38 +640,57 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
     };
 
     setUsuarios([...usuarios, newUsuario]);
-    setShowCreateModal(false);
+
+    closeToList();
     setShowSuccessModal(true);
   };
 
   const confirmEdit = () => {
-    if (!selectedUsuario || !validateForm()) return;
+    if (!usuarioSeleccionado || !validateForm()) return;
+
+    const isSelf = !!loggedUserId && usuarioSeleccionado.id === loggedUserId;
 
     setUsuarios(
       usuarios.map((u) =>
-        u.id === selectedUsuario.id
+        u.id === usuarioSeleccionado.id
           ? {
-              ...u,
-              tipoDocumento: formTipoDoc,
-              numeroDocumento: formNumeroDoc.trim(),
-              nombre: formNombre.trim(),
-              apellido: formApellido.trim(),
-              email: formEmail.trim(),
-              telefono: formTelefono.trim(),
-              bodegas: formBodegas,
-              rol: formRol,
-            }
+            ...u,
+            tipoDocumento: formTipoDoc,
+            numeroDocumento: formNumeroDoc.trim(),
+            nombre: formNombre.trim(),
+            apellido: formApellido.trim(),
+            email: formEmail.trim(),
+            telefono: formTelefono.trim(),
+            bodegas: formBodegas,
+            // ✅ si es tu propio usuario, NO permitimos cambiar rol
+            rol: isSelf ? u.rol : formRol,
+          }
           : u
       )
     );
-    setShowEditModal(false);
-    toast.success('Usuario actualizado exitosamente');
+
+    if (isSelf && formRol !== usuarioSeleccionado.rol) {
+      toast.warning("No puedes cambiar tu propio rol mientras estás logueado");
+    } else {
+      toast.success("Usuario actualizado exitosamente");
+    }
+
+    closeToList();
   };
 
   const confirmDelete = () => {
-    setUsuarios(usuarios.filter((u) => u.id !== selectedUsuario?.id));
-    setShowDeleteModal(false);
-    toast.success('Usuario eliminado exitosamente');
+    if (!usuarioSeleccionado) return;
+
+    if (loggedUserId && usuarioSeleccionado.id === loggedUserId) {
+      toast.error("No puedes eliminar tu propio usuario");
+      closeToList();
+      return;
+    }
+
+    setUsuarios(usuarios.filter((u) => u.id !== usuarioSeleccionado.id));
+
+    toast.success("Usuario eliminado exitosamente");
+    closeToList();
   };
 
   const handlePageChange = (page: number) => {
@@ -585,35 +701,46 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
     setShowSuccessModal(false);
   };
 
-  const toggleEstado = (usuario: Usuario) => {
-    setUsuarioParaCambioEstado(usuario);
+  const toggleEstado = (u: Usuario) => {
+    if (loggedUserId && u.id === loggedUserId) {
+      toast.error("No puedes inhabilitar tu propio usuario");
+      return;
+    }
+    setUsuarioParaCambioEstado(u);
     setShowConfirmEstadoModal(true);
   };
 
   const handleConfirmEstado = () => {
-    if (usuarioParaCambioEstado) {
-      setUsuarios(
-        usuarios.map((u) =>
-          u.id === usuarioParaCambioEstado.id ? { ...u, estado: !u.estado } : u
-        )
-      );
-      toast.success(`Usuario ${!usuarioParaCambioEstado.estado ? 'activado' : 'desactivado'} exitosamente`);
+    if (!usuarioParaCambioEstado) return;
+
+    if (loggedUserId && usuarioParaCambioEstado.id === loggedUserId) {
+      toast.error("No puedes inhabilitar tu propio usuario");
       setShowConfirmEstadoModal(false);
       setUsuarioParaCambioEstado(null);
+      return;
     }
-  };
 
-  const handleSendPasswordLink = (usuario: Usuario) => {
-    toast.success(`Link de contraseña enviado a ${usuario.email}`);
+    setUsuarios(
+      usuarios.map((u) =>
+        u.id === usuarioParaCambioEstado.id ? { ...u, estado: !u.estado } : u
+      )
+    );
+
+    toast.success(
+      `Usuario ${!usuarioParaCambioEstado.estado ? "activado" : "desactivado"} exitosamente`
+    );
+
+    setShowConfirmEstadoModal(false);
+    setUsuarioParaCambioEstado(null);
   };
 
   const toggleBodega = (bodega: string) => {
     const newBodegas = formBodegas.includes(bodega)
       ? formBodegas.filter((b) => b !== bodega)
       : [...formBodegas, bodega];
-    
+
     setFormBodegas(newBodegas);
-    
+
     // Validar en tiempo real si ya se tocó el campo
     if (touched.bodegas) {
       setErrors({ ...errors, bodegas: validateBodegasField(newBodegas) });
@@ -658,7 +785,7 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
             className="pl-10"
           />
         </div>
-        
+
         {/* Filtro de Estado */}
         <div className="flex items-center gap-2 border border-gray-300 rounded-lg p-1 bg-gray-50">
           <Filter size={16} className="text-gray-500 ml-2" />
@@ -666,11 +793,10 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
             size="sm"
             variant={estadoFilter === 'todos' ? 'default' : 'ghost'}
             onClick={() => setEstadoFilter('todos')}
-            className={`h-8 ${
-              estadoFilter === 'todos'
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'hover:bg-gray-200'
-            }`}
+            className={`h-8 ${estadoFilter === 'todos'
+              ? 'bg-blue-600 text-white hover:bg-blue-700'
+              : 'hover:bg-gray-200'
+              }`}
           >
             Todos
           </Button>
@@ -678,11 +804,10 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
             size="sm"
             variant={estadoFilter === 'activos' ? 'default' : 'ghost'}
             onClick={() => setEstadoFilter('activos')}
-            className={`h-8 ${
-              estadoFilter === 'activos'
-                ? 'bg-green-600 text-white hover:bg-green-700'
-                : 'hover:bg-gray-200'
-            }`}
+            className={`h-8 ${estadoFilter === 'activos'
+              ? 'bg-green-600 text-white hover:bg-green-700'
+              : 'hover:bg-gray-200'
+              }`}
           >
             Activos
           </Button>
@@ -690,11 +815,10 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
             size="sm"
             variant={estadoFilter === 'inactivos' ? 'default' : 'ghost'}
             onClick={() => setEstadoFilter('inactivos')}
-            className={`h-8 ${
-              estadoFilter === 'inactivos'
-                ? 'bg-red-600 text-white hover:bg-red-700'
-                : 'hover:bg-gray-200'
-            }`}
+            className={`h-8 ${estadoFilter === 'inactivos'
+              ? 'bg-red-600 text-white hover:bg-red-700'
+              : 'hover:bg-gray-200'
+              }`}
           >
             Inactivos
           </Button>
@@ -722,6 +846,7 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
                 <TableHead className="text-right w-40">Acciones</TableHead>
               </TableRow>
             </TableHeader>
+
             <TableBody>
               {currentUsuarios.length === 0 ? (
                 <TableRow>
@@ -730,134 +855,188 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
                   </TableCell>
                 </TableRow>
               ) : (
-                currentUsuarios.map((usuario, index) => (
-                  <TableRow key={usuario.id} className="hover:bg-gray-50">
-                    <TableCell>{startIndex + index + 1}</TableCell>
-                    <TableCell className="font-medium text-gray-900">
-                      {usuario.nombre} {usuario.apellido}
-                    </TableCell>
-                    <TableCell className="text-gray-700">{usuario.email}</TableCell>
-                    <TableCell className="text-gray-700">{usuario.telefono}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
-                        {usuario.bodegas.join(', ')}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className={getRolBadgeColor(usuario.rol)}>
-                        {usuario.rol}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => toggleEstado(usuario)}
-                        className={
-                          usuario.estado
-                            ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                            : 'bg-red-100 text-red-800 hover:bg-red-200'
-                        }
-                      >
-                        {usuario.estado ? 'Activo' : 'Inactivo'}
-                      </Button>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleSendPasswordLink(usuario)}
-                          className="h-8 w-8 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
-                          title="Enviar link de contraseña"
+                currentUsuarios.map((usuario, index) => {
+                  const isSelfRow = !!loggedUserId && usuario.id === loggedUserId;
+
+                  return (
+                    <TableRow key={usuario.id} className="hover:bg-gray-50">
+                      <TableCell>{startIndex + index + 1}</TableCell>
+
+                      <TableCell className="font-medium text-gray-900">
+                        {usuario.nombre} {usuario.apellido}
+                      </TableCell>
+
+                      <TableCell className="text-gray-700">
+                        {usuario.email}
+                      </TableCell>
+
+                      <TableCell className="text-gray-700">
+                        {usuario.telefono}
+                      </TableCell>
+
+                      <TableCell className="max-w-[240px] whitespace-normal break-words">
+                        <Badge
+                          variant="outline"
+                          className="bg-purple-50 text-purple-700 border-purple-200 whitespace-normal"
                         >
-                          <Mail size={16} />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleView(usuario)}
-                          className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                          title="Ver detalles"
+                          {usuario.bodegas.slice(0, 2).join(", ")}
+                          {usuario.bodegas.length > 2 && (
+                            <>
+                              <br />
+                              {usuario.bodegas.slice(2).join(", ")}
+                            </>
+                          )}
+                        </Badge>
+                      </TableCell>
+
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={getRolBadgeColor(usuario.rol)}
                         >
-                          <Eye size={16} />
-                        </Button>
+                          {usuario.rol}
+                        </Badge>
+                      </TableCell>
+
+                      <TableCell className="text-center">
                         <Button
+                          size="sm"
                           variant="ghost"
-                          size="icon"
-                          onClick={() => handleEdit(usuario)}
-                          className="h-8 w-8 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
-                          title="Editar"
+                          disabled={isSelfRow}
+                          onClick={() => {
+                            if (isSelfRow) {
+                              toast.error("No puedes inhabilitar tu propio usuario");
+                              return;
+                            }
+                            toggleEstado(usuario);
+                          }}
+                          className={`${usuario.estado
+                            ? "bg-green-100 text-green-800 hover:bg-green-200"
+                            : "bg-red-100 text-red-800 hover:bg-red-200"
+                            } ${isSelfRow ? "opacity-40 cursor-not-allowed" : ""}`}
+                          title={isSelfRow ? "No puedes cambiar tu propio estado" : "Cambiar estado"}
                         >
-                          <Edit size={16} />
+                          {usuario.estado ? "Activo" : "Inactivo"}
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDelete(usuario)}
-                          className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                          title="Eliminar"
-                        >
-                          <Trash2 size={16} />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
+                      </TableCell>
+
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleOpenResetDialog(usuario)}
+                            className="h-8 w-8 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                            title="Enviar link de contraseña"
+                          >
+                            <Mail size={16} />
+                          </Button>
+
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleView(usuario)}
+                            className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            title="Ver detalles"
+                          >
+                            <Eye size={16} />
+                          </Button>
+
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleEdit(usuario)}
+                            className="h-8 w-8 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                            title="Editar"
+                          >
+                            <Edit size={16} />
+                          </Button>
+
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDelete(usuario)}
+                            disabled={isSelfRow}
+                            className={`h-8 w-8 ${isSelfRow
+                              ? "opacity-40 cursor-not-allowed"
+                              : "text-red-600 hover:text-red-700 hover:bg-red-50"
+                              }`}
+                            title={
+                              isSelfRow
+                                ? "No puedes eliminar tu propio usuario"
+                                : "Eliminar"
+                            }
+                          >
+                            <Trash2 size={16} />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>
         </div>
-
-        {/* Paginación */}
-        {filteredUsuarios.length > 0 && (
-          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
-            <div className="text-sm text-gray-600">
-              Mostrando {startIndex + 1} - {Math.min(endIndex, filteredUsuarios.length)} de{' '}
-              {filteredUsuarios.length} usuarios
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1}
-                className="h-8"
-              >
-                <ChevronLeft size={16} />
-                Anterior
-              </Button>
-              <div className="flex items-center gap-1">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                  <Button
-                    key={page}
-                    variant={currentPage === page ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => handlePageChange(page)}
-                    className="h-8 w-8 p-0"
-                  >
-                    {page}
-                  </Button>
-                ))}
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}
-                className="h-8"
-              >
-                Siguiente
-                <ChevronRight size={16} />
-              </Button>
-            </div>
-          </div>
-        )}
       </div>
 
+      {/* Paginación */}
+      {filteredUsuarios.length > 0 && (
+        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
+          <div className="text-sm text-gray-600">
+            Mostrando {startIndex + 1} - {Math.min(endIndex, filteredUsuarios.length)} de{' '}
+            {filteredUsuarios.length} usuarios
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+              className="h-8"
+            >
+              <ChevronLeft size={16} />
+              Anterior
+            </Button>
+            <div className="flex items-center gap-1">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <Button
+                  key={page}
+                  variant={currentPage === page ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => handlePageChange(page)}
+                  className="h-8 w-8 p-0"
+                >
+                  {page}
+                </Button>
+              ))}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className="h-8"
+            >
+              Siguiente
+              <ChevronRight size={16} />
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Modal Ver Detalles */}
-      <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
-        <DialogContent className="max-w-6xl" aria-describedby="view-usuario-description">
+      <Dialog
+        open={isVer}
+        onOpenChange={(open) => {
+          if (!open) closeToList();
+        }}
+      >
+        <DialogContent
+          className="max-w-6xl"
+          aria-describedby="view-usuario-description"
+          onInteractOutside={(e) => e.preventDefault()} // ✅ NO cerrar al click por fuera
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserIcon className="h-5 w-5 text-blue-600" />
@@ -867,30 +1046,38 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
               Información completa del usuario
             </DialogDescription>
           </DialogHeader>
-          {selectedUsuario && (
+
+          {usuarioSeleccionado && (
             <div className="space-y-6">
               {/* Información Principal */}
               <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-6 border border-blue-100">
                 <div className="flex items-start justify-between">
                   <div className="space-y-2">
                     <h3 className="text-2xl font-semibold text-gray-900">
-                      {selectedUsuario.nombre} {selectedUsuario.apellido}
+                      {usuarioSeleccionado.nombre} {usuarioSeleccionado.apellido}
                     </h3>
+
                     <div className="flex items-center gap-4">
                       <Badge variant="outline" className="bg-white">
-                        {selectedUsuario.tipoDocumento}: {selectedUsuario.numeroDocumento}
+                        {usuarioSeleccionado.tipoDocumento}:{" "}
+                        {usuarioSeleccionado.numeroDocumento}
                       </Badge>
-                      <Badge variant="outline" className={getRolBadgeColor(selectedUsuario.rol)}>
-                        {selectedUsuario.rol}
+
+                      <Badge
+                        variant="outline"
+                        className={getRolBadgeColor(usuarioSeleccionado.rol)}
+                      >
+                        {usuarioSeleccionado.rol}
                       </Badge>
+
                       <Badge
                         className={
-                          selectedUsuario.estado
-                            ? 'bg-green-100 text-green-800 hover:bg-green-100'
-                            : 'bg-red-100 text-red-800 hover:bg-red-100'
+                          usuarioSeleccionado.estado
+                            ? "bg-green-100 text-green-800 hover:bg-green-100"
+                            : "bg-red-100 text-red-800 hover:bg-red-100"
                         }
                       >
-                        {selectedUsuario.estado ? 'Activo' : 'Inactivo'}
+                        {usuarioSeleccionado.estado ? "Activo" : "Inactivo"}
                       </Badge>
                     </div>
                   </div>
@@ -903,14 +1090,20 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
                   <Mail className="h-4 w-4 text-blue-600" />
                   Información de Contacto
                 </h4>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                     <Label className="text-xs text-gray-500 mb-1">Email</Label>
-                    <p className="font-medium text-gray-900">{selectedUsuario.email}</p>
+                    <p className="font-medium text-gray-900">
+                      {usuarioSeleccionado.email}
+                    </p>
                   </div>
+
                   <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                     <Label className="text-xs text-gray-500 mb-1">Teléfono</Label>
-                    <p className="font-medium text-gray-900">{selectedUsuario.telefono}</p>
+                    <p className="font-medium text-gray-900">
+                      {usuarioSeleccionado.telefono}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -921,15 +1114,21 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
                   <Building2 className="h-4 w-4 text-blue-600" />
                   Asignación de Bodega
                 </h4>
+
                 <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                  <Label className="text-xs text-gray-500 mb-1">Bodegas Asignadas</Label>
-                  <p className="font-medium text-gray-900">{selectedUsuario.bodegas.join(', ')}</p>
+                  <Label className="text-xs text-gray-500 mb-1">
+                    Bodegas Asignadas
+                  </Label>
+                  <p className="font-medium text-gray-900">
+                    {usuarioSeleccionado.bodegas.join(", ")}
+                  </p>
                 </div>
               </div>
             </div>
           )}
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowViewModal(false)}>
+            <Button variant="outline" onClick={closeToList}>
               Cerrar
             </Button>
           </DialogFooter>
@@ -937,9 +1136,14 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
       </Dialog>
 
       {/* Modal Crear Usuario */}
-      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent 
-          className="max-w-6xl max-h-[90vh] overflow-y-auto" 
+      <Dialog
+        open={isCrear}
+        onOpenChange={(open) => {
+          if (!open) closeToList();
+        }}
+      >
+        <DialogContent
+          className="max-w-6xl max-h-[90vh] overflow-y-auto"
           aria-describedby="create-usuario-description"
           onInteractOutside={(e) => e.preventDefault()}
         >
@@ -949,6 +1153,7 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
               Completa la información del nuevo usuario del sistema
             </DialogDescription>
           </DialogHeader>
+
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -964,6 +1169,7 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
                   </SelectContent>
                 </Select>
               </div>
+
               <div>
                 <Label htmlFor="create-numero-doc">N° de Documento *</Label>
                 <Input
@@ -979,6 +1185,7 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
                 )}
               </div>
             </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="create-nombre">Nombre *</Label>
@@ -994,6 +1201,7 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
                   <p className="text-red-500 text-sm mt-1">{errors.nombre}</p>
                 )}
               </div>
+
               <div>
                 <Label htmlFor="create-apellido">Apellido *</Label>
                 <Input
@@ -1009,6 +1217,7 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
                 )}
               </div>
             </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="create-email">Email *</Label>
@@ -1025,9 +1234,11 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
                   <p className="text-red-500 text-sm mt-1">{errors.email}</p>
                 )}
               </div>
+
               <div>
                 <Label htmlFor="create-telefono">Teléfono *</Label>
                 <Input
+                  maxLength={10}
                   id="create-telefono"
                   value={formTelefono}
                   onChange={(e) => handleTelefonoChange(e.target.value)}
@@ -1040,6 +1251,7 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
                 )}
               </div>
             </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="create-bodega">Bodegas Asignadas *</Label>
@@ -1064,6 +1276,7 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
                   <p className="text-red-500 text-sm mt-1">{errors.bodegas}</p>
                 )}
               </div>
+
               <div>
                 <Label htmlFor="create-rol">Rol *</Label>
                 <Select value={formRol} onValueChange={handleRolChange} onBlur={handleRolBlur}>
@@ -1084,8 +1297,9 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
               </div>
             </div>
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateModal(false)}>
+            <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
             <Button onClick={confirmCreate} className="bg-blue-600 hover:bg-blue-700">
@@ -1096,9 +1310,14 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
       </Dialog>
 
       {/* Modal Editar Usuario */}
-      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent 
-          className="max-w-6xl max-h-[90vh] overflow-y-auto" 
+      <Dialog
+        open={isEditar}
+        onOpenChange={(open) => {
+          if (!open) closeToList();
+        }}
+      >
+        <DialogContent
+          className="max-w-6xl max-h-[90vh] overflow-y-auto"
           aria-describedby="edit-usuario-description"
           onInteractOutside={(e) => e.preventDefault()}
         >
@@ -1108,6 +1327,7 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
               Modifica la información del usuario
             </DialogDescription>
           </DialogHeader>
+
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -1123,6 +1343,7 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
                   </SelectContent>
                 </Select>
               </div>
+
               <div>
                 <Label htmlFor="edit-numero-doc">N° de Documento *</Label>
                 <Input
@@ -1138,6 +1359,7 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
                 )}
               </div>
             </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="edit-nombre">Nombre *</Label>
@@ -1153,6 +1375,7 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
                   <p className="text-red-500 text-sm mt-1">{errors.nombre}</p>
                 )}
               </div>
+
               <div>
                 <Label htmlFor="edit-apellido">Apellido *</Label>
                 <Input
@@ -1168,6 +1391,7 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
                 )}
               </div>
             </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="edit-email">Email *</Label>
@@ -1184,6 +1408,7 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
                   <p className="text-red-500 text-sm mt-1">{errors.email}</p>
                 )}
               </div>
+
               <div>
                 <Label htmlFor="edit-telefono">Teléfono *</Label>
                 <Input
@@ -1199,6 +1424,7 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
                 )}
               </div>
             </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="edit-bodega">Bodegas Asignadas *</Label>
@@ -1223,12 +1449,20 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
                   <p className="text-red-500 text-sm mt-1">{errors.bodegas}</p>
                 )}
               </div>
+
               <div>
                 <Label htmlFor="edit-rol">Rol *</Label>
-                <Select value={formRol} onValueChange={handleRolChange} onBlur={handleRolBlur}>
-                  <SelectTrigger id="edit-rol">
+
+                <Select
+                  value={formRol}
+                  onValueChange={handleRolChange}
+                  onBlur={handleRolBlur}
+                  disabled={isSelfEdit}
+                >
+                  <SelectTrigger id="edit-rol" className={isSelfEdit ? "opacity-60 cursor-not-allowed" : ""}>
                     <SelectValue placeholder="Selecciona un rol" />
                   </SelectTrigger>
+
                   <SelectContent>
                     {rolesDisponibles.map((rol) => (
                       <SelectItem key={rol} value={rol}>
@@ -1237,14 +1471,22 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
                     ))}
                   </SelectContent>
                 </Select>
-                {errors.rol && touched.rol && (
+
+                {isSelfEdit && (
+                  <p className="text-xs text-amber-700 mt-1">
+                    No puedes cambiar tu propio rol mientras estás logueado.
+                  </p>
+                )}
+
+                {errors.rol && touched.rol && !isSelfEdit && (
                   <p className="text-red-500 text-sm mt-1">{errors.rol}</p>
                 )}
               </div>
             </div>
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEditModal(false)}>
+            <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
             <Button onClick={confirmEdit} className="bg-orange-600 hover:bg-orange-700">
@@ -1254,8 +1496,59 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
         </DialogContent>
       </Dialog>
 
+      {/* ✅ MODAL RESET PASSWORD (igual a Profile) */}
+      <Dialog
+        open={isConfirmReset}
+        modal
+        onOpenChange={(open) => {
+          if (!open && !sendingReset) setIsConfirmReset(false);
+        }}
+      >
+        <DialogContent
+          className="max-w-lg"
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => {
+            // ✅ permitir ESC para cerrar (como pediste)
+            if (sendingReset) e.preventDefault();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Enviar cambio de contraseña</DialogTitle>
+            <DialogDescription>
+              Se enviará un enlace de cambio de contraseña al correo:{" "}
+              <span className="font-semibold text-gray-900">{resetEmail}</span>
+              <br />
+              ¿Deseas continuar?
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsConfirmReset(false)}
+              disabled={sendingReset}
+            >
+              Cancelar
+            </Button>
+
+            <Button
+              className="bg-blue-600 hover:bg-blue-700"
+              onClick={handleSendPasswordReset}
+              disabled={sendingReset}
+            >
+              {sendingReset ? "Enviando..." : "Enviar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Modal Eliminar Usuario */}
-      <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
+      <Dialog
+        open={isEliminar}
+        onOpenChange={(open) => {
+          if (!open) closeToList();
+        }}
+      >
         <DialogContent aria-describedby="delete-usuario-description">
           <DialogHeader>
             <DialogTitle>Eliminar Usuario</DialogTitle>
@@ -1263,21 +1556,35 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
               ¿Estás seguro de que deseas eliminar este usuario? Esta acción no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
-          {selectedUsuario && (
+
+          {usuarioSeleccionado && (
             <div className="py-4">
               <p className="text-gray-700">
-                Usuario: <span className="font-semibold">{selectedUsuario.nombre} {selectedUsuario.apellido}</span>
+                Usuario:{" "}
+                <span className="font-semibold">
+                  {usuarioSeleccionado.nombre} {usuarioSeleccionado.apellido}
+                </span>
               </p>
               <p className="text-gray-600 text-sm mt-1">
-                Email: {selectedUsuario.email}
+                Email: {usuarioSeleccionado.email}
               </p>
             </div>
           )}
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDeleteModal(false)}>
+            <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
-            <Button variant="destructive" onClick={confirmDelete}>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={!!loggedUserId && usuarioSeleccionado?.id === loggedUserId}
+              title={
+                !!loggedUserId && usuarioSeleccionado?.id === loggedUserId
+                  ? "No puedes eliminar tu propio usuario"
+                  : "Eliminar"
+              }
+            >
               Eliminar
             </Button>
           </DialogFooter>
@@ -1347,6 +1654,6 @@ export default function Usuarios({ triggerCreate, selectedBodega = 'Bodega Princ
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </div >
   );
 }

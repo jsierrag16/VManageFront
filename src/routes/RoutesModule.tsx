@@ -21,6 +21,8 @@ import vManageLogo from "@/assets/images/VManageLogo.png";
 import vManageLogoSmall from "@/assets/images/VLogo.png";
 import gvmLogo from "@/assets/images/GVMLogo.png";
 import Perfil from "@/features/perfil/pages/Perfil";
+import Usuarios from "@/features/usuarios/pages/Usuarios";
+import Roles from "@/features/roles/pages/Roles";
 
 
 export default function RoutesModule() {
@@ -64,6 +66,20 @@ export default function RoutesModule() {
 
           {/* PERFIL */}
           <Route path="perfil" element={<Perfil />} />
+          
+          {/* USUARIOS */}
+          <Route path="usuarios" element={< Usuarios/>} />
+          <Route path="usuarios/crear" element={< Usuarios />} />
+          <Route path="usuarios/:id/editar" element={< Usuarios/>} />
+          <Route path="usuarios/:id/ver" element={< Usuarios/>} />
+          <Route path="usuarios/:id/eliminar" element={< Usuarios/>} />
+         
+          {/* ROLES */}
+          <Route path="roles" element={< Roles/>} />
+          <Route path="roles/crear" element={< Roles />} />
+          <Route path="roles/:id/editar" element={< Roles/>} />
+          <Route path="roles/:id/ver" element={< Roles/>} />
+          <Route path="roles/:id/eliminar" element={< Roles/>} />
           
           {/* BODEGAS */}
           <Route path="bodegas" element={<Bodegas />} />
