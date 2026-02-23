@@ -1,7 +1,24 @@
-import { useState, useMemo, useEffect } from 'react';
-import { Search, Eye, Edit, Trash2, ChevronLeft, ChevronRight, Plus, CheckCircle, Truck, Mail, MapPin, User, FileText, Phone, Building2 } from 'lucide-react';
-import { Button } from '../../../shared/components/ui/button';
-import { Input } from '../../../shared/components/ui/input';
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate, useOutletContext, useParams } from "react-router-dom";
+import type { AppOutletContext } from "@/layouts/MainLayout";
+import {
+  Search,
+  Eye,
+  Edit,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  CheckCircle,
+  Truck,
+  Mail,
+  MapPin,
+  User,
+  FileText,
+  Phone,
+} from "lucide-react";
+import { Button } from "../../../shared/components/ui/button";
+import { Input } from "../../../shared/components/ui/input";
 import {
   Table,
   TableBody,
@@ -9,7 +26,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '../../../shared/components/ui/table';
+} from "../../../shared/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -17,117 +34,149 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from '../../../shared/components/ui/dialog';
+} from "../../../shared/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../../../shared/components/ui/select';
-import { Label } from '../../../shared/components/ui/label';
-import { Badge } from '../../../shared/components/ui/badge';
-import { Textarea } from '../../../shared/components/ui/textarea';
-import { toast } from 'sonner';
-import { proveedoresData as initialProveedoresData, Proveedor } from '../../../data/proveedores';
-
-interface ProveedoresProps {
-  triggerCreate?: number;
-  selectedBodega?: string;
-}
+} from "../../../shared/components/ui/select";
+import { Label } from "../../../shared/components/ui/label";
+import { Badge } from "../../../shared/components/ui/badge";
+import { Textarea } from "../../../shared/components/ui/textarea";
+import { toast } from "sonner";
+import { proveedoresData as initialProveedoresData, Proveedor } from "../../../data/proveedores";
 
 // Categorías disponibles en el sistema
 const CATEGORIAS_PROVEEDOR = [
-  'Medicamentos',
-  'Equipos Médicos',
-  'Material de Curación',
-  'Alimentos',
-  'Suplementos',
-  'Insumos Veterinarios',
-  'Otros'
+  "Medicamentos",
+  "Equipos Médicos",
+  "Material de Curación",
+  "Alimentos",
+  "Suplementos",
+  "Insumos Veterinarios",
+  "Otros",
 ] as const;
 
 // Países disponibles
 const PAISES = [
-  'Colombia',
-  'Argentina',
-  'Brasil',
-  'Chile',
-  'Ecuador',
-  'México',
-  'Perú',
-  'Venezuela',
-  'Estados Unidos',
-  'España',
-  'Otro'
+  "Colombia",
+  "Argentina",
+  "Brasil",
+  "Chile",
+  "Ecuador",
+  "México",
+  "Perú",
+  "Venezuela",
+  "Estados Unidos",
+  "España",
+  "Otro",
 ] as const;
 
 // Ciudades principales de Colombia
 const CIUDADES_COLOMBIA = [
-  'Bogotá',
-  'Medellín',
-  'Cali',
-  'Barranquilla',
-  'Cartagena',
-  'Cúcuta',
-  'Bucaramanga',
-  'Pereira',
-  'Santa Marta',
-  'Ibagué',
-  'Pasto',
-  'Manizales',
-  'Neiva',
-  'Villavicencio',
-  'Armenia',
-  'Valledupar',
-  'Montería',
-  'Popayán',
-  'Sincelejo',
-  'Tunja',
-  'Otra'
+  "Bogotá",
+  "Medellín",
+  "Cali",
+  "Barranquilla",
+  "Cartagena",
+  "Cúcuta",
+  "Bucaramanga",
+  "Pereira",
+  "Santa Marta",
+  "Ibagué",
+  "Pasto",
+  "Manizales",
+  "Neiva",
+  "Villavicencio",
+  "Armenia",
+  "Valledupar",
+  "Montería",
+  "Popayán",
+  "Sincelejo",
+  "Tunja",
+  "Otra",
 ] as const;
 
-export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Principal' }: ProveedoresProps) {
-  const [searchTerm, setSearchTerm] = useState('');
+export default function Proveedores() {
+  
+  // ✅ estados base
+  
+  const [searchTerm, setSearchTerm] = useState("");
   const [proveedores, setProveedores] = useState<Proveedor[]>(initialProveedoresData);
-  const [showViewModal, setShowViewModal] = useState(false);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
-  const [selectedProveedor, setSelectedProveedor] = useState<Proveedor | null>(null);
   const [proveedorParaCambioEstado, setProveedorParaCambioEstado] = useState<Proveedor | null>(null);
+
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  // Form states
-  const [formTipoDoc, setFormTipoDoc] = useState('NIT');
-  const [formNumeroDoc, setFormNumeroDoc] = useState('');
-  const [formNombre, setFormNombre] = useState('');
-  const [formEmail, setFormEmail] = useState('');
-  const [formTelefono, setFormTelefono] = useState('');
-  const [formDireccion, setFormDireccion] = useState('');
-  const [formCiudad, setFormCiudad] = useState('');
-  const [formPais, setFormPais] = useState('');
-  const [formCategoria, setFormCategoria] = useState('');
-  const [formContacto, setFormContacto] = useState('');
-  const [formNotas, setFormNotas] = useState('');
+  
+  // ✅ router + bodega + flags URL (igual que Usuarios)
+  
+  const navigate = useNavigate();
+  const location = useLocation();
+  const params = useParams<{ id: string }>();
 
-  // Estados para validaciones en tiempo real
+  const { selectedBodegaNombre } = useOutletContext<AppOutletContext>();
+  const selectedBodega = selectedBodegaNombre;
+
+  const isCrear = location.pathname.endsWith("/proveedores/crear");
+  const isVer = location.pathname.endsWith("/ver");
+  const isEditar = location.pathname.endsWith("/editar");
+  const isEliminar = location.pathname.endsWith("/eliminar");
+
+  const closeToList = () => navigate("/app/proveedores");
+
+  
+  // ✅ proveedor seleccionado por URL (:id)
+  
+  const proveedorSeleccionado = useMemo(() => {
+    if (!params.id) return null;
+    return proveedores.find((p) => p.id === params.id) ?? null;
+  }, [proveedores, params.id]);
+
+  // ✅ Si entran a /ver, /editar o /eliminar con id inválido → volver
+  useEffect(() => {
+    if (!isVer && !isEditar && !isEliminar) return;
+
+    if (!proveedorSeleccionado) {
+      closeToList();
+      return;
+    }
+  }, [isVer, isEditar, isEliminar, proveedorSeleccionado, closeToList]);
+
+  
+  // ✅ Form states
+  
+  const [formTipoDoc, setFormTipoDoc] = useState("NIT");
+  const [formNumeroDoc, setFormNumeroDoc] = useState("");
+  const [formNombre, setFormNombre] = useState("");
+  const [formEmail, setFormEmail] = useState("");
+  const [formTelefono, setFormTelefono] = useState("");
+  const [formDireccion, setFormDireccion] = useState("");
+  const [formCiudad, setFormCiudad] = useState("");
+  const [formPais, setFormPais] = useState("");
+  const [formCategoria, setFormCategoria] = useState("");
+  const [formContacto, setFormContacto] = useState("");
+  const [formNotas, setFormNotas] = useState("");
+
   const [errors, setErrors] = useState({
-    tipoDoc: '',
-    numeroDoc: '',
-    nombre: '',
-    email: '',
-    telefono: '',
-    direccion: '',
-    ciudad: '',
-    pais: '',
-    categoria: '',
-    contacto: '',
-    notas: ''
+    tipoDoc: "",
+    numeroDoc: "",
+    nombre: "",
+    email: "",
+    telefono: "",
+    direccion: "",
+    ciudad: "",
+    pais: "",
+    categoria: "",
+    contacto: "",
+    notas: "",
   });
+
   const [touched, setTouched] = useState({
     tipoDoc: false,
     numeroDoc: false,
@@ -139,257 +188,170 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
     pais: false,
     categoria: false,
     contacto: false,
-    notas: false
+    notas: false,
   });
 
-  // Funciones de validación individuales
+  
+  // ✅ Validaciones (DEBEN IR ANTES de usarse en handlers)
+  
   const validateTipoDoc = (value: string) => {
-    if (!value) {
-      return 'El tipo de documento es requerido';
-    }
-    return '';
+    if (!value) return "El tipo de documento es requerido";
+    return "";
   };
 
   const validateNumeroDoc = (value: string) => {
-    if (!value.trim()) {
-      return 'El número de documento es requerido';
-    }
-    // Solo números y guiones
+    if (!value.trim()) return "El número de documento es requerido";
     const validPattern = /^[0-9-]+$/;
-    if (!validPattern.test(value)) {
-      return 'Solo se permiten números y guiones';
-    }
-    if (value.length < 6) {
-      return 'Mínimo 6 caracteres';
-    }
-    if (value.length > 20) {
-      return 'Máximo 20 caracteres';
-    }
-    return '';
+    if (!validPattern.test(value)) return "Solo se permiten números y guiones";
+    if (value.length < 6) return "Mínimo 6 caracteres";
+    if (value.length > 20) return "Máximo 20 caracteres";
+    return "";
   };
 
   const validateNombre = (value: string) => {
-    if (!value.trim()) {
-      return 'El nombre del proveedor es requerido';
-    }
-    // Permitir letras, números, espacios, puntos y guiones
+    if (!value.trim()) return "El nombre del proveedor es requerido";
     const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s.\-&]+$/;
     if (!validPattern.test(value)) {
-      return 'Solo se permiten letras, números, espacios, puntos, guiones y &';
+      return "Solo se permiten letras, números, espacios, puntos, guiones y &";
     }
-    if (value.trim().length < 3) {
-      return 'Mínimo 3 caracteres';
-    }
-    if (value.trim().length > 100) {
-      return 'Máximo 100 caracteres';
-    }
-    return '';
+    if (value.trim().length < 3) return "Mínimo 3 caracteres";
+    if (value.trim().length > 100) return "Máximo 100 caracteres";
+    return "";
   };
 
   const validateEmail = (value: string) => {
-    if (!value.trim()) {
-      return 'El email es requerido';
-    }
-    if (!value.includes('@')) {
-      return 'El email debe contener un @';
-    }
+    if (!value.trim()) return "El email es requerido";
+    if (!value.includes("@")) return "El email debe contener un @";
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(value)) {
-      return 'Formato de email inválido';
-    }
-    return '';
+    if (!emailRegex.test(value)) return "Formato de email inválido";
+    return "";
   };
 
   const validateTelefono = (value: string) => {
-    if (!value.trim()) {
-      return 'El teléfono es requerido';
-    }
-    // Exactamente 10 números
+    if (!value.trim()) return "El teléfono es requerido";
     const diezNumeros = /^[0-9]{10}$/;
-    if (!diezNumeros.test(value)) {
-      return 'Debe tener exactamente 10 números';
-    }
-    return '';
+    if (!diezNumeros.test(value)) return "Debe tener exactamente 10 números";
+    return "";
   };
 
   const validateDireccion = (value: string) => {
-    if (!value.trim()) {
-      return 'La dirección es requerida';
-    }
-    // Permitir letras, números, espacios, guiones, comas, puntos y #
+    if (!value.trim()) return "La dirección es requerida";
     const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s\-,#.]+$/;
     if (!validPattern.test(value)) {
-      return 'Solo se permiten letras, números, espacios, guiones, comas, puntos y #';
+      return "Solo se permiten letras, números, espacios, guiones, comas, puntos y #";
     }
-    if (value.trim().length < 5) {
-      return 'Mínimo 5 caracteres';
-    }
-    if (value.trim().length > 200) {
-      return 'Máximo 200 caracteres';
-    }
-    return '';
+    if (value.trim().length < 5) return "Mínimo 5 caracteres";
+    if (value.trim().length > 200) return "Máximo 200 caracteres";
+    return "";
   };
 
   const validateCiudad = (value: string) => {
-    if (!value || value === '') {
-      return 'La ciudad es requerida';
-    }
-    return '';
+    if (!value || value === "") return "La ciudad es requerida";
+    return "";
   };
 
   const validatePais = (value: string) => {
-    if (!value.trim()) {
-      return 'El país es requerido';
-    }
-    // Solo letras y espacios
+    if (!value.trim()) return "El país es requerido";
     const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/;
-    if (!validPattern.test(value)) {
-      return 'Solo se permiten letras y espacios';
-    }
-    if (value.trim().length < 3) {
-      return 'Mínimo 3 caracteres';
-    }
-    if (value.trim().length > 50) {
-      return 'Máximo 50 caracteres';
-    }
-    return '';
+    if (!validPattern.test(value)) return "Solo se permiten letras y espacios";
+    if (value.trim().length < 3) return "Mínimo 3 caracteres";
+    if (value.trim().length > 50) return "Máximo 50 caracteres";
+    return "";
   };
 
   const validateCategoria = (value: string) => {
-    if (!value.trim()) {
-      return 'La categoría es requerida';
-    }
-    // Permitir letras, números y espacios
+    if (!value.trim()) return "La categoría es requerida";
     const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s]+$/;
-    if (!validPattern.test(value)) {
-      return 'Solo se permiten letras, números y espacios';
-    }
-    if (value.trim().length < 3) {
-      return 'Mínimo 3 caracteres';
-    }
-    if (value.trim().length > 50) {
-      return 'Máximo 50 caracteres';
-    }
-    return '';
+    if (!validPattern.test(value)) return "Solo se permiten letras, números y espacios";
+    if (value.trim().length < 3) return "Mínimo 3 caracteres";
+    if (value.trim().length > 50) return "Máximo 50 caracteres";
+    return "";
   };
 
   const validateContacto = (value: string) => {
-    if (!value.trim()) {
-      return 'El nombre del contacto es requerido';
-    }
-    // Solo letras y espacios
+    if (!value.trim()) return "El nombre del contacto es requerido";
     const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/;
-    if (!validPattern.test(value)) {
-      return 'Solo se permiten letras y espacios';
-    }
-    if (value.trim().length < 3) {
-      return 'Mínimo 3 caracteres';
-    }
-    if (value.trim().length > 100) {
-      return 'Máximo 100 caracteres';
-    }
-    return '';
+    if (!validPattern.test(value)) return "Solo se permiten letras y espacios";
+    if (value.trim().length < 3) return "Mínimo 3 caracteres";
+    if (value.trim().length > 100) return "Máximo 100 caracteres";
+    return "";
   };
 
   const validateNotas = (value: string) => {
-    if (!value.trim()) {
-      return ''; // Las notas son opcionales
-    }
-    // Permitir letras, números, espacios y puntuación común
+    if (!value.trim()) return ""; // opcional
     const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s.,;:()\-¿?¡!]+$/;
     if (!validPattern.test(value)) {
-      return 'Solo se permiten letras, números, espacios y puntuación básica';
+      return "Solo se permiten letras, números, espacios y puntuación básica";
     }
-    if (value.trim().length > 500) {
-      return 'Máximo 500 caracteres';
-    }
-    return '';
+    if (value.trim().length > 500) return "Máximo 500 caracteres";
+    return "";
   };
 
-  // Handlers con validación en tiempo real
-  const handleTipoDocChange = (value: string) => {
-    setFormTipoDoc(value);
-    if (touched.tipoDoc) {
-      setErrors({ ...errors, tipoDoc: validateTipoDoc(value) });
-    }
-  };
-
+  
+  // ✅ Handlers con validación en tiempo real (Inputs)
+  
   const handleNumeroDocChange = (value: string) => {
     setFormNumeroDoc(value);
-    if (touched.numeroDoc) {
-      setErrors({ ...errors, numeroDoc: validateNumeroDoc(value) });
-    }
+    if (touched.numeroDoc) setErrors({ ...errors, numeroDoc: validateNumeroDoc(value) });
   };
 
   const handleNombreChange = (value: string) => {
     setFormNombre(value);
-    if (touched.nombre) {
-      setErrors({ ...errors, nombre: validateNombre(value) });
-    }
+    if (touched.nombre) setErrors({ ...errors, nombre: validateNombre(value) });
   };
 
   const handleEmailChange = (value: string) => {
     setFormEmail(value);
-    if (touched.email) {
-      setErrors({ ...errors, email: validateEmail(value) });
-    }
+    if (touched.email) setErrors({ ...errors, email: validateEmail(value) });
   };
 
   const handleTelefonoChange = (value: string) => {
     setFormTelefono(value);
-    if (touched.telefono) {
-      setErrors({ ...errors, telefono: validateTelefono(value) });
-    }
+    if (touched.telefono) setErrors({ ...errors, telefono: validateTelefono(value) });
   };
 
   const handleDireccionChange = (value: string) => {
     setFormDireccion(value);
-    if (touched.direccion) {
-      setErrors({ ...errors, direccion: validateDireccion(value) });
-    }
-  };
-
-  const handleCiudadChange = (value: string) => {
-    setFormCiudad(value);
-    if (touched.ciudad) {
-      setErrors({ ...errors, ciudad: validateCiudad(value) });
-    }
-  };
-
-  const handlePaisChange = (value: string) => {
-    setFormPais(value);
-    if (touched.pais) {
-      setErrors({ ...errors, pais: validatePais(value) });
-    }
-  };
-
-  const handleCategoriaChange = (value: string) => {
-    setFormCategoria(value);
-    if (touched.categoria) {
-      setErrors({ ...errors, categoria: validateCategoria(value) });
-    }
+    if (touched.direccion) setErrors({ ...errors, direccion: validateDireccion(value) });
   };
 
   const handleContactoChange = (value: string) => {
     setFormContacto(value);
-    if (touched.contacto) {
-      setErrors({ ...errors, contacto: validateContacto(value) });
-    }
+    if (touched.contacto) setErrors({ ...errors, contacto: validateContacto(value) });
   };
 
   const handleNotasChange = (value: string) => {
     setFormNotas(value);
-    if (touched.notas) {
-      setErrors({ ...errors, notas: validateNotas(value) });
-    }
+    if (touched.notas) setErrors({ ...errors, notas: validateNotas(value) });
   };
 
-  // Handlers onBlur
-  const handleTipoDocBlur = () => {
-    setTouched({ ...touched, tipoDoc: true });
-    setErrors({ ...errors, tipoDoc: validateTipoDoc(formTipoDoc) });
+  const handleTipoDocChange = (value: string) => {
+    setFormTipoDoc(value);
+    setTouched((t) => ({ ...t, tipoDoc: true }));
+    setErrors((e) => ({ ...e, tipoDoc: validateTipoDoc(value) }));
   };
 
+  const handleCiudadChange = (value: string) => {
+    setFormCiudad(value);
+    setTouched((t) => ({ ...t, ciudad: true }));
+    setErrors((e) => ({ ...e, ciudad: validateCiudad(value) }));
+  };
+
+  const handlePaisChange = (value: string) => {
+    setFormPais(value);
+    setTouched((t) => ({ ...t, pais: true }));
+    setErrors((e) => ({ ...e, pais: validatePais(value) }));
+  };
+
+  const handleCategoriaChange = (value: string) => {
+    setFormCategoria(value);
+    setTouched((t) => ({ ...t, categoria: true }));
+    setErrors((e) => ({ ...e, categoria: validateCategoria(value) }));
+  };
+
+  
+  // ✅ Handlers onBlur (Inputs)
+  
   const handleNumeroDocBlur = () => {
     setTouched({ ...touched, numeroDoc: true });
     setErrors({ ...errors, numeroDoc: validateNumeroDoc(formNumeroDoc) });
@@ -415,21 +377,6 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
     setErrors({ ...errors, direccion: validateDireccion(formDireccion) });
   };
 
-  const handleCiudadBlur = () => {
-    setTouched({ ...touched, ciudad: true });
-    setErrors({ ...errors, ciudad: validateCiudad(formCiudad) });
-  };
-
-  const handlePaisBlur = () => {
-    setTouched({ ...touched, pais: true });
-    setErrors({ ...errors, pais: validatePais(formPais) });
-  };
-
-  const handleCategoriaBlur = () => {
-    setTouched({ ...touched, categoria: true });
-    setErrors({ ...errors, categoria: validateCategoria(formCategoria) });
-  };
-
   const handleContactoBlur = () => {
     setTouched({ ...touched, contacto: true });
     setErrors({ ...errors, contacto: validateContacto(formContacto) });
@@ -440,30 +387,118 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
     setErrors({ ...errors, notas: validateNotas(formNotas) });
   };
 
-  // Filtrar proveedores - por bodega Y por búsqueda
+  // ✅ Al entrar a /editar, precargar el formulario
+  useEffect(() => {
+    if (!isEditar) return;
+    if (!proveedorSeleccionado) return;
+
+    setFormTipoDoc(proveedorSeleccionado.tipoDocumento);
+    setFormNumeroDoc(proveedorSeleccionado.numeroDocumento);
+    setFormNombre(proveedorSeleccionado.nombre);
+    setFormEmail(proveedorSeleccionado.email);
+    setFormTelefono(proveedorSeleccionado.telefono);
+    setFormDireccion(proveedorSeleccionado.direccion);
+    setFormCiudad(proveedorSeleccionado.ciudad);
+    setFormPais(proveedorSeleccionado.pais);
+    setFormCategoria(proveedorSeleccionado.categoria);
+    setFormContacto(proveedorSeleccionado.contacto);
+    setFormNotas(proveedorSeleccionado.notas || "");
+
+    setErrors({
+      tipoDoc: "",
+      numeroDoc: "",
+      nombre: "",
+      email: "",
+      telefono: "",
+      direccion: "",
+      ciudad: "",
+      pais: "",
+      categoria: "",
+      contacto: "",
+      notas: "",
+    });
+    setTouched({
+      tipoDoc: false,
+      numeroDoc: false,
+      nombre: false,
+      email: false,
+      telefono: false,
+      direccion: false,
+      ciudad: false,
+      pais: false,
+      categoria: false,
+      contacto: false,
+      notas: false,
+    });
+  }, [isEditar, proveedorSeleccionado]);
+
+  // Al entrar a /crear, limpiar el form
+  useEffect(() => {
+    if (!isCrear) return;
+
+    setFormTipoDoc("NIT");
+    setFormNumeroDoc("");
+    setFormNombre("");
+    setFormEmail("");
+    setFormTelefono("");
+    setFormDireccion("");
+    setFormCiudad("");
+    setFormPais("");
+    setFormCategoria("");
+    setFormContacto("");
+    setFormNotas("");
+
+    setErrors({
+      tipoDoc: "",
+      numeroDoc: "",
+      nombre: "",
+      email: "",
+      telefono: "",
+      direccion: "",
+      ciudad: "",
+      pais: "",
+      categoria: "",
+      contacto: "",
+      notas: "",
+    });
+
+    setTouched({
+      tipoDoc: false,
+      numeroDoc: false,
+      nombre: false,
+      email: false,
+      telefono: false,
+      direccion: false,
+      ciudad: false,
+      pais: false,
+      categoria: false,
+      contacto: false,
+      notas: false,
+    });
+  }, [isCrear]);
+
+  // Filtrado por bodega + búsqueda
   const filteredProveedores = useMemo(() => {
-    return proveedores
-      .filter((proveedor) => {
-        // Si es "Todas las bodegas", no filtrar por bodega
-        if (selectedBodega === 'Todas las bodegas') {
-          return true;
-        }
-        return proveedor.bodega === selectedBodega;
-      })
-      .filter((proveedor) => {
-        const searchLower = searchTerm.toLowerCase();
-        return (
-          proveedor.id.toLowerCase().includes(searchLower) ||
-          proveedor.nombre.toLowerCase().includes(searchLower) ||
-          proveedor.tipoDocumento.toLowerCase().includes(searchLower) ||
-          proveedor.numeroDocumento.toLowerCase().includes(searchLower) ||
-          proveedor.email.toLowerCase().includes(searchLower) ||
-          proveedor.telefono.toLowerCase().includes(searchLower) ||
-          proveedor.categoria.toLowerCase().includes(searchLower) ||
-          proveedor.estado.toLowerCase().includes(searchLower)
-        );
-      });
-  }, [proveedores, searchTerm, selectedBodega]);
+    const s = searchTerm.toLowerCase();
+
+    return proveedores.filter((p) => {
+      return (
+        p.id.toLowerCase().includes(s) ||
+        p.nombre.toLowerCase().includes(s) ||
+        p.tipoDocumento.toLowerCase().includes(s) ||
+        p.numeroDocumento.toLowerCase().includes(s) ||
+        p.email.toLowerCase().includes(s) ||
+        p.telefono.toLowerCase().includes(s) ||
+        p.categoria.toLowerCase().includes(s) ||
+        p.estado.toLowerCase().includes(s)
+      );
+    });
+  }, [proveedores, searchTerm]);
+
+  // Resetear a página 1 cuando cambia filtro
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedBodega]);
 
   // Paginación
   const totalPages = Math.ceil(filteredProveedores.length / itemsPerPage);
@@ -471,167 +506,129 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
   const endIndex = startIndex + itemsPerPage;
   const currentProveedores = filteredProveedores.slice(startIndex, endIndex);
 
-  // Resetear a página 1 cuando cambia el filtro
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm]);
-
-  // Función para cambiar el estado del proveedor directamente desde la tabla
-  const handleToggleEstado = (proveedor: Proveedor) => {
-    setProveedorParaCambioEstado(proveedor);
+  // Confirmación cambio de estado
+  const handleToggleEstado = (p: Proveedor) => {
+    setProveedorParaCambioEstado(p);
     setShowConfirmEstadoModal(true);
   };
 
   const handleConfirmEstado = () => {
-    if (proveedorParaCambioEstado) {
-      const nuevoEstado = proveedorParaCambioEstado.estado === 'Activo' ? 'Inactivo' : 'Activo';
-      setProveedores(
-        proveedores.map((p) =>
-          p.id === proveedorParaCambioEstado.id ? { ...p, estado: nuevoEstado } : p
-        )
-      );
-      toast.success(
-        `Proveedor ${nuevoEstado === 'Activo' ? 'activado' : 'desactivado'} exitosamente`
-      );
-      setShowConfirmEstadoModal(false);
-      setProveedorParaCambioEstado(null);
-    }
+    if (!proveedorParaCambioEstado) return;
+
+    const nuevoEstado =
+      proveedorParaCambioEstado.estado === "Activo" ? "Inactivo" : "Activo";
+
+    setProveedores(
+      proveedores.map((p) =>
+        p.id === proveedorParaCambioEstado.id ? { ...p, estado: nuevoEstado } : p
+      )
+    );
+
+    toast.success(
+      `Proveedor ${nuevoEstado === "Activo" ? "activado" : "desactivado"
+      } exitosamente`
+    );
+
+    setShowConfirmEstadoModal(false);
+    setProveedorParaCambioEstado(null);
   };
 
-  const handleView = (proveedor: Proveedor) => {
-    setSelectedProveedor(proveedor);
-    setShowViewModal(true);
+  // Navegación (modales por URL)
+  const handleView = (p: Proveedor) => {
+    navigate(`/app/proveedores/${p.id}/ver`);
   };
 
   const handleCreate = () => {
-    setFormTipoDoc('NIT');
-    setFormNumeroDoc('');
-    setFormNombre('');
-    setFormEmail('');
-    setFormTelefono('');
-    setFormDireccion('');
-    setFormCiudad('');
-    setFormPais('');
-    setFormCategoria('');
-    setFormContacto('');
-    setFormNotas('');
-    setErrors({
-      tipoDoc: '',
-      numeroDoc: '',
-      nombre: '',
-      email: '',
-      telefono: '',
-      direccion: '',
-      ciudad: '',
-      pais: '',
-      categoria: '',
-      contacto: '',
-      notas: ''
-    });
-    setTouched({
-      tipoDoc: false,
-      numeroDoc: false,
-      nombre: false,
-      email: false,
-      telefono: false,
-      direccion: false,
-      ciudad: false,
-      pais: false,
-      categoria: false,
-      contacto: false,
-      notas: false
-    });
-    setShowCreateModal(true);
+    navigate("/app/proveedores/crear");
   };
 
-  const handleEdit = (proveedor: Proveedor) => {
-    setSelectedProveedor(proveedor);
-    setFormTipoDoc(proveedor.tipoDocumento);
-    setFormNumeroDoc(proveedor.numeroDocumento);
-    setFormNombre(proveedor.nombre);
-    setFormEmail(proveedor.email);
-    setFormTelefono(proveedor.telefono);
-    setFormDireccion(proveedor.direccion);
-    setFormCiudad(proveedor.ciudad);
-    setFormPais(proveedor.pais);
-    setFormCategoria(proveedor.categoria);
-    setFormContacto(proveedor.contacto);
-    setFormNotas(proveedor.notas || '');
-    setErrors({
-      tipoDoc: '',
-      numeroDoc: '',
-      nombre: '',
-      email: '',
-      telefono: '',
-      direccion: '',
-      ciudad: '',
-      pais: '',
-      categoria: '',
-      contacto: '',
-      notas: ''
-    });
-    setTouched({
-      tipoDoc: false,
-      numeroDoc: false,
-      nombre: false,
-      email: false,
-      telefono: false,
-      direccion: false,
-      ciudad: false,
-      pais: false,
-      categoria: false,
-      contacto: false,
-      notas: false
-    });
-    setShowEditModal(true);
+  const handleEdit = (p: Proveedor) => {
+    navigate(`/app/proveedores/${p.id}/editar`);
   };
 
-  const handleDelete = (proveedor: Proveedor) => {
-    setSelectedProveedor(proveedor);
-    setShowDeleteModal(true);
+  const handleDelete = (p: Proveedor) => {
+    navigate(`/app/proveedores/${p.id}/eliminar`);
   };
 
+  // Validación general del formulario
   const validateForm = () => {
-    // Validar campos obligatorios
-    if (!formTipoDoc || !formNumeroDoc.trim() || !formNombre.trim() || !formEmail.trim() || 
-        !formTelefono.trim() || !formDireccion.trim() || !formCiudad.trim() || 
-        !formPais.trim() || !formCategoria.trim() || !formContacto.trim()) {
-      toast.error('Por favor completa todos los campos obligatorios');
-      return false;
-    }
+    setTouched({
+      tipoDoc: true,
+      numeroDoc: true,
+      nombre: true,
+      email: true,
+      telefono: true,
+      direccion: true,
+      ciudad: true,
+      pais: true,
+      categoria: true,
+      contacto: true,
+      notas: true,
+    });
 
-    // Validar número de documento (solo números y guiones)
-    if (!/^[0-9-]+$/.test(formNumeroDoc)) {
-      toast.error('El número de documento solo debe contener números y guiones');
-      return false;
-    }
+    const tipoDocError = validateTipoDoc(formTipoDoc);
+    const numeroDocError = validateNumeroDoc(formNumeroDoc);
+    const nombreError = validateNombre(formNombre);
+    const emailError = validateEmail(formEmail);
+    const telefonoError = validateTelefono(formTelefono);
+    const direccionError = validateDireccion(formDireccion);
+    const ciudadError = validateCiudad(formCiudad);
+    const paisError = validatePais(formPais);
+    const categoriaError = validateCategoria(formCategoria);
+    const contactoError = validateContacto(formContacto);
+    const notasError = validateNotas(formNotas);
 
-    // Validar email
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formEmail)) {
-      toast.error('El email no tiene un formato válido');
-      return false;
-    }
+    setErrors({
+      tipoDoc: tipoDocError,
+      numeroDoc: numeroDocError,
+      nombre: nombreError,
+      email: emailError,
+      telefono: telefonoError,
+      direccion: direccionError,
+      ciudad: ciudadError,
+      pais: paisError,
+      categoria: categoriaError,
+      contacto: contactoError,
+      notas: notasError,
+    });
 
-    // Validar teléfono (solo números, espacios, guiones y paréntesis)
-    if (!/^[0-9\s\-()]+$/.test(formTelefono)) {
-      toast.error('El teléfono solo debe contener números, espacios, guiones y paréntesis');
-      return false;
-    }
-
-    // Validar que nombre no contenga caracteres especiales peligrosos
-    if (/[<>{}[\]\\\/]/.test(formNombre)) {
-      toast.error('El nombre contiene caracteres no permitidos');
+    if (
+      tipoDocError ||
+      numeroDocError ||
+      nombreError ||
+      emailError ||
+      telefonoError ||
+      direccionError ||
+      ciudadError ||
+      paisError ||
+      categoriaError ||
+      contactoError ||
+      notasError
+    ) {
+      toast.error("Por favor corrige los errores en el formulario");
       return false;
     }
 
     return true;
   };
 
+  // Generar ID consecutivo robusto
+  const getNextProveedorId = () => {
+    const maxNum = proveedores.reduce((max, p) => {
+      const match = /^PROV-(\d+)$/.exec(p.id);
+      const num = match ? Number(match[1]) : 0;
+      return Number.isFinite(num) ? Math.max(max, num) : max;
+    }, 0);
+
+    return `PROV-${String(maxNum + 1).padStart(3, "0")}`;
+  };
+
+  // Crear proveedor
   const confirmCreate = () => {
     if (!validateForm()) return;
 
     const newProveedor: Proveedor = {
-      id: `PROV-${String(proveedores.length + 1).padStart(3, '0')}`,
+      id: getNextProveedorId(),
       tipoDocumento: formTipoDoc,
       numeroDocumento: formNumeroDoc.trim(),
       nombre: formNombre.trim(),
@@ -639,54 +636,63 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
       telefono: formTelefono.trim(),
       direccion: formDireccion.trim(),
       ciudad: formCiudad.trim(),
-      departamento: '',
+      departamento: "",
       pais: formPais.trim(),
       categoria: formCategoria.trim(),
       contacto: formContacto.trim(),
       notas: formNotas.trim(),
-      estado: 'Activo',
-      fechaRegistro: new Date().toISOString().split('T')[0],
+      estado: "Activo",
+      fechaRegistro: new Date().toISOString().split("T")[0],
       bodega: selectedBodega,
     };
 
     setProveedores([...proveedores, newProveedor]);
-    setShowCreateModal(false);
+    closeToList();
     setShowSuccessModal(true);
   };
 
+  // Editar proveedor
   const confirmEdit = () => {
-    if (!selectedProveedor || !validateForm()) return;
+    if (!proveedorSeleccionado || !validateForm()) return;
 
     setProveedores(
       proveedores.map((p) =>
-        p.id === selectedProveedor.id
+        p.id === proveedorSeleccionado.id
           ? {
-              ...p,
-              tipoDocumento: formTipoDoc,
-              numeroDocumento: formNumeroDoc.trim(),
-              nombre: formNombre.trim(),
-              email: formEmail.trim(),
-              telefono: formTelefono.trim(),
-              direccion: formDireccion.trim(),
-              ciudad: formCiudad.trim(),
-              pais: formPais.trim(),
-              categoria: formCategoria.trim(),
-              contacto: formContacto.trim(),
-              notas: formNotas.trim(),
-            }
+            ...p,
+            tipoDocumento: formTipoDoc,
+            numeroDocumento: formNumeroDoc.trim(),
+            nombre: formNombre.trim(),
+            email: formEmail.trim(),
+            telefono: formTelefono.trim(),
+            direccion: formDireccion.trim(),
+            ciudad: formCiudad.trim(),
+            pais: formPais.trim(),
+            categoria: formCategoria.trim(),
+            contacto: formContacto.trim(),
+            notas: formNotas.trim(),
+          }
           : p
       )
     );
-    setShowEditModal(false);
-    toast.success('Proveedor actualizado exitosamente');
+
+    toast.success("Proveedor actualizado exitosamente");
+    closeToList();
   };
 
+  // Eliminar proveedor
   const confirmDelete = () => {
-    setProveedores(proveedores.filter((p) => p.id !== selectedProveedor?.id));
-    setShowDeleteModal(false);
-    toast.success('Proveedor eliminado exitosamente');
+    if (!proveedorSeleccionado) return;
+
+    setProveedores(
+      proveedores.filter((p) => p.id !== proveedorSeleccionado.id)
+    );
+
+    toast.success("Proveedor eliminado exitosamente");
+    closeToList();
   };
 
+  // Paginación
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
   };
@@ -700,15 +706,16 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
       {/* Header */}
       <div>
         <h2 className="text-gray-900">Gestión de Proveedores</h2>
-        <p className="text-gray-600 mt-1">
-          Administra la información de tus proveedores
-        </p>
+        <p className="text-gray-600 mt-1">Administra la información de tus proveedores</p>
       </div>
 
       {/* Search Bar and Action Buttons */}
       <div className="flex items-center gap-4">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+          <Search
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+            size={20}
+          />
           <Input
             placeholder="Buscar por nombre, documento, email, categoría o estado (Activo/Inactivo)..."
             value={searchTerm}
@@ -716,6 +723,7 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
             className="pl-10"
           />
         </div>
+
         <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
           <Plus size={18} className="mr-2" />
           Nuevo Proveedor
@@ -739,6 +747,7 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
                 <TableHead className="text-right w-32">Acciones</TableHead>
               </TableRow>
             </TableHeader>
+
             <TableBody>
               {currentProveedores.length === 0 ? (
                 <TableRow>
@@ -750,30 +759,43 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
                 currentProveedores.map((proveedor, index) => (
                   <TableRow key={proveedor.id} className="hover:bg-gray-50">
                     <TableCell>{startIndex + index + 1}</TableCell>
-                    <TableCell className="font-medium text-gray-900">{proveedor.nombre}</TableCell>
+
+                    <TableCell className="font-medium text-gray-900">
+                      {proveedor.nombre}
+                    </TableCell>
+
                     <TableCell>{proveedor.tipoDocumento}</TableCell>
-                    <TableCell className="font-mono text-sm">{proveedor.numeroDocumento}</TableCell>
+
+                    <TableCell className="font-mono text-sm">
+                      {proveedor.numeroDocumento}
+                    </TableCell>
+
                     <TableCell className="text-gray-700">{proveedor.email}</TableCell>
                     <TableCell className="text-gray-700">{proveedor.telefono}</TableCell>
+
                     <TableCell>
-                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                      <Badge
+                        variant="outline"
+                        className="bg-blue-50 text-blue-700 border-blue-200"
+                      >
                         {proveedor.categoria}
                       </Badge>
                     </TableCell>
+
                     <TableCell className="text-center">
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleToggleEstado(proveedor)}
-                        className={`h-7 ${
-                          proveedor.estado === 'Activo'
-                            ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                            : 'bg-red-100 text-red-800 hover:bg-red-200'
-                        }`}
+                        className={`h-7 ${proveedor.estado === "Activo"
+                          ? "bg-green-100 text-green-800 hover:bg-green-200"
+                          : "bg-red-100 text-red-800 hover:bg-red-200"
+                          }`}
                       >
                         {proveedor.estado}
                       </Button>
                     </TableCell>
+
                     <TableCell>
                       <div className="flex items-center justify-end gap-2">
                         <Button
@@ -785,6 +807,7 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
                         >
                           <Eye size={16} />
                         </Button>
+
                         <Button
                           variant="ghost"
                           size="icon"
@@ -794,6 +817,7 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
                         >
                           <Edit size={16} />
                         </Button>
+
                         <Button
                           variant="ghost"
                           size="icon"
@@ -816,9 +840,10 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
         {filteredProveedores.length > 0 && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
             <div className="text-sm text-gray-600">
-              Mostrando {startIndex + 1} - {Math.min(endIndex, filteredProveedores.length)} de{' '}
+              Mostrando {startIndex + 1} - {Math.min(endIndex, filteredProveedores.length)} de{" "}
               {filteredProveedores.length} proveedores
             </div>
+
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
@@ -830,11 +855,12 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
                 <ChevronLeft size={16} />
                 Anterior
               </Button>
+
               <div className="flex items-center gap-1">
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                   <Button
                     key={page}
-                    variant={currentPage === page ? 'default' : 'outline'}
+                    variant={currentPage === page ? "default" : "outline"}
                     size="sm"
                     onClick={() => handlePageChange(page)}
                     className="h-8 w-8 p-0"
@@ -843,6 +869,7 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
                   </Button>
                 ))}
               </div>
+
               <Button
                 variant="outline"
                 size="sm"
@@ -859,8 +886,17 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
       </div>
 
       {/* Modal Ver Detalles */}
-      <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
-        <DialogContent className="max-w-6xl max-h-[85vh] overflow-y-auto" aria-describedby="view-proveedor-description">
+      <Dialog
+        open={isVer}
+        onOpenChange={(open) => {
+          if (!open) closeToList();
+        }}
+      >
+        <DialogContent
+          className="max-w-6xl max-h-[85vh] overflow-y-auto"
+          aria-describedby="view-proveedor-description"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Truck className="h-5 w-5 text-blue-600" />
@@ -870,39 +906,47 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
               Información completa del proveedor
             </DialogDescription>
           </DialogHeader>
-          {selectedProveedor && (
+
+          {proveedorSeleccionado && (
             <div className="space-y-4">
               {/* Información Principal */}
               <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-100">
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">{selectedProveedor.nombre}</h3>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                  {proveedorSeleccionado.nombre}
+                </h3>
+
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="outline" className="bg-white text-xs">
-                    {selectedProveedor.tipoDocumento}: {selectedProveedor.numeroDocumento}
+                    {proveedorSeleccionado.tipoDocumento}:{" "}
+                    {proveedorSeleccionado.numeroDocumento}
                   </Badge>
+
                   <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100 text-xs">
-                    {selectedProveedor.categoria}
+                    {proveedorSeleccionado.categoria}
                   </Badge>
+
                   <Badge
                     className={
-                      selectedProveedor.estado === 'Activo'
-                        ? 'bg-green-100 text-green-800 hover:bg-green-100 text-xs'
-                        : 'bg-red-100 text-red-800 hover:bg-red-100 text-xs'
+                      proveedorSeleccionado.estado === "Activo"
+                        ? "bg-green-100 text-green-800 hover:bg-green-100 text-xs"
+                        : "bg-red-100 text-red-800 hover:bg-red-100 text-xs"
                     }
                   >
-                    {selectedProveedor.estado}
+                    {proveedorSeleccionado.estado}
                   </Badge>
                 </div>
               </div>
 
               {/* Grid de información */}
               <div className="grid grid-cols-2 gap-3">
-                {/* Contacto */}
                 <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                   <div className="flex items-center gap-2 mb-1">
                     <Mail className="h-3.5 w-3.5 text-blue-600" />
                     <Label className="text-xs text-gray-500">Email</Label>
                   </div>
-                  <p className="text-sm font-medium text-gray-900">{selectedProveedor.email}</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {proveedorSeleccionado.email}
+                  </p>
                 </div>
 
                 <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
@@ -910,7 +954,9 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
                     <Phone className="h-3.5 w-3.5 text-blue-600" />
                     <Label className="text-xs text-gray-500">Teléfono</Label>
                   </div>
-                  <p className="text-sm font-medium text-gray-900">{selectedProveedor.telefono}</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {proveedorSeleccionado.telefono}
+                  </p>
                 </div>
 
                 <div className="col-span-2 bg-gray-50 rounded-lg p-3 border border-gray-200">
@@ -918,16 +964,19 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
                     <User className="h-3.5 w-3.5 text-blue-600" />
                     <Label className="text-xs text-gray-500">Contacto Principal</Label>
                   </div>
-                  <p className="text-sm font-medium text-gray-900">{selectedProveedor.contacto}</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {proveedorSeleccionado.contacto}
+                  </p>
                 </div>
 
-                {/* Ubicación */}
                 <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                   <div className="flex items-center gap-2 mb-1">
                     <MapPin className="h-3.5 w-3.5 text-blue-600" />
                     <Label className="text-xs text-gray-500">Ciudad</Label>
                   </div>
-                  <p className="text-sm font-medium text-gray-900">{selectedProveedor.ciudad}</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {proveedorSeleccionado.ciudad}
+                  </p>
                 </div>
 
                 <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
@@ -935,7 +984,9 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
                     <MapPin className="h-3.5 w-3.5 text-blue-600" />
                     <Label className="text-xs text-gray-500">Departamento</Label>
                   </div>
-                  <p className="text-sm font-medium text-gray-900">{selectedProveedor.departamento || 'N/A'}</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {proveedorSeleccionado.departamento || "N/A"}
+                  </p>
                 </div>
 
                 <div className="col-span-2 bg-gray-50 rounded-lg p-3 border border-gray-200">
@@ -943,24 +994,29 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
                     <MapPin className="h-3.5 w-3.5 text-blue-600" />
                     <Label className="text-xs text-gray-500">Dirección</Label>
                   </div>
-                  <p className="text-sm font-medium text-gray-900">{selectedProveedor.direccion}</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {proveedorSeleccionado.direccion}
+                  </p>
                 </div>
               </div>
 
               {/* Notas */}
-              {selectedProveedor.notas && (
+              {proveedorSeleccionado.notas && (
                 <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
                   <div className="flex items-center gap-2 mb-1">
                     <FileText className="h-3.5 w-3.5 text-amber-600" />
                     <Label className="text-xs text-gray-600">Notas</Label>
                   </div>
-                  <p className="text-sm text-gray-700">{selectedProveedor.notas}</p>
+                  <p className="text-sm text-gray-700">
+                    {proveedorSeleccionado.notas}
+                  </p>
                 </div>
               )}
             </div>
           )}
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowViewModal(false)}>
+            <Button variant="outline" onClick={closeToList}>
               Cerrar
             </Button>
           </DialogFooter>
@@ -968,19 +1024,29 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
       </Dialog>
 
       {/* Modal Crear Proveedor */}
-      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto" aria-describedby="create-proveedor-description">
+      <Dialog
+        open={isCrear}
+        onOpenChange={(open) => {
+          if (!open) closeToList();
+        }}
+      >
+        <DialogContent
+          className="max-w-6xl max-h-[90vh] overflow-y-auto"
+          aria-describedby="create-proveedor-description"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>Nuevo Proveedor</DialogTitle>
             <DialogDescription id="create-proveedor-description">
               Completa la información del nuevo proveedor
             </DialogDescription>
           </DialogHeader>
+
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="create-tipo-doc">Tipo de Documento *</Label>
-                <Select value={formTipoDoc} onValueChange={setFormTipoDoc}>
+                <Select value={formTipoDoc} onValueChange={handleTipoDocChange}>
                   <SelectTrigger id="create-tipo-doc">
                     <SelectValue />
                   </SelectTrigger>
@@ -991,34 +1057,42 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
                     <SelectItem value="Pasaporte">Pasaporte</SelectItem>
                   </SelectContent>
                 </Select>
+                {errors.tipoDoc && touched.tipoDoc && (
+                  <p className="text-red-500 text-sm mt-1">{errors.tipoDoc}</p>
+                )}
               </div>
+
               <div>
                 <Label htmlFor="create-numero-doc">N° de Documento *</Label>
                 <Input
                   id="create-numero-doc"
                   value={formNumeroDoc}
                   onChange={(e) => handleNumeroDocChange(e.target.value)}
-                  placeholder="Ej: 900123456-7"
                   onBlur={handleNumeroDocBlur}
+                  placeholder="Ej: 900123456-7"
+                  className={errors.numeroDoc && touched.numeroDoc ? "border-red-500" : ""}
                 />
                 {errors.numeroDoc && touched.numeroDoc && (
-                  <p className="text-red-500 text-xs mt-1">{errors.numeroDoc}</p>
+                  <p className="text-red-500 text-sm mt-1">{errors.numeroDoc}</p>
                 )}
               </div>
             </div>
+
             <div>
               <Label htmlFor="create-nombre">Nombre o Razón Social *</Label>
               <Input
                 id="create-nombre"
                 value={formNombre}
                 onChange={(e) => handleNombreChange(e.target.value)}
-                placeholder="Ej: Distribuciones Médicas S.A.S."
                 onBlur={handleNombreBlur}
+                placeholder="Ej: Distribuciones Médicas S.A.S."
+                className={errors.nombre && touched.nombre ? "border-red-500" : ""}
               />
               {errors.nombre && touched.nombre && (
-                <p className="text-red-500 text-xs mt-1">{errors.nombre}</p>
+                <p className="text-red-500 text-sm mt-1">{errors.nombre}</p>
               )}
             </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="create-email">Email *</Label>
@@ -1027,31 +1101,35 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
                   type="email"
                   value={formEmail}
                   onChange={(e) => handleEmailChange(e.target.value)}
-                  placeholder="correo@ejemplo.com"
                   onBlur={handleEmailBlur}
+                  placeholder="correo@ejemplo.com"
+                  className={errors.email && touched.email ? "border-red-500" : ""}
                 />
                 {errors.email && touched.email && (
-                  <p className="text-red-500 text-xs mt-1">{errors.email}</p>
+                  <p className="text-red-500 text-sm mt-1">{errors.email}</p>
                 )}
               </div>
+
               <div>
                 <Label htmlFor="create-telefono">Teléfono *</Label>
                 <Input
                   id="create-telefono"
                   value={formTelefono}
                   onChange={(e) => handleTelefonoChange(e.target.value)}
-                  placeholder="(601) 123-4567"
                   onBlur={handleTelefonoBlur}
+                  placeholder="3001234567"
+                  className={errors.telefono && touched.telefono ? "border-red-500" : ""}
                 />
                 {errors.telefono && touched.telefono && (
-                  <p className="text-red-500 text-xs mt-1">{errors.telefono}</p>
+                  <p className="text-red-500 text-sm mt-1">{errors.telefono}</p>
                 )}
               </div>
             </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="create-ciudad">Ciudad *</Label>
-                <Select value={formCiudad} onValueChange={setFormCiudad}>
+                <Select value={formCiudad} onValueChange={handleCiudadChange}>
                   <SelectTrigger id="create-ciudad">
                     <SelectValue placeholder="Selecciona una ciudad" />
                   </SelectTrigger>
@@ -1063,10 +1141,14 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
                     ))}
                   </SelectContent>
                 </Select>
+                {errors.ciudad && touched.ciudad && (
+                  <p className="text-red-500 text-sm mt-1">{errors.ciudad}</p>
+                )}
               </div>
+
               <div>
                 <Label htmlFor="create-pais">País *</Label>
-                <Select value={formPais} onValueChange={setFormPais}>
+                <Select value={formPais} onValueChange={handlePaisChange}>
                   <SelectTrigger id="create-pais">
                     <SelectValue placeholder="Selecciona un país" />
                   </SelectTrigger>
@@ -1078,12 +1160,16 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
                     ))}
                   </SelectContent>
                 </Select>
+                {errors.pais && touched.pais && (
+                  <p className="text-red-500 text-sm mt-1">{errors.pais}</p>
+                )}
               </div>
             </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="create-categoria">Categoría *</Label>
-                <Select value={formCategoria} onValueChange={setFormCategoria}>
+                <Select value={formCategoria} onValueChange={handleCategoriaChange}>
                   <SelectTrigger id="create-categoria">
                     <SelectValue placeholder="Selecciona una categoría" />
                   </SelectTrigger>
@@ -1095,51 +1181,61 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
                     ))}
                   </SelectContent>
                 </Select>
+                {errors.categoria && touched.categoria && (
+                  <p className="text-red-500 text-sm mt-1">{errors.categoria}</p>
+                )}
               </div>
+
               <div>
                 <Label htmlFor="create-contacto">Contacto Principal *</Label>
                 <Input
                   id="create-contacto"
                   value={formContacto}
                   onChange={(e) => handleContactoChange(e.target.value)}
-                  placeholder="Nombre del contacto principal"
                   onBlur={handleContactoBlur}
+                  placeholder="Nombre del contacto principal"
+                  className={errors.contacto && touched.contacto ? "border-red-500" : ""}
                 />
                 {errors.contacto && touched.contacto && (
-                  <p className="text-red-500 text-xs mt-1">{errors.contacto}</p>
+                  <p className="text-red-500 text-sm mt-1">{errors.contacto}</p>
                 )}
               </div>
             </div>
+
             <div>
               <Label htmlFor="create-direccion">Dirección *</Label>
               <Input
                 id="create-direccion"
                 value={formDireccion}
                 onChange={(e) => handleDireccionChange(e.target.value)}
-                placeholder="Ej: Calle 123 # 45-67"
                 onBlur={handleDireccionBlur}
+                placeholder="Ej: Calle 123 # 45-67"
+                className={errors.direccion && touched.direccion ? "border-red-500" : ""}
               />
               {errors.direccion && touched.direccion && (
-                <p className="text-red-500 text-xs mt-1">{errors.direccion}</p>
+                <p className="text-red-500 text-sm mt-1">{errors.direccion}</p>
               )}
             </div>
+
             <div>
               <Label htmlFor="create-notas">Notas (opcional)</Label>
               <Textarea
                 id="create-notas"
                 value={formNotas}
                 onChange={(e) => handleNotasChange(e.target.value)}
+                onBlur={handleNotasBlur}
                 placeholder="Información adicional sobre el proveedor"
                 rows={3}
-                onBlur={handleNotasBlur}
+                className={errors.notas && touched.notas ? "border-red-500" : ""}
               />
               {errors.notas && touched.notas && (
-                <p className="text-red-500 text-xs mt-1">{errors.notas}</p>
+                <p className="text-red-500 text-sm mt-1">{errors.notas}</p>
               )}
             </div>
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateModal(false)}>
+            <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
             <Button onClick={confirmCreate} className="bg-blue-600 hover:bg-blue-700">
@@ -1150,19 +1246,29 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
       </Dialog>
 
       {/* Modal Editar Proveedor */}
-      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto" aria-describedby="edit-proveedor-description">
+      <Dialog
+        open={isEditar}
+        onOpenChange={(open) => {
+          if (!open) closeToList();
+        }}
+      >
+        <DialogContent
+          className="max-w-6xl max-h-[90vh] overflow-y-auto"
+          aria-describedby="edit-proveedor-description"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>Editar Proveedor</DialogTitle>
             <DialogDescription id="edit-proveedor-description">
               Modifica la información del proveedor
             </DialogDescription>
           </DialogHeader>
+
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="edit-tipo-doc">Tipo de Documento *</Label>
-                <Select value={formTipoDoc} onValueChange={setFormTipoDoc}>
+                <Select value={formTipoDoc} onValueChange={handleTipoDocChange}>
                   <SelectTrigger id="edit-tipo-doc">
                     <SelectValue />
                   </SelectTrigger>
@@ -1173,34 +1279,42 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
                     <SelectItem value="Pasaporte">Pasaporte</SelectItem>
                   </SelectContent>
                 </Select>
+                {errors.tipoDoc && touched.tipoDoc && (
+                  <p className="text-red-500 text-sm mt-1">{errors.tipoDoc}</p>
+                )}
               </div>
+
               <div>
                 <Label htmlFor="edit-numero-doc">N° de Documento *</Label>
                 <Input
                   id="edit-numero-doc"
                   value={formNumeroDoc}
                   onChange={(e) => handleNumeroDocChange(e.target.value)}
-                  placeholder="Ej: 900123456-7"
                   onBlur={handleNumeroDocBlur}
+                  placeholder="Ej: 900123456-7"
+                  className={errors.numeroDoc && touched.numeroDoc ? "border-red-500" : ""}
                 />
                 {errors.numeroDoc && touched.numeroDoc && (
-                  <p className="text-red-500 text-xs mt-1">{errors.numeroDoc}</p>
+                  <p className="text-red-500 text-sm mt-1">{errors.numeroDoc}</p>
                 )}
               </div>
             </div>
+
             <div>
               <Label htmlFor="edit-nombre">Nombre o Razón Social *</Label>
               <Input
                 id="edit-nombre"
                 value={formNombre}
                 onChange={(e) => handleNombreChange(e.target.value)}
-                placeholder="Ej: Distribuciones Médicas S.A.S."
                 onBlur={handleNombreBlur}
+                placeholder="Ej: Distribuciones Médicas S.A.S."
+                className={errors.nombre && touched.nombre ? "border-red-500" : ""}
               />
               {errors.nombre && touched.nombre && (
-                <p className="text-red-500 text-xs mt-1">{errors.nombre}</p>
+                <p className="text-red-500 text-sm mt-1">{errors.nombre}</p>
               )}
             </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="edit-email">Email *</Label>
@@ -1209,31 +1323,35 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
                   type="email"
                   value={formEmail}
                   onChange={(e) => handleEmailChange(e.target.value)}
-                  placeholder="correo@ejemplo.com"
                   onBlur={handleEmailBlur}
+                  placeholder="correo@ejemplo.com"
+                  className={errors.email && touched.email ? "border-red-500" : ""}
                 />
                 {errors.email && touched.email && (
-                  <p className="text-red-500 text-xs mt-1">{errors.email}</p>
+                  <p className="text-red-500 text-sm mt-1">{errors.email}</p>
                 )}
               </div>
+
               <div>
                 <Label htmlFor="edit-telefono">Teléfono *</Label>
                 <Input
                   id="edit-telefono"
                   value={formTelefono}
                   onChange={(e) => handleTelefonoChange(e.target.value)}
-                  placeholder="(601) 123-4567"
                   onBlur={handleTelefonoBlur}
+                  placeholder="3001234567"
+                  className={errors.telefono && touched.telefono ? "border-red-500" : ""}
                 />
                 {errors.telefono && touched.telefono && (
-                  <p className="text-red-500 text-xs mt-1">{errors.telefono}</p>
+                  <p className="text-red-500 text-sm mt-1">{errors.telefono}</p>
                 )}
               </div>
             </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="edit-ciudad">Ciudad *</Label>
-                <Select value={formCiudad} onValueChange={setFormCiudad}>
+                <Select value={formCiudad} onValueChange={handleCiudadChange}>
                   <SelectTrigger id="edit-ciudad">
                     <SelectValue placeholder="Selecciona una ciudad" />
                   </SelectTrigger>
@@ -1245,10 +1363,14 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
                     ))}
                   </SelectContent>
                 </Select>
+                {errors.ciudad && touched.ciudad && (
+                  <p className="text-red-500 text-sm mt-1">{errors.ciudad}</p>
+                )}
               </div>
+
               <div>
                 <Label htmlFor="edit-pais">País *</Label>
-                <Select value={formPais} onValueChange={setFormPais}>
+                <Select value={formPais} onValueChange={handlePaisChange}>
                   <SelectTrigger id="edit-pais">
                     <SelectValue placeholder="Selecciona un país" />
                   </SelectTrigger>
@@ -1260,12 +1382,16 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
                     ))}
                   </SelectContent>
                 </Select>
+                {errors.pais && touched.pais && (
+                  <p className="text-red-500 text-sm mt-1">{errors.pais}</p>
+                )}
               </div>
             </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="edit-categoria">Categoría *</Label>
-                <Select value={formCategoria} onValueChange={setFormCategoria}>
+                <Select value={formCategoria} onValueChange={handleCategoriaChange}>
                   <SelectTrigger id="edit-categoria">
                     <SelectValue placeholder="Selecciona una categoría" />
                   </SelectTrigger>
@@ -1277,51 +1403,61 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
                     ))}
                   </SelectContent>
                 </Select>
+                {errors.categoria && touched.categoria && (
+                  <p className="text-red-500 text-sm mt-1">{errors.categoria}</p>
+                )}
               </div>
+
               <div>
                 <Label htmlFor="edit-contacto">Contacto Principal *</Label>
                 <Input
                   id="edit-contacto"
                   value={formContacto}
                   onChange={(e) => handleContactoChange(e.target.value)}
-                  placeholder="Nombre del contacto principal"
                   onBlur={handleContactoBlur}
+                  placeholder="Nombre del contacto principal"
+                  className={errors.contacto && touched.contacto ? "border-red-500" : ""}
                 />
                 {errors.contacto && touched.contacto && (
-                  <p className="text-red-500 text-xs mt-1">{errors.contacto}</p>
+                  <p className="text-red-500 text-sm mt-1">{errors.contacto}</p>
                 )}
               </div>
             </div>
+
             <div>
               <Label htmlFor="edit-direccion">Dirección *</Label>
               <Input
                 id="edit-direccion"
                 value={formDireccion}
                 onChange={(e) => handleDireccionChange(e.target.value)}
-                placeholder="Ej: Calle 123 # 45-67"
                 onBlur={handleDireccionBlur}
+                placeholder="Ej: Calle 123 # 45-67"
+                className={errors.direccion && touched.direccion ? "border-red-500" : ""}
               />
               {errors.direccion && touched.direccion && (
-                <p className="text-red-500 text-xs mt-1">{errors.direccion}</p>
+                <p className="text-red-500 text-sm mt-1">{errors.direccion}</p>
               )}
             </div>
+
             <div>
               <Label htmlFor="edit-notas">Notas (opcional)</Label>
               <Textarea
                 id="edit-notas"
                 value={formNotas}
                 onChange={(e) => handleNotasChange(e.target.value)}
+                onBlur={handleNotasBlur}
                 placeholder="Información adicional sobre el proveedor"
                 rows={3}
-                onBlur={handleNotasBlur}
+                className={errors.notas && touched.notas ? "border-red-500" : ""}
               />
               {errors.notas && touched.notas && (
-                <p className="text-red-500 text-xs mt-1">{errors.notas}</p>
+                <p className="text-red-500 text-sm mt-1">{errors.notas}</p>
               )}
             </div>
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEditModal(false)}>
+            <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
             <Button onClick={confirmEdit} className="bg-orange-600 hover:bg-orange-700">
@@ -1332,26 +1468,38 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
       </Dialog>
 
       {/* Modal Eliminar Proveedor */}
-      <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
-        <DialogContent aria-describedby="delete-proveedor-description">
+      <Dialog
+        open={isEliminar}
+        onOpenChange={(open) => {
+          if (!open) closeToList();
+        }}
+      >
+        <DialogContent
+          aria-describedby="delete-proveedor-description"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>Eliminar Proveedor</DialogTitle>
             <DialogDescription id="delete-proveedor-description">
               ¿Estás seguro de que deseas eliminar este proveedor? Esta acción no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
-          {selectedProveedor && (
+
+          {proveedorSeleccionado && (
             <div className="py-4">
               <p className="text-gray-700">
-                Proveedor: <span className="font-semibold">{selectedProveedor.nombre}</span>
+                Proveedor:{" "}
+                <span className="font-semibold">{proveedorSeleccionado.nombre}</span>
               </p>
               <p className="text-gray-600 text-sm mt-1">
-                {selectedProveedor.tipoDocumento}: {selectedProveedor.numeroDocumento}
+                {proveedorSeleccionado.tipoDocumento}:{" "}
+                {proveedorSeleccionado.numeroDocumento}
               </p>
             </div>
           )}
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDeleteModal(false)}>
+            <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
             <Button variant="destructive" onClick={confirmDelete}>
@@ -1362,37 +1510,68 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
       </Dialog>
 
       {/* Modal Confirmación Cambio de Estado */}
-      <Dialog open={showConfirmEstadoModal} onOpenChange={setShowConfirmEstadoModal}>
-        <DialogContent className="max-w-lg" aria-describedby="confirm-estado-description">
+      <Dialog
+        open={showConfirmEstadoModal}
+        onOpenChange={setShowConfirmEstadoModal}
+      >
+        <DialogContent
+          className="max-w-lg"
+          aria-describedby="confirm-estado-description"
+        >
           <DialogHeader>
             <DialogTitle>Confirmar Cambio de Estado</DialogTitle>
             <DialogDescription id="confirm-estado-description">
               ¿Estás seguro de que deseas cambiar el estado de este proveedor?
             </DialogDescription>
           </DialogHeader>
+
           <div className="space-y-3 py-4">
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Proveedor:</span>
-              <span className="font-medium">{proveedorParaCambioEstado?.nombre}</span>
+              <span className="font-medium">
+                {proveedorParaCambioEstado?.nombre}
+              </span>
             </div>
+
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Estado Actual:</span>
-              <span className={`font-medium ${proveedorParaCambioEstado?.estado === 'Activo' ? 'text-green-700' : 'text-red-700'}`}>
+              <span
+                className={`font-medium ${proveedorParaCambioEstado?.estado === "Activo"
+                  ? "text-green-700"
+                  : "text-red-700"
+                  }`}
+              >
                 {proveedorParaCambioEstado?.estado}
               </span>
             </div>
+
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Nuevo Estado:</span>
-              <span className={`font-medium ${proveedorParaCambioEstado?.estado === 'Inactivo' ? 'text-green-700' : 'text-red-700'}`}>
-                {proveedorParaCambioEstado?.estado === 'Activo' ? 'Inactivo' : 'Activo'}
+              <span
+                className={`font-medium ${proveedorParaCambioEstado?.estado === "Inactivo"
+                  ? "text-green-700"
+                  : "text-red-700"
+                  }`}
+              >
+                {proveedorParaCambioEstado?.estado === "Activo"
+                  ? "Inactivo"
+                  : "Activo"}
               </span>
             </div>
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowConfirmEstadoModal(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setShowConfirmEstadoModal(false)}
+            >
               Cancelar
             </Button>
-            <Button onClick={handleConfirmEstado} className="bg-blue-600 hover:bg-blue-700">
+
+            <Button
+              onClick={handleConfirmEstado}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
               Confirmar
             </Button>
           </DialogFooter>
@@ -1401,24 +1580,39 @@ export default function Proveedores({ triggerCreate, selectedBodega = 'Bodega Pr
 
       {/* Modal de Éxito */}
       <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
-        <DialogContent className="max-w-lg" aria-describedby="success-proveedor-description">
+        <DialogContent
+          className="max-w-lg"
+          aria-describedby="success-proveedor-description"
+        >
           <DialogHeader>
             <DialogTitle className="sr-only">Registro Exitoso</DialogTitle>
-            <DialogDescription id="success-proveedor-description" className="sr-only">
+            <DialogDescription
+              id="success-proveedor-description"
+              className="sr-only"
+            >
               El proveedor se ha registrado correctamente
             </DialogDescription>
+
             <div className="flex justify-center mb-4">
               <div className="rounded-full bg-green-100 p-3">
                 <CheckCircle className="h-12 w-12 text-green-600" />
               </div>
             </div>
-            <DialogTitle className="text-center">¡Registro Exitoso!</DialogTitle>
+
+            <DialogTitle className="text-center">
+              ¡Registro Exitoso!
+            </DialogTitle>
+
             <DialogDescription className="text-center">
               El proveedor ha sido creado correctamente en el sistema
             </DialogDescription>
           </DialogHeader>
+
           <DialogFooter className="flex justify-center">
-            <Button onClick={handleSuccessModalClose} className="bg-green-600 hover:bg-green-700">
+            <Button
+              onClick={handleSuccessModalClose}
+              className="bg-green-600 hover:bg-green-700"
+            >
               Aceptar
             </Button>
           </DialogFooter>

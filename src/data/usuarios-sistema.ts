@@ -10,11 +10,10 @@ export interface UsuarioSistema {
   telefono?: string;
   direccion?: string;
   fechaNacimiento?: string;
-  genero?: string;
-  bio?: string;
   avatarUrl?: string;
   rol: string;
   permisos: Permisos;
+  estado: boolean;
   bodegasIds: number[];
 }
 
@@ -29,6 +28,7 @@ export const usuariosSistema: UsuarioSistema[] = [
     documento: "1234567890",
     telefono: "3001234567",
     rol: "Administrador",
+    estado: true,
     bodegasIds: [1, 2, 3, 4], // ✅ Acceso a todas las bodegas
     permisos: {
       dashboard: { acceder: true },
@@ -64,6 +64,7 @@ export const usuariosSistema: UsuarioSistema[] = [
     documento: "9876543210",
     telefono: "3109876543",
     rol: "Vendedor",
+    estado: true,
     bodegasIds: [2], // ✅ Solo Bodega 2
     permisos: {
       dashboard: { acceder: true },
@@ -99,6 +100,7 @@ export const usuariosSistema: UsuarioSistema[] = [
     documento: "1122334455",
     telefono: "3201122334",
     rol: "Auxiliar Administrativo",
+    estado: true,
     bodegasIds: [1], // ✅ Solo Bodega 1
     permisos: {
       dashboard: { acceder: true },
@@ -134,6 +136,7 @@ export const usuariosSistema: UsuarioSistema[] = [
     documento: "5566778899",
     telefono: "3155667788",
     rol: "Auxiliar de Bodega",
+    estado: true,
     bodegasIds: [3], // ✅ Solo Bodega 3
     permisos: {
       dashboard: { acceder: true },
@@ -169,6 +172,7 @@ export const usuariosSistema: UsuarioSistema[] = [
     documento: "6677889900",
     telefono: "3186677889",
     rol: "Conductor",
+    estado: true,
     bodegasIds: [1], // ✅ Solo Bodega 1
     permisos: {
       dashboard: { acceder: true },

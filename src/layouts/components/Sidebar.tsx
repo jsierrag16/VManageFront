@@ -138,7 +138,7 @@ export function Sidebar({
                   : item.id === "inventario"
                   ? isActive("/app/productos") || isActive("/app/traslados") || isActive("/app/bodegas")
                   : item.id === "compras"
-                  ? isActive("/app/proveedores") || isActive("/app/ordenescompra") || isActive("/app/remisionescompra")
+                  ? isActive("/app/proveedores") || isActive("/app/compras") || isActive("/app/remcompras")
                   : item.id === "ventas"
                   ? isActive("/app/clientes") || isActive("/app/cotizaciones") || isActive("/app/ordenes") || isActive("/app/remisiones") || isActive("/app/pagos")
                   : item.id === "configuracion"
@@ -212,14 +212,14 @@ export function Sidebar({
                               <SubMenuItem
                                 icon={ShoppingCart}
                                 label="Ordenes Compra"
-                                onClick={() => handleSubItemClick("/app/ordenescompra")}
-                                active={isActive("/app/ordenescompra")}
+                                onClick={() => handleSubItemClick("/app/compras")}
+                                active={isActive("/app/compras")}
                               />
                               <SubMenuItem
                                 icon={FileText}
                                 label="Remisiones Compra"
-                                onClick={() => handleSubItemClick("/app/remisionescompra")}
-                                active={isActive("/app/remisionescompra")}
+                                onClick={() => handleSubItemClick("/app/remcompras")}
+                                active={isActive("/app/remcompras")}
                               />
                             </>
                           )}
