@@ -1,9 +1,34 @@
-import { useState, useMemo, useEffect } from 'react';
-import { Search, Eye, Edit, Trash2, Plus, ShoppingCart, Package, Clock, CheckCircle2, XCircle, User, FileText, Phone, Building2, Mail, MapPin, X, Download, ChevronLeft, ChevronRight } from 'lucide-react';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import { Button } from '../../../shared/components/ui/button';
-import { Input } from '../../../shared/components/ui/input';
+import { useState, useMemo, useEffect } from "react";
+import { useNavigate, useLocation, useParams, useOutletContext } from "react-router-dom";
+
+import {
+  Search,
+  Eye,
+  Edit,
+  Trash2,
+  Plus,
+  ShoppingCart,
+  Package,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  User,
+  FileText,
+  Phone,
+  Building2,
+  Mail,
+  MapPin,
+  X,
+  Download,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
+
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+
+import { Button } from "../../../shared/components/ui/button";
+import { Input } from "../../../shared/components/ui/input";
 import {
   Table,
   TableBody,
@@ -11,22 +36,32 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '../../../shared/components/ui/table';
+} from "../../../shared/components/ui/table";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../../../shared/components/ui/select';
-import { Badge } from '../../../shared/components/ui/badge';
-import { Textarea } from '../../../shared/components/ui/textarea';
-import { Label } from '../../../shared/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../../../shared/components/ui/dialog';
-import { toast } from 'sonner';
-import { proveedoresData as initialProveedoresData, Proveedor } from '../../../data/proveedores';
-import { productosData, Producto } from '../../../data/productos';
-import { bodegasData } from '../../../data/bodegas';
+} from "../../../shared/components/ui/select";
+import { Badge } from "../../../shared/components/ui/badge";
+import { Textarea } from "../../../shared/components/ui/textarea";
+import { Label } from "../../../shared/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "../../../shared/components/ui/dialog";
+
+import { toast } from "sonner";
+import { proveedoresData as initialProveedoresData, Proveedor } from "../../../data/proveedores";
+import { productosData, Producto } from "../../../data/productos";
+import { bodegasData } from "../../../data/bodegas";
+
+import type { AppOutletContext } from "../../../layouts/MainLayout";
 
 interface Compra {
   id: number;
@@ -34,7 +69,7 @@ interface Compra {
   proveedor: string;
   fecha: string;
   fechaEntrega: string;
-  estado: 'Pendiente' | 'Aprobada';
+  estado: "Pendiente" | "Aprobada";
   items: number;
   subtotal: number;
   impuestos: number;
@@ -49,249 +84,153 @@ interface Compra {
   }>;
 }
 
-export const comprasData: Compra[] = [
-  {
-    id: 1,
-    numeroOrden: 'OC-001',
-    proveedor: 'Alimentos San José S.A.',
-    fecha: '2024-01-15',
-    fechaEntrega: '2024-01-20',
-    estado: 'Aprobada',
-    items: 2,
-    subtotal: 4201.68,
-    impuestos: 798.32,
-    total: 5000.00,
-    observaciones: 'Entrega en Bodega Principal',
-    bodega: 'Bodega Principal',
-    productos: [
-      {
-        producto: productosData[0], // Alimento Balanceado Premium
-        cantidad: 10,
-        precio: 250,
-        subtotal: 2500
-      },
-      {
-        producto: productosData[1], // Vitaminas y Minerales
-        cantidad: 20,
-        precio: 85.084,
-        subtotal: 1701.68
-      }
-    ]
-  },
-  {
-    id: 2,
-    numeroOrden: 'OC-002',
-    proveedor: 'Veterinaria La Esperanza',
-    fecha: '2024-01-14',
-    fechaEntrega: '2024-01-18',
-    estado: 'Aprobada',
-    items: 2,
-    subtotal: 2373.95,
-    impuestos: 451.05,
-    total: 2825.00,
-    observaciones: 'Productos refrigerados',
-    bodega: 'Bodega Secundaria',
-    productos: [
-      {
-        producto: productosData[2], // Antibiótico Inyectable
-        cantidad: 15,
-        precio: 120,
-        subtotal: 1800
-      },
-      {
-        producto: productosData[3], // Desparasitante Oral
-        cantidad: 8,
-        precio: 71.74,
-        subtotal: 573.95
-      }
-    ]
-  },
-  {
-    id: 3,
-    numeroOrden: 'OC-003',
-    proveedor: 'Distribuidora Agropecuaria',
-    fecha: '2024-01-16',
-    fechaEntrega: '2024-01-22',
-    estado: 'Pendiente',
-    items: 3,
-    subtotal: 8071.01,
-    impuestos: 1533.99,
-    total: 9605.00,
-    observaciones: 'Urgente - Prioridad alta',
-    bodega: 'Bodega Medellín',
-    productos: [
-      {
-        producto: productosData[0],
-        cantidad: 20,
-        precio: 250,
-        subtotal: 5000
-      },
-      {
-        producto: productosData[1],
-        cantidad: 25,
-        precio: 85.084,
-        subtotal: 2127.10
-      },
-      {
-        producto: productosData[4],
-        cantidad: 12,
-        precio: 78.66,
-        subtotal: 943.91
-      }
-    ]
-  },
-  {
-    id: 4,
-    numeroOrden: 'OC-004',
-    proveedor: 'Suplementos Nutricionales',
-    fecha: '2024-01-13',
-    fechaEntrega: '2024-01-17',
-    estado: 'Aprobada',
-    items: 2,
-    subtotal: 3037.82,
-    impuestos: 577.18,
-    total: 3615.00,
-    observaciones: 'Entrega completa',
-    bodega: 'Bodega Principal',
-    productos: [
-      {
-        producto: productosData[1],
-        cantidad: 30,
-        precio: 85.084,
-        subtotal: 2552.52
-      },
-      {
-        producto: productosData[5],
-        cantidad: 5,
-        precio: 97.06,
-        subtotal: 485.30
-      }
-    ]
-  },
-  {
-    id: 5,
-    numeroOrden: 'OC-005',
-    proveedor: 'Alimentos San José S.A.',
-    fecha: '2024-01-12',
-    fechaEntrega: '2024-01-15',
-    estado: 'Pendiente',
-    items: 1,
-    subtotal: 1424.37,
-    impuestos: 270.63,
-    total: 1695.00,
-    observaciones: 'Orden pendiente de aprobación',
-    bodega: 'Bodega Principal',
-    productos: [
-      {
-        producto: productosData[6],
-        cantidad: 18,
-        precio: 79.13,
-        subtotal: 1424.37
-      }
-    ]
-  }
-];
-
-interface ComprasProps {
-  triggerCreate?: number;
-  triggerCreateRemision?: number;
-  selectedBodega?: string;
-}
-
 // Categorías disponibles para proveedores
 const CATEGORIAS_PROVEEDOR = [
-  'Medicamentos',
-  'Equipos Médicos',
-  'Material de Curación',
-  'Alimentos',
-  'Suplementos',
-  'Insumos Veterinarios',
-  'Otros'
+  "Medicamentos",
+  "Equipos Médicos",
+  "Material de Curación",
+  "Alimentos",
+  "Suplementos",
+  "Insumos Veterinarios",
+  "Otros",
 ] as const;
 
-export default function Compras({ triggerCreate, triggerCreateRemision, selectedBodega = 'Todas las bodegas' }: ComprasProps) {
-  const [searchTerm, setSearchTerm] = useState('');
+export default function Compras() {
+  // Estados principales
+  const [searchTerm, setSearchTerm] = useState("");
   const [compras, setCompras] = useState<Compra[]>(comprasData);
   const [proveedores, setProveedores] = useState<Proveedor[]>(initialProveedoresData);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+
+  // Modales que NO van por URL
   const [isCreateProveedorModalOpen, setIsCreateProveedorModalOpen] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [selectedCompra, setSelectedCompra] = useState<Compra | null>(null);
+
+  // Paginación
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-  
-  // Form states para orden de compra
+
+  // Router + bodega + flags URL
+  const navigate = useNavigate();
+  const location = useLocation();
+  const params = useParams<{ id: string }>();
+
+  const { selectedBodegaNombre } = useOutletContext<AppOutletContext>();
+  const selectedBodega = selectedBodegaNombre;
+
+  const isCrear = location.pathname.endsWith("/compras/crear");
+  const isVer = location.pathname.endsWith("/ver");
+  const isEditar = location.pathname.endsWith("/editar");
+  const isEliminar = location.pathname.endsWith("/eliminar");
+
+  const closeToList = () => navigate("/app/compras");
+
+  // Navegación (modales por URL)
+  const handleView = (c: Compra) => navigate(`/app/compras/${c.id}/ver`);
+  const handleCreate = () => navigate("/app/compras/crear");
+  const handleEdit = (c: Compra) => navigate(`/app/compras/${c.id}/editar`);
+  const handleDelete = (c: Compra) => navigate(`/app/compras/${c.id}/eliminar`);
+
+  // Compra seleccionada por URL (:id)
+  const compraSeleccionada = useMemo(() => {
+    if (!params.id) return null;
+    const id = Number(params.id);
+    if (!Number.isFinite(id)) return null;
+    return compras.find((c) => c.id === id) ?? null;
+  }, [compras, params.id]);
+
+  // Si entran a /ver, /editar o /eliminar con id inválido -> volver
+  useEffect(() => {
+    if (!isVer && !isEditar && !isEliminar) return;
+
+    if (!compraSeleccionada) {
+      closeToList();
+      return;
+    }
+  }, [isVer, isEditar, isEliminar, compraSeleccionada]);
+
+  // Formulario de orden de compra
   const [formData, setFormData] = useState({
-    numeroOrden: '',
-    proveedor: '',
-    fecha: '',
-    fechaEntrega: '',
-    estado: 'Pendiente' as 'Pendiente' | 'Aprobada',
+    numeroOrden: "",
+    proveedor: "",
+    fecha: "",
+    fechaEntrega: "",
+    estado: "Pendiente" as "Pendiente" | "Aprobada",
     items: 0,
     subtotal: 0,
     impuestos: 0,
-    observaciones: '',
-    bodega: ''
+    observaciones: "",
+    bodega: "",
   });
 
-  // Form states para crear proveedor
-  const [formProvTipoDoc, setFormProvTipoDoc] = useState('NIT');
-  const [formProvNumeroDoc, setFormProvNumeroDoc] = useState('');
-  const [formProvNombre, setFormProvNombre] = useState('');
-  const [formProvEmail, setFormProvEmail] = useState('');
-  const [formProvTelefono, setFormProvTelefono] = useState('');
-  const [formProvDireccion, setFormProvDireccion] = useState('');
-  const [formProvCiudad, setFormProvCiudad] = useState('');
-  const [formProvCategoria, setFormProvCategoria] = useState('');
-  const [formProvContacto, setFormProvContacto] = useState('');
-  const [formProvNotas, setFormProvNotas] = useState('');
+  // Formulario para crear proveedor desde compras
+  const [formProvTipoDoc, setFormProvTipoDoc] = useState("NIT");
+  const [formProvNumeroDoc, setFormProvNumeroDoc] = useState("");
+  const [formProvNombre, setFormProvNombre] = useState("");
+  const [formProvEmail, setFormProvEmail] = useState("");
+  const [formProvTelefono, setFormProvTelefono] = useState("");
+  const [formProvDireccion, setFormProvDireccion] = useState("");
+  const [formProvCiudad, setFormProvCiudad] = useState("");
+  const [formProvCategoria, setFormProvCategoria] = useState("");
+  const [formProvContacto, setFormProvContacto] = useState("");
+  const [formProvNotas, setFormProvNotas] = useState("");
 
-  // Estados para manejo de productos en la orden
-  const [selectedProductoId, setSelectedProductoId] = useState('');
+  // Manejo de productos en la orden
+  const [selectedProductoId, setSelectedProductoId] = useState("");
   const [cantidadProducto, setCantidadProducto] = useState(1);
   const [precioProducto, setPrecioProducto] = useState(0);
-  const [productosOrden, setProductosOrden] = useState<Array<{
-    producto: Producto;
-    cantidad: number;
-    precio: number;
-    subtotal: number;
-  }>>([]);
+  const [productosOrden, setProductosOrden] = useState<
+    Array<{ producto: Producto; cantidad: number; precio: number; subtotal: number }>
+  >([]);
 
-  // Filtrar productos activos
+  // Productos activos
   const productosActivos = useMemo(() => {
-    return productosData.filter(p => p.estado);
+    return productosData.filter((p) => p.estado);
   }, []);
 
-  // Generar número de orden automático
-  const generarNumeroOrden = () => {
-    const siguienteNumero = compras.length + 1;
-    return `OC-${String(siguienteNumero).padStart(3, '0')}`;
-  };
-
-  // Obtener fecha actual en formato YYYY-MM-DD
-  const getFechaActual = () => {
-    return new Date().toISOString().split('T')[0];
-  };
-
-  // Filtrar proveedores activos
+  // Proveedores activos
   const proveedoresActivos = useMemo(() => {
-    return proveedores.filter(p => p.estado === 'Activo');
+    return proveedores.filter((p) => p.estado === "Activo");
   }, [proveedores]);
 
-  // Filtrar compras por bodega Y por búsqueda
+  // Generar número de orden consecutivo
+  const generarNumeroOrden = () => {
+    const maxNum = compras.reduce((max, c) => {
+      const match = /^OC-(\d+)$/.exec(c.numeroOrden);
+      const num = match ? Number(match[1]) : 0;
+      return Number.isFinite(num) ? Math.max(max, num) : max;
+    }, 0);
+
+    return `OC-${String(maxNum + 1).padStart(3, "0")}`;
+  };
+
+  // Fecha actual YYYY-MM-DD
+  const getFechaActual = () => {
+    return new Date().toISOString().split("T")[0];
+  };
+
+  // Filtrado por bodega + búsqueda
   const filteredCompras = useMemo(() => {
+    const s = searchTerm.toLowerCase();
+
     return compras
-      .filter((compra) => selectedBodega === 'Todas las bodegas' || compra.bodega === selectedBodega)
-      .filter((compra) =>
-        compra.numeroOrden.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        compra.proveedor.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        compra.estado.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        compra.items.toString().includes(searchTerm)
-      );
+      .filter((c) => {
+        if (selectedBodega === "Todas las bodegas") return true;
+        return c.bodega === selectedBodega;
+      })
+      .filter((c) => {
+        return (
+          c.numeroOrden.toLowerCase().includes(s) ||
+          c.proveedor.toLowerCase().includes(s) ||
+          c.estado.toLowerCase().includes(s) ||
+          String(c.items).includes(s)
+        );
+      });
   }, [compras, searchTerm, selectedBodega]);
+
+  // Resetear página cuando cambia filtro
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedBodega]);
 
   // Paginación
   const totalPages = Math.ceil(filteredCompras.length / itemsPerPage);
@@ -299,413 +238,138 @@ export default function Compras({ triggerCreate, triggerCreateRemision, selected
   const endIndex = startIndex + itemsPerPage;
   const currentCompras = filteredCompras.slice(startIndex, endIndex);
 
-  // Resetear a página 1 cuando cambia el filtro
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, selectedBodega]);
-
-  // Calcular estadísticas
+  // Estadísticas
   const stats = useMemo(() => {
     const totalCompras = compras.length;
-    const pendientes = compras.filter(c => c.estado === 'Pendiente').length;
-    const aprobadas = compras.filter(c => c.estado === 'Aprobada').length;
-    
+    const pendientes = compras.filter((c) => c.estado === "Pendiente").length;
+    const aprobadas = compras.filter((c) => c.estado === "Aprobada").length;
     return { totalCompras, pendientes, aprobadas };
   }, [compras]);
 
-  // Abrir modal de crear con datos iniciales automáticos
-  const handleOpenCreateModal = () => {
-    const bodegaInicial = selectedBodega === 'Todas las bodegas' ? 'Bodega Principal' : selectedBodega;
-    setFormData({
-      numeroOrden: generarNumeroOrden(),
-      proveedor: '',
-      fecha: getFechaActual(),
-      fechaEntrega: '',
-      estado: 'Pendiente',
-      items: 0,
-      subtotal: 0,
-      impuestos: 0,
-      observaciones: '',
-      bodega: bodegaInicial
-    });
-    // Limpiar productos
-    setProductosOrden([]);
-    setSelectedProductoId('');
-    setCantidadProducto(1);
-    setPrecioProducto(0);
-    setIsCreateModalOpen(true);
-  };
-
-  // Validación de formulario de proveedor
-  const validateProveedorForm = () => {
-    if (!formProvTipoDoc || !formProvNumeroDoc.trim() || !formProvNombre.trim() || !formProvEmail.trim() || 
-        !formProvTelefono.trim() || !formProvDireccion.trim() || !formProvCiudad.trim() || 
-        !formProvCategoria.trim() || !formProvContacto.trim()) {
-      toast.error('Por favor completa todos los campos obligatorios');
-      return false;
-    }
-
-    if (!/^[0-9-]+$/.test(formProvNumeroDoc)) {
-      toast.error('El número de documento solo debe contener números y guiones');
-      return false;
-    }
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formProvEmail)) {
-      toast.error('El email no tiene un formato válido');
-      return false;
-    }
-
-    if (!/^[0-9\s\-()]+$/.test(formProvTelefono)) {
-      toast.error('El teléfono solo debe contener números, espacios, guiones y paréntesis');
-      return false;
-    }
-
-    if (/[<>{}[\]\\\/]/.test(formProvNombre)) {
-      toast.error('El nombre contiene caracteres no permitidos');
-      return false;
-    }
-
-    return true;
-  };
-
-  // Crear nuevo proveedor desde el modal de orden de compra
-  const handleCreateProveedor = () => {
-    if (!validateProveedorForm()) return;
-
-    const bodegaInicial = selectedBodega === 'Todas las bodegas' ? 'Bodega Principal' : selectedBodega;
-    const newProveedor: Proveedor = {
-      id: `PROV-${String(proveedores.length + 1).padStart(3, '0')}`,
-      tipoDocumento: formProvTipoDoc,
-      numeroDocumento: formProvNumeroDoc.trim(),
-      nombre: formProvNombre.trim(),
-      email: formProvEmail.trim(),
-      telefono: formProvTelefono.trim(),
-      direccion: formProvDireccion.trim(),
-      ciudad: formProvCiudad.trim(),
-      departamento: '',
-      pais: 'Colombia',
-      categoria: formProvCategoria.trim(),
-      contacto: formProvContacto.trim(),
-      notas: formProvNotas.trim(),
-      estado: 'Activo',
-      fechaRegistro: new Date().toISOString().split('T')[0],
-      bodega: bodegaInicial,
-    };
-
-    setProveedores([...proveedores, newProveedor]);
-    setFormData({ ...formData, proveedor: newProveedor.nombre });
-    setIsCreateProveedorModalOpen(false);
-    toast.success('Proveedor creado exitosamente');
-    
-    // Limpiar formulario de proveedor
-    resetProveedorForm();
-  };
-
-  const resetProveedorForm = () => {
-    setFormProvTipoDoc('NIT');
-    setFormProvNumeroDoc('');
-    setFormProvNombre('');
-    setFormProvEmail('');
-    setFormProvTelefono('');
-    setFormProvDireccion('');
-    setFormProvCiudad('');
-    setFormProvCategoria('');
-    setFormProvContacto('');
-    setFormProvNotas('');
-  };
-
-  // Funciones para manejar productos en la orden
-  const handleAgregarProducto = () => {
-    if (!selectedProductoId) {
-      toast.error('Por favor selecciona un producto');
-      return;
-    }
-
-    if (cantidadProducto <= 0) {
-      toast.error('La cantidad debe ser mayor a cero');
-      return;
-    }
-
-    if (precioProducto <= 0) {
-      toast.error('El precio debe ser mayor a cero');
-      return;
-    }
-
-    const producto = productosActivos.find(p => p.id === selectedProductoId);
-    if (!producto) return;
-
-    // Verificar si el producto ya está en la lista
-    const productoExistente = productosOrden.find(p => p.producto.id === selectedProductoId);
-    if (productoExistente) {
-      toast.error('Este producto ya está agregado. Elimínalo primero si deseas modificarlo');
-      return;
-    }
-
-    const subtotal = cantidadProducto * precioProducto;
-    const nuevoProducto = {
-      producto,
-      cantidad: cantidadProducto,
-      precio: precioProducto,
-      subtotal
-    };
-
-    setProductosOrden([...productosOrden, nuevoProducto]);
-    
-    // Limpiar campos
-    setSelectedProductoId('');
-    setCantidadProducto(1);
-    setPrecioProducto(0);
-    
-    toast.success('Producto agregado correctamente');
-  };
-
-  const handleEliminarProducto = (productoId: string) => {
-    setProductosOrden(productosOrden.filter(p => p.producto.id !== productoId));
-    toast.success('Producto eliminado de la orden');
-  };
-
-  // Calcular totales basados en los productos agregados
+  // Totales dinámicos
   const calcularTotales = useMemo(() => {
     const subtotal = productosOrden.reduce((sum, item) => sum + item.subtotal, 0);
-    const impuestos = subtotal * 0.19; // 19% de IVA
+    const impuestos = subtotal * 0.19;
     const total = subtotal + impuestos;
     const items = productosOrden.length;
-
     return { subtotal, impuestos, total, items };
   }, [productosOrden]);
 
-  const handleCreate = () => {
-    if (!formData.numeroOrden || !formData.proveedor || !formData.fecha || !formData.fechaEntrega || !formData.bodega) {
-      toast.error('Por favor completa todos los campos obligatorios');
-      return;
-    }
-
-    if (productosOrden.length === 0) {
-      toast.error('Debes agregar al menos un producto a la orden');
-      return;
-    }
-
-    const nuevaCompra: Compra = {
-      id: compras.length + 1,
-      numeroOrden: formData.numeroOrden,
-      proveedor: formData.proveedor,
-      fecha: formData.fecha,
-      fechaEntrega: formData.fechaEntrega,
-      estado: formData.estado,
-      items: calcularTotales.items,
-      subtotal: calcularTotales.subtotal,
-      impuestos: calcularTotales.impuestos,
-      total: calcularTotales.total,
-      observaciones: formData.observaciones,
-      bodega: formData.bodega,
-      productos: [...productosOrden]
-    };
-
-    setCompras([...compras, nuevaCompra]);
-    setIsCreateModalOpen(false);
-    setShowSuccessModal(true);
-    resetForm();
-    setProductosOrden([]);
+  // Cambiar página
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
   };
 
-  const handleEdit = () => {
-    if (!selectedCompra || !formData.numeroOrden || !formData.proveedor || !formData.bodega) {
-      toast.error('Por favor completa todos los campos obligatorios');
-      return;
+  // Clase badge por estado
+  const getEstadoBadgeClass = (estado: string) => {
+    switch (estado) {
+      case "Pendiente":
+        return "bg-yellow-100 text-yellow-800 border-yellow-300";
+      case "Aprobada":
+        return "bg-blue-100 text-blue-800 border-blue-300";
+      default:
+        return "bg-gray-100 text-gray-800 border-gray-300";
     }
-
-    if (productosOrden.length === 0) {
-      toast.error('Debes agregar al menos un producto a la orden');
-      return;
-    }
-
-    setCompras(compras.map(compra =>
-      compra.id === selectedCompra.id
-        ? { 
-            ...compra, 
-            ...formData, 
-            items: calcularTotales.items,
-            subtotal: calcularTotales.subtotal,
-            impuestos: calcularTotales.impuestos,
-            total: calcularTotales.total,
-            productos: [...productosOrden]
-          }
-        : compra
-    ));
-    toast.success('Orden de compra actualizada exitosamente');
-    setIsEditModalOpen(false);
-    setSelectedCompra(null);
-    resetForm();
-    setProductosOrden([]);
   };
 
-  const handleDelete = () => {
-    if (!selectedCompra) return;
-
-    setCompras(compras.filter(compra => compra.id !== selectedCompra.id));
-    toast.success('Orden de compra eliminada exitosamente');
-    setIsDeleteModalOpen(false);
-    setSelectedCompra(null);
-  };
-
+  // Descargar PDF
   const handleDownloadPDF = (compra: Compra) => {
     const doc = new jsPDF();
-    
-    // Título
+
     doc.setFontSize(20);
-    doc.setFont('helvetica', 'bold');
-    doc.text('ORDEN DE COMPRA', 105, 20, { align: 'center' });
-    
-    // Información de la orden
+    doc.setFont("helvetica", "bold");
+    doc.text("ORDEN DE COMPRA", 105, 20, { align: "center" });
+
     doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    
-    // Columna izquierda
+    doc.setFont("helvetica", "normal");
+
     doc.text(`N° Orden: ${compra.numeroOrden}`, 20, 40);
     doc.text(`Proveedor: ${compra.proveedor}`, 20, 46);
     doc.text(`Bodega: ${compra.bodega}`, 20, 52);
-    
-    // Columna derecha
-    doc.text(`Fecha: ${new Date(compra.fecha).toLocaleDateString('es-CO')}`, 120, 40);
-    doc.text(`Fecha Entrega: ${new Date(compra.fechaEntrega).toLocaleDateString('es-CO')}`, 120, 46);
+
+    doc.text(`Fecha: ${new Date(compra.fecha).toLocaleDateString("es-CO")}`, 120, 40);
+    doc.text(
+      `Fecha Entrega: ${new Date(compra.fechaEntrega).toLocaleDateString("es-CO")}`,
+      120,
+      46
+    );
     doc.text(`Estado: ${compra.estado}`, 120, 52);
-    
-    // Línea separadora
+
     doc.setLineWidth(0.5);
     doc.line(20, 58, 190, 58);
-    
-    // Tabla de productos
+
     if (compra.productos && compra.productos.length > 0) {
-      const tableData = compra.productos.map(item => [
+      const tableData = compra.productos.map((item) => [
         item.producto.nombre,
-        item.cantidad.toString(),
-        `$${item.precio.toLocaleString('es-CO', { minimumFractionDigits: 2 })}`,
-        `$${item.subtotal.toLocaleString('es-CO', { minimumFractionDigits: 2 })}`
+        String(item.cantidad),
+        `$${item.precio.toLocaleString("es-CO", { minimumFractionDigits: 2 })}`,
+        `$${item.subtotal.toLocaleString("es-CO", { minimumFractionDigits: 2 })}`,
       ]);
-      
+
       autoTable(doc, {
         startY: 65,
-        head: [['Producto', 'Cantidad', 'Precio Unit.', 'Subtotal']],
+        head: [["Producto", "Cantidad", "Precio Unit.", "Subtotal"]],
         body: tableData,
-        theme: 'grid',
-        headStyles: {
-          fillColor: [37, 99, 235],
-          textColor: 255,
-          fontSize: 10,
-          fontStyle: 'bold'
-        },
-        styles: {
-          fontSize: 9,
-          cellPadding: 3
-        },
+        theme: "grid",
+        styles: { fontSize: 9, cellPadding: 3 },
         columnStyles: {
           0: { cellWidth: 80 },
-          1: { cellWidth: 30, halign: 'center' },
-          2: { cellWidth: 40, halign: 'right' },
-          3: { cellWidth: 40, halign: 'right' }
-        }
+          1: { cellWidth: 30, halign: "center" },
+          2: { cellWidth: 40, halign: "right" },
+          3: { cellWidth: 40, halign: "right" },
+        },
       });
     }
-    
-    // Totales
+
     const finalY = (doc as any).lastAutoTable?.finalY || 65;
     const totalesY = finalY + 10;
-    
-    doc.setFont('helvetica', 'normal');
-    doc.text('Subtotal:', 130, totalesY);
-    doc.text(`$${compra.subtotal.toLocaleString('es-CO', { minimumFractionDigits: 2 })}`, 190, totalesY, { align: 'right' });
-    
-    doc.text('Impuestos (19%):', 130, totalesY + 6);
-    doc.text(`$${compra.impuestos.toLocaleString('es-CO', { minimumFractionDigits: 2 })}`, 190, totalesY + 6, { align: 'right' });
-    
+
+    doc.text("Subtotal:", 130, totalesY);
+    doc.text(
+      `$${compra.subtotal.toLocaleString("es-CO", { minimumFractionDigits: 2 })}`,
+      190,
+      totalesY,
+      { align: "right" }
+    );
+
+    doc.text("Impuestos (19%):", 130, totalesY + 6);
+    doc.text(
+      `$${compra.impuestos.toLocaleString("es-CO", { minimumFractionDigits: 2 })}`,
+      190,
+      totalesY + 6,
+      { align: "right" }
+    );
+
     doc.setLineWidth(0.3);
     doc.line(130, totalesY + 10, 190, totalesY + 10);
-    
-    doc.setFont('helvetica', 'bold');
+
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
-    doc.text('Total:', 130, totalesY + 16);
-    doc.text(`$${compra.total.toLocaleString('es-CO', { minimumFractionDigits: 2 })}`, 190, totalesY + 16, { align: 'right' });
-    
-    // Observaciones
+    doc.text("Total:", 130, totalesY + 16);
+    doc.text(
+      `$${compra.total.toLocaleString("es-CO", { minimumFractionDigits: 2 })}`,
+      190,
+      totalesY + 16,
+      { align: "right" }
+    );
+
     if (compra.observaciones) {
-      doc.setFont('helvetica', 'normal');
+      doc.setFont("helvetica", "normal");
       doc.setFontSize(10);
-      doc.text('Observaciones:', 20, totalesY + 30);
-      const splitObservaciones = doc.splitTextToSize(compra.observaciones, 170);
-      doc.text(splitObservaciones, 20, totalesY + 36);
+      doc.text("Observaciones:", 20, totalesY + 30);
+      const splitObs = doc.splitTextToSize(compra.observaciones, 170);
+      doc.text(splitObs, 20, totalesY + 36);
     }
-    
-    // Pie de página
+
     const pageHeight = doc.internal.pageSize.height;
     doc.setFontSize(8);
-    doc.setFont('helvetica', 'italic');
-    doc.text(`Generado el ${new Date().toLocaleString('es-CO')}`, 105, pageHeight - 10, { align: 'center' });
-    
-    // Descargar
+    doc.setFont("helvetica", "italic");
+    doc.text(`Generado el ${new Date().toLocaleString("es-CO")}`, 105, pageHeight - 10, {
+      align: "center",
+    });
+
     doc.save(`Orden_Compra_${compra.numeroOrden}.pdf`);
-    toast.success('PDF descargado exitosamente');
-  };
-
-  const openEditModal = (compra: Compra) => {
-    setSelectedCompra(compra);
-    setFormData({
-      numeroOrden: compra.numeroOrden,
-      proveedor: compra.proveedor,
-      fecha: compra.fecha,
-      fechaEntrega: compra.fechaEntrega,
-      estado: compra.estado,
-      items: compra.items,
-      subtotal: compra.subtotal,
-      impuestos: compra.impuestos,
-      observaciones: compra.observaciones,
-      bodega: compra.bodega
-    });
-    // Cargar productos existentes de la orden
-    setProductosOrden(compra.productos || []);
-    setSelectedProductoId('');
-    setCantidadProducto(1);
-    setPrecioProducto(0);
-    setIsEditModalOpen(true);
-  };
-
-  const openDeleteModal = (compra: Compra) => {
-    setSelectedCompra(compra);
-    setIsDeleteModalOpen(true);
-  };
-
-  const openViewModal = (compra: Compra) => {
-    setSelectedCompra(compra);
-    setIsViewModalOpen(true);
-  };
-
-  const resetForm = () => {
-    setFormData({
-      numeroOrden: '',
-      proveedor: '',
-      fecha: '',
-      fechaEntrega: '',
-      estado: 'Pendiente',
-      items: 0,
-      subtotal: 0,
-      impuestos: 0,
-      observaciones: '',
-      bodega: ''
-    });
-  };
-
-  const getEstadoBadgeClass = (estado: string) => {
-    switch (estado) {
-      case 'Pendiente':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-300';
-      case 'Aprobada':
-        return 'bg-blue-100 text-blue-800 border-blue-300';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-300';
-    }
-  };
-
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
+    toast.success("PDF descargado exitosamente");
   };
 
   return (
@@ -993,7 +657,7 @@ export default function Compras({ triggerCreate, triggerCreateRemision, selected
             {/* Sección de Productos */}
             <div className="border-t pt-6 mt-6">
               <Label className="text-lg mb-4 block">Productos de la Orden</Label>
-              
+
               {/* Formulario para agregar productos */}
               <div className="grid grid-cols-12 gap-4">
                 <div className="col-span-4 space-y-2">
@@ -1375,7 +1039,7 @@ export default function Compras({ triggerCreate, triggerCreateRemision, selected
               Cerrar
             </Button>
             {selectedCompra && (
-              <Button 
+              <Button
                 onClick={() => handleDownloadPDF(selectedCompra)}
                 className="bg-green-600 hover:bg-green-700"
               >
@@ -1479,7 +1143,7 @@ export default function Compras({ triggerCreate, triggerCreateRemision, selected
             {/* Sección de Productos */}
             <div className="border-t pt-6 mt-6">
               <Label className="text-lg mb-4 block">Productos de la Orden</Label>
-              
+
               {/* Formulario para agregar productos */}
               <div className="grid grid-cols-12 gap-4">
                 <div className="col-span-4 space-y-2">

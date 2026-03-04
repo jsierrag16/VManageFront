@@ -45,7 +45,7 @@ import {
   SelectValue,
 } from "../../../shared/components/ui/select";
 
-import { comprasData } from "../../compras/pages/Compras";
+// import { comprasData } from "../../compras/pages/Compras";
 import { useProductos } from "../../../shared/context/ProductosContext";
 
 interface RemisionesCompraProps {

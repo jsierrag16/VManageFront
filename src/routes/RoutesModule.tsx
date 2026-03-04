@@ -99,11 +99,11 @@ export default function RoutesModule() {
           <Route path="proveedores/:id/eliminar" element={<Proveedores />} />
           
           {/* ORDENES COMPRA PENDIENTE*/}
-          <Route path="compras" element={< Compras/>} />
+          {/* <Route path="compras" element={< Compras/>} />
           <Route path="compras/crear" element={< Compras />} />
           <Route path="compras/:id/ver" element={< Compras/>} />
           <Route path="compras/:id/editar" element={< Compras/>} />
-          <Route path="compras/:id/eliminar" element={< Compras/>} />
+          <Route path="compras/:id/eliminar" element={< Compras/>} /> */}
           
           {/* REMISIONES COMPRA PENDIENTE*/}
           <Route path="remcompras" element={< RemisionesCompra/>} />
