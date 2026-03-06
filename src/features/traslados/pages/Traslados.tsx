@@ -415,26 +415,27 @@ export default function Traslados({
   const calcularTotalItems = (items: TrasladoItem[]) =>
     items.reduce((sum, item) => sum + item.cantidad, 0);
 
-  const getEstadoBadge = (estado: string) => {
-    const badges: Record<string, { class: string; icon: any }> = {
+  const getEstadoBadge = (estado: EstadoTraslado) => {
+    const badges: Record<EstadoTraslado, { class: string; icon: any }> = {
       Pendiente: {
-        class: "bg-yellow-100 text-yellow-800 border-yellow-200",
+        class: "bg-yellow-100 text-yellow-800 hover:bg-yellow-200",
         icon: Clock,
       },
       Enviado: {
-        class: "bg-blue-100 text-blue-800 border-blue-200",
+        class: "bg-blue-100 text-blue-800 hover:bg-blue-200",
         icon: Truck,
       },
       Recibido: {
-        class: "bg-green-100 text-green-800 border-green-200",
+        class: "bg-green-100 text-green-800 hover:bg-green-200",
         icon: CheckCircle,
       },
       Cancelado: {
-        class: "bg-red-100 text-red-800 border-red-200",
+        class: "bg-red-100 text-red-800 hover:bg-red-200",
         icon: XCircle,
       },
     };
-    return badges[estado] || badges.Pendiente;
+
+    return badges[estado];
   };
 
   const getSiguienteEstado = (
@@ -870,14 +871,16 @@ export default function Traslados({
                       </TableCell>
                       <TableCell className="text-center font-medium">{totalUnidades}</TableCell>
                       <TableCell className="text-center">
-                        <Badge
-                          variant="outline"
-                          className={`${estadoBadge.class} ${siguienteEstado ? 'cursor-pointer hover:opacity-80' : ''}`}
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => siguienteEstado && handleEstadoClick(traslado)}
+                          disabled={!siguienteEstado}
+                          className={`h-7 px-3 ${estadoBadge.class} ${!siguienteEstado ? "opacity-100 cursor-default" : ""}`}
                         >
                           <Icon size={14} className="mr-1" />
                           {traslado.estado}
-                        </Badge>
+                        </Button>
                       </TableCell>
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-2">
@@ -999,15 +1002,24 @@ export default function Traslados({
                   <Label className="text-gray-600">Responsable</Label>
                   <p className="font-medium">{selectedTraslado.responsable}</p>
                 </div>
-                <div>
-                  <Label className="text-gray-600">Estado</Label>
-                  <Badge variant="outline" className={getEstadoBadge(selectedTraslado.estado).class}>
+                <div className="mt-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      const siguienteEstado = getSiguienteEstado(selectedTraslado.estado);
+                      if (siguienteEstado) handleEstadoClick(selectedTraslado);
+                    }}
+                    disabled={!getSiguienteEstado(selectedTraslado.estado)}
+                    className={`h-7 px-3 ${getEstadoBadge(selectedTraslado.estado).class} ${!getSiguienteEstado(selectedTraslado.estado) ? "opacity-100 cursor-default" : ""
+                      }`}
+                  >
                     {(() => {
-                      const Icon = getEstadoBadge(selectedTraslado.estado).icon;
-                      return <Icon size={14} className="mr-1" />;
+                      const EstadoIcon = getEstadoBadge(selectedTraslado.estado).icon;
+                      return <EstadoIcon size={14} className="mr-1" />;
                     })()}
                     {selectedTraslado.estado}
-                  </Badge>
+                  </Button>
                 </div>
               </div>
 

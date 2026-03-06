@@ -1,5 +1,10 @@
-// RemisionesCompra.tsx
 import { useState, useMemo, useEffect, useRef } from "react";
+import {
+  useNavigate,
+  useLocation,
+  useParams,
+  useOutletContext,
+} from "react-router-dom";
 import {
   FileText,
   Search,
@@ -45,155 +50,83 @@ import {
   SelectValue,
 } from "../../../shared/components/ui/select";
 
-// import { comprasData } from "../../compras/pages/Compras";
+import { comprasData } from "../../../data/compras";
 import { useProductos } from "../../../shared/context/ProductosContext";
+import {
+  remisionesCompraData,
+  type RemisionCompra,
+  type ItemRemisionCompra,
+} from "../../../data/remisiones-compra";
 
-interface RemisionesCompraProps {
-  selectedBodega: string; // ✅ para que no falle el prop en Dashboard
-}
+import type { AppOutletContext } from "../../../layouts/MainLayout";
 
-interface ItemRemision {
-  producto: string;
-  productoNombre: string;
-  numeroLote: string;
-  cantidad: number;
-  fechaVencimiento: string;
-}
-
-interface RemisionCompra {
-  id: number;
-  numeroRemision: string;
-  ordenCompra: string;
-  proveedor: string;
-  fecha: string;
-  estado: "Pendiente" | "Aprobada";
-  items: ItemRemision[];
-  total: number;
-  observaciones: string;
-  bodega: string; // ✅ para filtrar por bodega
-}
-
-// ✅ Mock con bodega (ajusta nombres si los tuyos son distintos)
-const remisionesCompraData: RemisionCompra[] = [
-  {
-    id: 1,
-    numeroRemision: "RC-001",
-    ordenCompra: "OC-001",
-    proveedor: "Alimentos San José S.A.",
-    fecha: "2024-01-15",
-    estado: "Aprobada",
-    bodega: "Bodega Principal",
-    items: [
-      {
-        producto: "PROD-001",
-        productoNombre: "Concentrado Inicial Lechones",
-        numeroLote: "AL-2024-001",
-        cantidad: 100,
-        fechaVencimiento: "2025-06-15",
-      },
-    ],
-    total: 5650.0,
-    observaciones: "Mercancía recibida conforme",
-  },
-  {
-    id: 2,
-    numeroRemision: "RC-002",
-    ordenCompra: "OC-002",
-    proveedor: "Veterinaria La Esperanza",
-    fecha: "2024-01-14",
-    estado: "Aprobada",
-    bodega: "Bodega Secundaria",
-    items: [
-      {
-        producto: "PROD-004",
-        productoNombre: "Vitamina ADE Inyectable",
-        numeroLote: "VIT-2024-034",
-        cantidad: 50,
-        fechaVencimiento: "2026-02-10",
-      },
-    ],
-    total: 2825.0,
-    observaciones: "Ingresado a inventario",
-  },
-  {
-    id: 3,
-    numeroRemision: "RC-003",
-    ordenCompra: "OC-003",
-    proveedor: "Distribuidora Agropecuaria",
-    fecha: "2024-01-16",
-    estado: "Pendiente",
-    bodega: "Bodega Medellín",
-    items: [
-      {
-        producto: "PROD-002",
-        productoNombre: "Concentrado Levante",
-        numeroLote: "AL-2024-012",
-        cantidad: 150,
-        fechaVencimiento: "2025-07-30",
-      },
-    ],
-    total: 9605.0,
-    observaciones: "Esperando recepción",
-  },
-  {
-    id: 4,
-    numeroRemision: "RC-004",
-    ordenCompra: "OC-004",
-    proveedor: "Suplementos Nutricionales",
-    fecha: "2024-01-13",
-    estado: "Aprobada",
-    bodega: "Bodega Principal",
-    items: [
-      {
-        producto: "PROD-012",
-        productoNombre: "Premezcla Minerales",
-        numeroLote: "VIT-2024-113",
-        cantidad: 75,
-        fechaVencimiento: "2026-09-10",
-      },
-    ],
-    total: 3616.0,
-    observaciones: "Procesado completamente",
-  },
-  {
-    id: 5,
-    numeroRemision: "RC-005",
-    ordenCompra: "OC-005",
-    proveedor: "Alimentos San José S.A.",
-    fecha: "2024-01-12",
-    estado: "Pendiente",
-    bodega: "Bodega Medellín",
-    items: [
-      {
-        producto: "PROD-003",
-        productoNombre: "Concentrado Engorde",
-        numeroLote: "AL-2024-023",
-        cantidad: 80,
-        fechaVencimiento: "2025-08-25",
-      },
-    ],
-    total: 1695.0,
-    observaciones: "Pendiente de aprobación",
-  },
-];
-
-export default function RemisionesCompra({ selectedBodega }: RemisionesCompraProps) {
+export default function RemisionesCompra() {
   const { productos } = useProductos();
 
+  const { selectedBodegaNombre } = useOutletContext<AppOutletContext>();
+  const selectedBodega = selectedBodegaNombre;
+
+  // ✅ estados base
   const [searchTerm, setSearchTerm] = useState("");
-  const [remisiones, setRemisiones] = useState<RemisionCompra[]>(remisionesCompraData);
+  const [remisiones, setRemisiones] = useState<RemisionCompra[]>(
+    remisionesCompraData
+  );
 
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-  const [isConfirmEstadoModalOpen, setIsConfirmEstadoModalOpen] = useState(false);
-
-  const [selectedRemision, setSelectedRemision] = useState<RemisionCompra | null>(null);
+  const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [remisionParaCambioEstado, setRemisionParaCambioEstado] =
+    useState<RemisionCompra | null>(null);
   const [nuevoEstado, setNuevoEstado] = useState<"Pendiente" | "Aprobada" | null>(null);
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+
+  // ✅ router + bodega + flags URL
+  const navigate = useNavigate();
+  const location = useLocation();
+  const params = useParams<{ id: string }>();
+
+  const isCrear = location.pathname.endsWith("/remcompras/crear");
+  const isVer = location.pathname.endsWith("/ver");
+  const isEditar = location.pathname.endsWith("/editar");
+  const isEliminar = location.pathname.endsWith("/eliminar");
+
+  const closeToList = () => navigate("/app/remcompras");
+
+  // ✅ remisión seleccionada por URL (:id)
+  const remisionSeleccionada = useMemo(() => {
+    if (!params.id) return null;
+    const id = Number(params.id);
+    if (!Number.isFinite(id)) return null;
+    return remisiones.find((r) => r.id === id) ?? null;
+  }, [remisiones, params.id]);
+
+  // ✅ si entran a /ver, /editar o /eliminar con id inválido → volver
+  useEffect(() => {
+    if (!isVer && !isEditar && !isEliminar) return;
+
+    if (!remisionSeleccionada) {
+      closeToList();
+      return;
+    }
+  }, [isVer, isEditar, isEliminar, remisionSeleccionada]);
+
+  // ✅ navegación (modales por URL)
+  const handleView = (r: RemisionCompra) => {
+    navigate(`/app/remcompras/${r.id}/ver`);
+  };
+
+  const handleCreate = () => {
+    navigate("/app/remcompras/crear");
+  };
+
+  const handleEdit = (r: RemisionCompra) => {
+    navigate(`/app/remcompras/${r.id}/editar`);
+  };
+
+  const handleDelete = (r: RemisionCompra) => {
+    navigate(`/app/remcompras/${r.id}/eliminar`);
+  };
 
   // Form data
   const [formData, setFormData] = useState({
@@ -205,7 +138,7 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
   });
 
   // Items de la remisión
-  const [items, setItems] = useState<ItemRemision[]>([]);
+  const [items, setItems] = useState<ItemRemisionCompra[]>([]);
 
   // Formulario de item actual
   const [currentProducto, setCurrentProducto] = useState("");
@@ -217,7 +150,7 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
   const [codigoBarras, setCodigoBarras] = useState("");
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
-  // ✅ Filtrar por bodega + búsqueda
+  // ✅ filtrar por bodega + búsqueda
   const filteredRemisiones = useMemo(() => {
     const porBodega =
       selectedBodega === "Todas las bodegas"
@@ -226,48 +159,95 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
 
     return porBodega.filter(
       (remision) =>
-        remision.numeroRemision.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        remision.ordenCompra.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        remision.numeroRemision
+          .toLowerCase()
+          .includes(searchTerm.toLowerCase()) ||
+        remision.ordenCompra
+          .toLowerCase()
+          .includes(searchTerm.toLowerCase()) ||
         remision.proveedor.toLowerCase().includes(searchTerm.toLowerCase()) ||
         remision.estado.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        remision.items.toString().includes(searchTerm)
+        String(remision.items.length).includes(searchTerm)
     );
   }, [remisiones, searchTerm, selectedBodega]);
 
-  // Paginación
+  // ✅ resetear a página 1 cuando cambia filtro
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedBodega]);
+
+  // ✅ paginación
   const totalPages = Math.ceil(filteredRemisiones.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const currentRemisiones = filteredRemisiones.slice(startIndex, endIndex);
 
-  // Resetear a página 1 cuando cambia el filtro
+  // ✅ resetear formulario
+  const resetForm = () => {
+    setFormData({
+      numeroRemision: "",
+      ordenCompra: "",
+      proveedor: "",
+      fecha: "",
+      observaciones: "",
+    });
+    setItems([]);
+    setCurrentProducto("");
+    setCurrentNumeroLote("");
+    setCurrentCantidad("");
+    setCurrentFechaVencimiento("");
+    setCodigoBarras("");
+  };
+
+  // ✅ al entrar a /crear, limpiar el formulario y generar número
   useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, selectedBodega]);
+    if (!isCrear) return;
 
-  // Generar número de remisión automático al abrir el modal de crear
+    resetForm();
+
+    const ultimaRemision =
+      remisiones.length > 0
+        ? remisiones.reduce((max, r) => {
+          const num = parseInt(r.numeroRemision.split("-")[1]);
+          return num > max ? num : max;
+        }, 0)
+        : 0;
+
+    const siguienteNumero = ultimaRemision + 1;
+    const nuevoNumeroRemision = `RC-${String(siguienteNumero).padStart(3, "0")}`;
+
+    setFormData((prev) => ({
+      ...prev,
+      numeroRemision: nuevoNumeroRemision,
+      fecha: new Date().toISOString().split("T")[0],
+    }));
+  }, [isCrear, remisiones]);
+
+  // ✅ al entrar a /editar, precargar formulario
   useEffect(() => {
-    if (isCreateModalOpen) {
-      const ultimaRemision =
-        remisiones.length > 0
-          ? remisiones.reduce((max, r) => {
-            const num = parseInt(r.numeroRemision.split("-")[1]);
-            return num > max ? num : max;
-          }, 0)
-          : 0;
+    if (!isEditar) return;
+    if (!remisionSeleccionada) return;
 
-      const siguienteNumero = ultimaRemision + 1;
-      const nuevoNumeroRemision = `RC-${String(siguienteNumero).padStart(3, "0")}`;
+    setFormData({
+      numeroRemision: remisionSeleccionada.numeroRemision,
+      ordenCompra: remisionSeleccionada.ordenCompra,
+      proveedor: remisionSeleccionada.proveedor,
+      fecha: remisionSeleccionada.fecha,
+      observaciones: remisionSeleccionada.observaciones,
+    });
 
-      setFormData((prev) => ({
-        ...prev,
-        numeroRemision: nuevoNumeroRemision,
-      }));
-    }
-  }, [isCreateModalOpen, remisiones]);
+    setItems(remisionSeleccionada.items);
+    setCurrentProducto("");
+    setCurrentNumeroLote("");
+    setCurrentCantidad("");
+    setCurrentFechaVencimiento("");
+    setCodigoBarras("");
+  }, [isEditar, remisionSeleccionada]);
 
   const handleOrdenCompraChange = (numeroOrden: string) => {
-    const ordenSeleccionada = comprasData.find((c: any) => c.numeroOrden === numeroOrden);
+    const ordenSeleccionada = comprasData.find(
+      (c) => c.numeroOrden === numeroOrden
+    );
 
     if (ordenSeleccionada) {
       setFormData((prev) => ({
@@ -278,17 +258,26 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
     }
   };
 
-  // Calcular estadísticas (sobre remisiones filtradas por bodega)
+  // ✅ calcular estadísticas
   const stats = useMemo(() => {
     const totalRemisiones = filteredRemisiones.length;
-    const pendientes = filteredRemisiones.filter((r) => r.estado === "Pendiente").length;
-    const aprobadas = filteredRemisiones.filter((r) => r.estado === "Aprobada").length;
+    const pendientes = filteredRemisiones.filter(
+      (r) => r.estado === "Pendiente"
+    ).length;
+    const aprobadas = filteredRemisiones.filter(
+      (r) => r.estado === "Aprobada"
+    ).length;
 
     return { totalRemisiones, pendientes, aprobadas };
   }, [filteredRemisiones]);
 
   const handleAddItem = () => {
-    if (!currentProducto || !currentNumeroLote || !currentCantidad || !currentFechaVencimiento) {
+    if (
+      !currentProducto ||
+      !currentNumeroLote ||
+      !currentCantidad ||
+      !currentFechaVencimiento
+    ) {
       toast.error("Por favor completa todos los campos del producto");
       return;
     }
@@ -305,7 +294,7 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
       return;
     }
 
-    const nuevoItem: ItemRemision = {
+    const nuevoItem: ItemRemisionCompra = {
       producto: currentProducto,
       productoNombre: producto.nombre,
       numeroLote: currentNumeroLote,
@@ -328,8 +317,14 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
     toast.success("Producto eliminado de la remisión");
   };
 
-  const handleCreate = () => {
-    if (!formData.numeroRemision || !formData.ordenCompra || !formData.proveedor || !formData.fecha) {
+  // ✅ crear remisión
+  const confirmCreate = () => {
+    if (
+      !formData.numeroRemision ||
+      !formData.ordenCompra ||
+      !formData.proveedor ||
+      !formData.fecha
+    ) {
       toast.error("Por favor completa todos los campos obligatorios");
       return;
     }
@@ -340,7 +335,7 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
     }
 
     const nuevaRemision: RemisionCompra = {
-      id: remisiones.length + 1,
+      id: remisiones.length > 0 ? Math.max(...remisiones.map((r) => r.id)) + 1 : 1,
       numeroRemision: formData.numeroRemision,
       ordenCompra: formData.ordenCompra,
       proveedor: formData.proveedor,
@@ -349,17 +344,27 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
       items,
       total: 0,
       observaciones: formData.observaciones,
-      bodega: selectedBodega === "Todas las bodegas" ? "Bodega Principal" : selectedBodega, // ✅ default si estás en "Todas"
+      bodega:
+        selectedBodega === "Todas las bodegas"
+          ? "Bodega Principal"
+          : selectedBodega,
     };
 
     setRemisiones([...remisiones, nuevaRemision]);
-    toast.success("Remisión de compra creada exitosamente");
-    setIsCreateModalOpen(false);
-    resetForm();
+    closeToList();
+    setShowSuccessModal(true);
   };
 
-  const handleEdit = () => {
-    if (!selectedRemision || !formData.numeroRemision || !formData.proveedor) {
+  // ✅ editar remisión
+  const confirmEdit = () => {
+    if (!remisionSeleccionada) return;
+
+    if (
+      !formData.numeroRemision ||
+      !formData.ordenCompra ||
+      !formData.proveedor ||
+      !formData.fecha
+    ) {
       toast.error("Por favor completa todos los campos obligatorios");
       return;
     }
@@ -371,7 +376,7 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
 
     setRemisiones(
       remisiones.map((remision) =>
-        remision.id === selectedRemision.id
+        remision.id === remisionSeleccionada.id
           ? {
             ...remision,
             numeroRemision: formData.numeroRemision,
@@ -380,33 +385,57 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
             fecha: formData.fecha,
             items,
             observaciones: formData.observaciones,
-            // bodega: remision.bodega (no cambia aquí)
           }
           : remision
       )
     );
 
     toast.success("Remisión de compra actualizada exitosamente");
-    setIsEditModalOpen(false);
-    setSelectedRemision(null);
-    resetForm();
+    closeToList();
   };
 
-  const handleDelete = () => {
-    if (!selectedRemision) return;
+  // ✅ eliminar remisión
+  const confirmDelete = () => {
+    if (!remisionSeleccionada) return;
 
-    setRemisiones(remisiones.filter((remision) => remision.id !== selectedRemision.id));
+    setRemisiones(
+      remisiones.filter((remision) => remision.id !== remisionSeleccionada.id)
+    );
+
     toast.success("Remisión de compra eliminada exitosamente");
-    setIsDeleteModalOpen(false);
-    setSelectedRemision(null);
+    closeToList();
   };
 
   const handleConfirmEstado = () => {
-    if (!selectedRemision || !nuevoEstado) return;
+    if (!remisionParaCambioEstado || !nuevoEstado) return;
+
+    // ✅ Si pasa a aprobada, aquí ejecutas la lógica de inventario
+    if (nuevoEstado === "Aprobada") {
+      try {
+        remisionParaCambioEstado.items.forEach((item) => {
+          // Aquí debes conectar tu lógica real de existencias.
+          // Ejemplo conceptual:
+          // actualizarExistencia(item.producto, item.cantidad, remisionParaCambioEstado.bodega, item.numeroLote, item.fechaVencimiento);
+
+          console.log("Subir a existencias:", {
+            producto: item.producto,
+            cantidad: item.cantidad,
+            bodega: remisionParaCambioEstado.bodega,
+            lote: item.numeroLote,
+            fechaVencimiento: item.fechaVencimiento,
+          });
+        });
+      } catch (error) {
+        toast.error("No fue posible actualizar existencias");
+        return;
+      }
+    }
 
     setRemisiones(
       remisiones.map((remision) =>
-        remision.id === selectedRemision.id ? { ...remision, estado: nuevoEstado } : remision
+        remision.id === remisionParaCambioEstado.id
+          ? { ...remision, estado: nuevoEstado }
+          : remision
       )
     );
 
@@ -416,48 +445,13 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
       toast.success("Estado de remisión actualizado exitosamente");
     }
 
-    setIsConfirmEstadoModalOpen(false);
-    setSelectedRemision(null);
+    setShowConfirmEstadoModal(false);
+    setRemisionParaCambioEstado(null);
     setNuevoEstado(null);
   };
 
-  const openEditModal = (remision: RemisionCompra) => {
-    setSelectedRemision(remision);
-    setFormData({
-      numeroRemision: remision.numeroRemision,
-      ordenCompra: remision.ordenCompra,
-      proveedor: remision.proveedor,
-      fecha: remision.fecha,
-      observaciones: remision.observaciones,
-    });
-    setItems(remision.items);
-    setIsEditModalOpen(true);
-  };
-
-  const openDeleteModal = (remision: RemisionCompra) => {
-    setSelectedRemision(remision);
-    setIsDeleteModalOpen(true);
-  };
-
-  const openViewModal = (remision: RemisionCompra) => {
-    setSelectedRemision(remision);
-    setIsViewModalOpen(true);
-  };
-
-  const resetForm = () => {
-    setFormData({
-      numeroRemision: "",
-      ordenCompra: "",
-      proveedor: "",
-      fecha: "",
-      observaciones: "",
-    });
-    setItems([]);
-    setCurrentProducto("");
-    setCurrentNumeroLote("");
-    setCurrentCantidad("");
-    setCurrentFechaVencimiento("");
-    setCodigoBarras("");
+  const handleSuccessModalClose = () => {
+    setShowSuccessModal(false);
   };
 
   const handleBarcodeKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -476,7 +470,9 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
         setCodigoBarras("");
 
         setTimeout(() => {
-          const numeroLoteInput = document.getElementById("numeroLote") as HTMLInputElement;
+          const numeroLoteInput = document.getElementById(
+            "numeroLote"
+          ) as HTMLInputElement;
           numeroLoteInput?.focus();
         }, 100);
       } else {
@@ -517,12 +513,17 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
         ...rows.map((row) => row.map((cell) => `"${cell}"`).join(",")),
       ].join("\n");
 
-      const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8;" });
+      const blob = new Blob(["\ufeff" + csvContent], {
+        type: "text/csv;charset=utf-8;",
+      });
       const link = document.createElement("a");
       const url = URL.createObjectURL(blob);
 
       link.setAttribute("href", url);
-      link.setAttribute("download", `remisiones_compra_${new Date().toISOString().split("T")[0]}.csv`);
+      link.setAttribute(
+        "download",
+        `remisiones_compra_${new Date().toISOString().split("T")[0]}.csv`
+      );
       link.style.visibility = "hidden";
 
       document.body.appendChild(link);
@@ -563,7 +564,9 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
 
       const csvContent = csvLines.join("\n");
 
-      const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8;" });
+      const blob = new Blob(["\ufeff" + csvContent], {
+        type: "text/csv;charset=utf-8;",
+      });
       const link = document.createElement("a");
       const url = URL.createObjectURL(blob);
 
@@ -578,7 +581,9 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
       link.click();
       document.body.removeChild(link);
 
-      toast.success(`Remisión ${remision.numeroRemision} descargada exitosamente`);
+      toast.success(
+        `Remisión ${remision.numeroRemision} descargada exitosamente`
+      );
     } catch (error) {
       toast.error("Error al descargar la remisión");
       console.error("Error al descargar:", error);
@@ -587,8 +592,14 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
 
   const getEstadoBadge = (estado: string) => {
     const badges = {
-      Pendiente: { class: "bg-yellow-100 text-yellow-800 border-yellow-200", icon: Clock },
-      Aprobada: { class: "bg-blue-100 text-blue-800 border-blue-200", icon: CheckCircle },
+      Pendiente: {
+        class: "bg-yellow-100 text-yellow-800 border-yellow-200",
+        icon: Clock,
+      },
+      Aprobada: {
+        class: "bg-blue-100 text-blue-800 border-blue-200",
+        icon: CheckCircle,
+      },
     };
     return badges[estado as keyof typeof badges] || badges.Pendiente;
   };
@@ -596,7 +607,10 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
   const getSiguienteEstado = (
     estadoActual: RemisionCompra["estado"]
   ): RemisionCompra["estado"] | null => {
-    const flujoEstados: Record<RemisionCompra["estado"], RemisionCompra["estado"] | null> = {
+    const flujoEstados: Record<
+      RemisionCompra["estado"],
+      RemisionCompra["estado"] | null
+    > = {
       Pendiente: "Aprobada",
       Aprobada: null,
     };
@@ -612,11 +626,10 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
       return;
     }
 
-    setSelectedRemision(remision);
+    setRemisionParaCambioEstado(remision);
     setNuevoEstado(siguienteEstado);
-    setIsConfirmEstadoModalOpen(true);
+    setShowConfirmEstadoModal(true);
   };
-
 
   return (
     <div className="space-y-6">
@@ -674,7 +687,7 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
             </Button>
 
             <Button
-              onClick={() => setIsCreateModalOpen(true)}
+              onClick={handleCreate}
               className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto"
             >
               <Plus size={20} className="mr-2" />
@@ -696,7 +709,7 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
                 <TableHead>Proveedor</TableHead>
                 <TableHead>Fecha</TableHead>
                 <TableHead>Items</TableHead>
-                <TableHead>Estado</TableHead>
+                <TableHead className="text-center">Estado</TableHead>
                 <TableHead className="text-center">Acciones</TableHead>
               </TableRow>
             </TableHeader>
@@ -718,25 +731,25 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
                     <TableCell>{remision.proveedor}</TableCell>
                     <TableCell>{new Date(remision.fecha).toLocaleDateString("es-CO")}</TableCell>
                     <TableCell>{remision.items.length}</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={
-                          remision.estado === "Pendiente"
-                            ? "bg-yellow-100 text-yellow-800 border-yellow-200 cursor-pointer hover:bg-yellow-200"
-                            : "bg-blue-100 text-blue-800 border-blue-200"
-                        }
+                    <TableCell className="text-center">
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => handleEstadoClick(remision)}
+                        className={`h-7 ${remision.estado === "Aprobada"
+                          ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
+                          : "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                          }`}
                       >
                         {remision.estado}
-                      </Badge>
+                      </Button>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-center gap-2">
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => openViewModal(remision)}
+                          onClick={() => handleView(remision)}
                           className="hover:bg-blue-50"
                           title="Ver detalles"
                         >
@@ -754,7 +767,7 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => openEditModal(remision)}
+                          onClick={() => handleEdit(remision)}
                           className="hover:bg-yellow-50"
                           title="Editar"
                         >
@@ -763,7 +776,7 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => openDeleteModal(remision)}
+                          onClick={() => handleDelete(remision)}
                           className="hover:bg-red-50"
                           title="Eliminar"
                         >
@@ -827,11 +840,23 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
       </div>
 
       {/* Modal Crear */}
-      <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto" aria-describedby="create-remision-compra-description">
+      <Dialog
+        open={isCrear}
+        onOpenChange={(open) => {
+          if (!open) closeToList();
+        }}
+      >
+        <DialogContent
+          className="max-w-6xl max-h-[90vh] overflow-y-auto"
+          aria-describedby="create-remision-compra-description"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>Nueva Remisión de Compra</DialogTitle>
-            <DialogDescription id="create-remision-compra-description" className="sr-only">
+            <DialogDescription
+              id="create-remision-compra-description"
+              className="sr-only"
+            >
               Formulario para crear una nueva remisión de compra
             </DialogDescription>
           </DialogHeader>
@@ -840,18 +865,29 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="numeroRemision">Número de Remisión *</Label>
-                <Input id="numeroRemision" value={formData.numeroRemision} readOnly className="bg-gray-100 cursor-not-allowed" />
+                <Input
+                  id="numeroRemision"
+                  value={formData.numeroRemision}
+                  readOnly
+                  className="bg-gray-100 cursor-not-allowed"
+                />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="ordenCompra">Orden de Compra *</Label>
-                <Select value={formData.ordenCompra} onValueChange={handleOrdenCompraChange}>
+                <Select
+                  value={formData.ordenCompra}
+                  onValueChange={handleOrdenCompraChange}
+                >
                   <SelectTrigger id="ordenCompra">
                     <SelectValue placeholder="Seleccionar orden de compra" />
                   </SelectTrigger>
                   <SelectContent>
-                    {comprasData.map((compra: any) => (
-                      <SelectItem key={compra.numeroOrden} value={compra.numeroOrden}>
+                    {comprasData.map((compra) => (
+                      <SelectItem
+                        key={compra.numeroOrden}
+                        value={compra.numeroOrden}
+                      >
                         {compra.numeroOrden} - {compra.proveedor}
                       </SelectItem>
                     ))}
@@ -861,7 +897,12 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
 
               <div className="space-y-2">
                 <Label htmlFor="proveedor">Proveedor *</Label>
-                <Input id="proveedor" value={formData.proveedor} readOnly className="bg-gray-100 cursor-not-allowed" />
+                <Input
+                  id="proveedor"
+                  value={formData.proveedor}
+                  readOnly
+                  className="bg-gray-100 cursor-not-allowed"
+                />
               </div>
 
               <div className="space-y-2">
@@ -870,7 +911,9 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
                   id="fecha"
                   type="date"
                   value={formData.fecha}
-                  onChange={(e) => setFormData({ ...formData, fecha: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, fecha: e.target.value })
+                  }
                 />
               </div>
 
@@ -879,7 +922,9 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
                 <Input
                   id="observaciones"
                   value={formData.observaciones}
-                  onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, observaciones: e.target.value })
+                  }
                   placeholder="Notas adicionales..."
                 />
               </div>
@@ -910,10 +955,14 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
                     placeholder="Escanee el código de barras del producto..."
                     className="pr-10 bg-white border-blue-300 focus:border-blue-500"
                   />
-                  <Barcode className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-400" size={20} />
+                  <Barcode
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-400"
+                    size={20}
+                  />
                 </div>
                 <p className="text-xs text-blue-700 mt-2">
-                  Escanee el código de barras para seleccionar el producto automáticamente
+                  Escanee el código de barras para seleccionar el producto
+                  automáticamente
                 </p>
               </div>
 
@@ -921,16 +970,21 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="producto">Producto *</Label>
-                    <Select value={currentProducto} onValueChange={setCurrentProducto}>
+                    <Select
+                      value={currentProducto}
+                      onValueChange={(value: string) => setCurrentProducto(value)}
+                    >
                       <SelectTrigger id="producto">
                         <SelectValue placeholder="Seleccionar producto" />
                       </SelectTrigger>
                       <SelectContent>
-                        {productos.filter((p: any) => p.estado).map((producto: any) => (
-                          <SelectItem key={producto.id} value={producto.id}>
-                            {producto.nombre}
-                          </SelectItem>
-                        ))}
+                        {productos
+                          .filter((p: any) => p.estado)
+                          .map((producto: any) => (
+                            <SelectItem key={producto.id} value={producto.id}>
+                              {producto.nombre}
+                            </SelectItem>
+                          ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -958,7 +1012,9 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="fechaVencimiento">Fecha de Vencimiento *</Label>
+                    <Label htmlFor="fechaVencimiento">
+                      Fecha de Vencimiento *
+                    </Label>
                     <Input
                       id="fechaVencimiento"
                       type="date"
@@ -968,7 +1024,11 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
                   </div>
                 </div>
 
-                <Button type="button" onClick={handleAddItem} className="bg-green-600 hover:bg-green-700 w-full">
+                <Button
+                  type="button"
+                  onClick={handleAddItem}
+                  className="bg-green-600 hover:bg-green-700 w-full"
+                >
                   <Plus size={16} className="mr-2" />
                   Agregar Producto
                 </Button>
@@ -992,9 +1052,18 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
                           <TableCell>{item.productoNombre}</TableCell>
                           <TableCell>{item.numeroLote}</TableCell>
                           <TableCell>{item.cantidad}</TableCell>
-                          <TableCell>{new Date(item.fechaVencimiento).toLocaleDateString("es-CO")}</TableCell>
                           <TableCell>
-                            <Button variant="ghost" size="sm" onClick={() => handleRemoveItem(index)} className="hover:bg-red-50">
+                            {new Date(item.fechaVencimiento).toLocaleDateString(
+                              "es-CO"
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveItem(index)}
+                              className="hover:bg-red-50"
+                            >
                               <X size={16} className="text-red-600" />
                             </Button>
                           </TableCell>
@@ -1007,17 +1076,28 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
                 <div className="text-center py-8 text-gray-500 border rounded-lg border-dashed">
                   <Package size={48} className="mx-auto mb-2 text-gray-300" />
                   <p>No hay productos agregados</p>
-                  <p className="text-sm">Agrega productos usando el formulario anterior</p>
+                  <p className="text-sm">
+                    Agrega productos usando el formulario anterior
+                  </p>
                 </div>
               )}
             </div>
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setIsCreateModalOpen(false); resetForm(); }}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                closeToList();
+                resetForm();
+              }}
+            >
               Cancelar
             </Button>
-            <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
+            <Button
+              onClick={confirmCreate}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
               Crear Remisión
             </Button>
           </DialogFooter>
@@ -1025,11 +1105,23 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
       </Dialog>
 
       {/* Modal Editar */}
-      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto" aria-describedby="edit-remision-compra-description">
+      <Dialog
+        open={isEditar}
+        onOpenChange={(open) => {
+          if (!open) closeToList();
+        }}
+      >
+        <DialogContent
+          className="max-w-6xl max-h-[90vh] overflow-y-auto"
+          aria-describedby="edit-remision-compra-description"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>Editar Remisión de Compra</DialogTitle>
-            <DialogDescription id="edit-remision-compra-description" className="sr-only">
+            <DialogDescription
+              id="edit-remision-compra-description"
+              className="sr-only"
+            >
               Formulario para editar la remisión de compra
             </DialogDescription>
           </DialogHeader>
@@ -1041,7 +1133,9 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
                 <Input
                   id="edit-numeroRemision"
                   value={formData.numeroRemision}
-                  onChange={(e) => setFormData({ ...formData, numeroRemision: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, numeroRemision: e.target.value })
+                  }
                 />
               </div>
 
@@ -1050,7 +1144,9 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
                 <Input
                   id="edit-ordenCompra"
                   value={formData.ordenCompra}
-                  onChange={(e) => setFormData({ ...formData, ordenCompra: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, ordenCompra: e.target.value })
+                  }
                 />
               </div>
 
@@ -1059,7 +1155,9 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
                 <Input
                   id="edit-proveedor"
                   value={formData.proveedor}
-                  onChange={(e) => setFormData({ ...formData, proveedor: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, proveedor: e.target.value })
+                  }
                 />
               </div>
 
@@ -1069,7 +1167,9 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
                   id="edit-fecha"
                   type="date"
                   value={formData.fecha}
-                  onChange={(e) => setFormData({ ...formData, fecha: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, fecha: e.target.value })
+                  }
                 />
               </div>
 
@@ -1078,7 +1178,9 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
                 <Input
                   id="edit-observaciones"
                   value={formData.observaciones}
-                  onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, observaciones: e.target.value })
+                  }
                 />
               </div>
             </div>
@@ -1093,16 +1195,21 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="edit-producto">Producto *</Label>
-                    <Select value={currentProducto} onValueChange={setCurrentProducto}>
+                    <Select
+                      value={currentProducto}
+                      onValueChange={(value: string) => setCurrentProducto(value)}
+                    >
                       <SelectTrigger id="edit-producto">
                         <SelectValue placeholder="Seleccionar producto" />
                       </SelectTrigger>
                       <SelectContent>
-                        {productos.filter((p: any) => p.estado).map((producto: any) => (
-                          <SelectItem key={producto.id} value={producto.id}>
-                            {producto.nombre}
-                          </SelectItem>
-                        ))}
+                        {productos
+                          .filter((p: any) => p.estado)
+                          .map((producto: any) => (
+                            <SelectItem key={producto.id} value={producto.id}>
+                              {producto.nombre}
+                            </SelectItem>
+                          ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1130,7 +1237,9 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="edit-fechaVencimiento">Fecha de Vencimiento *</Label>
+                    <Label htmlFor="edit-fechaVencimiento">
+                      Fecha de Vencimiento *
+                    </Label>
                     <Input
                       id="edit-fechaVencimiento"
                       type="date"
@@ -1140,7 +1249,11 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
                   </div>
                 </div>
 
-                <Button type="button" onClick={handleAddItem} className="bg-green-600 hover:bg-green-700 w-full">
+                <Button
+                  type="button"
+                  onClick={handleAddItem}
+                  className="bg-green-600 hover:bg-green-700 w-full"
+                >
                   <Plus size={16} className="mr-2" />
                   Agregar Producto
                 </Button>
@@ -1164,9 +1277,18 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
                           <TableCell>{item.productoNombre}</TableCell>
                           <TableCell>{item.numeroLote}</TableCell>
                           <TableCell>{item.cantidad}</TableCell>
-                          <TableCell>{new Date(item.fechaVencimiento).toLocaleDateString("es-CO")}</TableCell>
                           <TableCell>
-                            <Button variant="ghost" size="sm" onClick={() => handleRemoveItem(index)} className="hover:bg-red-50">
+                            {new Date(item.fechaVencimiento).toLocaleDateString(
+                              "es-CO"
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveItem(index)}
+                              className="hover:bg-red-50"
+                            >
                               <X size={16} className="text-red-600" />
                             </Button>
                           </TableCell>
@@ -1179,17 +1301,28 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
                 <div className="text-center py-8 text-gray-500 border rounded-lg border-dashed">
                   <Package size={48} className="mx-auto mb-2 text-gray-300" />
                   <p>No hay productos agregados</p>
-                  <p className="text-sm">Agrega productos usando el formulario anterior</p>
+                  <p className="text-sm">
+                    Agrega productos usando el formulario anterior
+                  </p>
                 </div>
               )}
             </div>
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setIsEditModalOpen(false); setSelectedRemision(null); resetForm(); }}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                closeToList();
+                resetForm();
+              }}
+            >
               Cancelar
             </Button>
-            <Button onClick={handleEdit} className="bg-blue-600 hover:bg-blue-700">
+            <Button
+              onClick={confirmEdit}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
               Guardar Cambios
             </Button>
           </DialogFooter>
@@ -1197,43 +1330,73 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
       </Dialog>
 
       {/* Modal Ver */}
-      <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
-        <DialogContent className="max-w-3xl" aria-describedby="view-remision-compra-description">
+      <Dialog
+        open={isVer}
+        onOpenChange={(open) => {
+          if (!open) closeToList();
+        }}
+      >
+        <DialogContent
+          className="max-w-3xl"
+          aria-describedby="view-remision-compra-description"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>Detalle de Remisión de Compra</DialogTitle>
-            <DialogDescription id="view-remision-compra-description" className="sr-only">
+            <DialogDescription
+              id="view-remision-compra-description"
+              className="sr-only"
+            >
               Detalles completos de la remisión de compra
             </DialogDescription>
           </DialogHeader>
 
-          {selectedRemision && (
+          {remisionSeleccionada && (
             <div className="space-y-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-gray-600">Número de Remisión</p>
-                  <p className="font-semibold">{selectedRemision.numeroRemision}</p>
+                  <p className="font-semibold">
+                    {remisionSeleccionada.numeroRemision}
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Orden de Compra</p>
-                  <p className="font-semibold">{selectedRemision.ordenCompra}</p>
+                  <p className="font-semibold">
+                    {remisionSeleccionada.ordenCompra}
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Proveedor</p>
-                  <p className="font-semibold">{selectedRemision.proveedor}</p>
+                  <p className="font-semibold">
+                    {remisionSeleccionada.proveedor}
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Fecha</p>
-                  <p className="font-semibold">{new Date(selectedRemision.fecha).toLocaleDateString("es-CO")}</p>
+                  <p className="font-semibold">
+                    {new Date(remisionSeleccionada.fecha).toLocaleDateString("es-CO")}
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Bodega</p>
-                  <p className="font-semibold">{selectedRemision.bodega}</p>
+                  <p className="font-semibold">{remisionSeleccionada.bodega}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Estado</p>
-                  <Badge variant="outline" className={getEstadoBadge(selectedRemision.estado).class}>
-                    {selectedRemision.estado}
-                  </Badge>
+                  <div className="mt-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleEstadoClick(remisionSeleccionada)}
+                      className={`h-7 px-3 ${remisionSeleccionada.estado === "Aprobada"
+                        ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
+                        : "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                        }`}
+                    >
+                      {remisionSeleccionada.estado}
+                    </Button>
+                  </div>
                 </div>
               </div>
 
@@ -1253,12 +1416,16 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {selectedRemision.items.map((item, index) => (
+                      {remisionSeleccionada.items.map((item, index) => (
                         <TableRow key={index}>
                           <TableCell>{item.productoNombre}</TableCell>
                           <TableCell>{item.numeroLote}</TableCell>
                           <TableCell>{item.cantidad}</TableCell>
-                          <TableCell>{new Date(item.fechaVencimiento).toLocaleDateString("es-CO")}</TableCell>
+                          <TableCell>
+                            {new Date(item.fechaVencimiento).toLocaleDateString(
+                              "es-CO"
+                            )}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -1266,17 +1433,17 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
                 </div>
               </div>
 
-              {selectedRemision.observaciones && (
+              {remisionSeleccionada.observaciones && (
                 <div className="border-t pt-4">
                   <p className="text-sm text-gray-600">Observaciones</p>
-                  <p className="mt-1">{selectedRemision.observaciones}</p>
+                  <p className="mt-1">{remisionSeleccionada.observaciones}</p>
                 </div>
               )}
             </div>
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsViewModalOpen(false)}>
+            <Button variant="outline" onClick={closeToList}>
               Cerrar
             </Button>
           </DialogFooter>
@@ -1284,8 +1451,15 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
       </Dialog>
 
       {/* Modal Eliminar */}
-      <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
-        <DialogContent aria-describedby="delete-remision-compra-description">
+      <Dialog
+        open={isEliminar}
+        onOpenChange={(open) => {
+          if (!open) closeToList();
+        }}
+      >
+        <DialogContent 
+        onInteractOutside={(e) => e.preventDefault()}
+        aria-describedby="delete-remision-compra-description">
           <DialogHeader>
             <DialogTitle>Eliminar Remisión de Compra</DialogTitle>
             <DialogDescription id="delete-remision-compra-description">
@@ -1293,22 +1467,31 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
             </DialogDescription>
           </DialogHeader>
 
-          {selectedRemision && (
+          {remisionSeleccionada && (
             <div className="py-4">
               <p className="text-sm text-gray-600">
-                Remisión: <span className="font-semibold">{selectedRemision.numeroRemision}</span>
+                Remisión:{" "}
+                <span className="font-semibold">
+                  {remisionSeleccionada.numeroRemision}
+                </span>
               </p>
               <p className="text-sm text-gray-600">
-                Proveedor: <span className="font-semibold">{selectedRemision.proveedor}</span>
+                Proveedor:{" "}
+                <span className="font-semibold">
+                  {remisionSeleccionada.proveedor}
+                </span>
               </p>
             </div>
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setIsDeleteModalOpen(false); setSelectedRemision(null); }}>
+            <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
-            <Button onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
+            <Button
+              onClick={confirmDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
               Eliminar
             </Button>
           </DialogFooter>
@@ -1316,8 +1499,13 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
       </Dialog>
 
       {/* Modal Confirm Estado */}
-      <Dialog open={isConfirmEstadoModalOpen} onOpenChange={setIsConfirmEstadoModalOpen}>
-        <DialogContent aria-describedby="confirm-estado-description">
+      <Dialog
+        open={showConfirmEstadoModal}
+        onOpenChange={setShowConfirmEstadoModal}
+      >
+        <DialogContent 
+        onInteractOutside={(e) => e.preventDefault()}
+        aria-describedby="confirm-estado-description">
           <DialogHeader>
             <DialogTitle>Cambiar Estado de Remisión</DialogTitle>
             <DialogDescription id="confirm-estado-description">
@@ -1327,20 +1515,29 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
             </DialogDescription>
           </DialogHeader>
 
-          {selectedRemision && nuevoEstado && (
+          {remisionParaCambioEstado && nuevoEstado && (
             <div className="py-4">
               <p className="text-sm text-gray-600">
-                Remisión: <span className="font-semibold">{selectedRemision.numeroRemision}</span>
+                Remisión:{" "}
+                <span className="font-semibold">
+                  {remisionParaCambioEstado.numeroRemision}
+                </span>
               </p>
               <p className="text-sm text-gray-600">
                 Estado actual:{" "}
-                <Badge variant="outline" className={getEstadoBadge(selectedRemision.estado).class}>
-                  {selectedRemision.estado}
+                <Badge
+                  variant="outline"
+                  className={getEstadoBadge(remisionParaCambioEstado.estado).class}
+                >
+                  {remisionParaCambioEstado.estado}
                 </Badge>
               </p>
               <p className="text-sm text-gray-600 mt-2">
                 Nuevo estado:{" "}
-                <Badge variant="outline" className={getEstadoBadge(nuevoEstado).class}>
+                <Badge
+                  variant="outline"
+                  className={getEstadoBadge(nuevoEstado).class}
+                >
                   {nuevoEstado}
                 </Badge>
               </p>
@@ -1348,13 +1545,67 @@ export default function RemisionesCompra({ selectedBodega }: RemisionesCompraPro
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setIsConfirmEstadoModalOpen(false); setSelectedRemision(null); setNuevoEstado(null); }}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowConfirmEstadoModal(false);
+                setRemisionParaCambioEstado(null);
+                setNuevoEstado(null);
+              }}
+            >
               Cancelar
             </Button>
-            <Button onClick={handleConfirmEstado} className="bg-blue-600 hover:bg-blue-700">
+            <Button
+              onClick={handleConfirmEstado}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
               Confirmar
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Éxito */}
+      <Dialog
+        open={showSuccessModal}
+        onOpenChange={handleSuccessModalClose}
+      >
+        <DialogContent
+          className="max-w-md"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+          aria-describedby="success-remision-description"
+        >
+          <button
+            onClick={handleSuccessModalClose}
+            className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground"
+          >
+            <X className="h-4 w-4" />
+            <span className="sr-only">Cerrar</span>
+          </button>
+          <DialogHeader className="sr-only">
+            <DialogTitle>Registro Exitoso</DialogTitle>
+            <DialogDescription id="success-remision-description">
+              La remisión de compra se ha creado correctamente
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center justify-center py-6">
+            <div className="rounded-full bg-green-100 p-3 mb-4">
+              <CheckCircle className="h-12 w-12 text-green-600" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              ¡Remisión Creada!
+            </h3>
+            <p className="text-sm text-gray-600 text-center mb-6">
+              La remisión de compra se ha registrado correctamente en el sistema
+            </p>
+            <Button
+              onClick={() => setShowSuccessModal(false)}
+              className="w-full bg-green-600 hover:bg-green-700"
+            >
+              Aceptar
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

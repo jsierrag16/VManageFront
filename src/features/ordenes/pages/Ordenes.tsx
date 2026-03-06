@@ -27,7 +27,7 @@ import { toast } from 'sonner';
 import { clientesData as initialClientesData, Cliente } from '../../../data/clientes';
 import { productosData, Producto } from '../../../data/productos';
 import { bodegasData } from '../../../data/bodegas';
-import { cotizacionesData } from '../../cotizaciones/pages/Cotizaciones';
+import { cotizacionesData } from '../../../data/cotizaciones';
 
 interface Orden {
   id: number;

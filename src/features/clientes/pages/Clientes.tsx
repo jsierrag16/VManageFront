@@ -30,57 +30,87 @@ import { Badge } from '../../../shared/components/ui/badge';
 import { Textarea } from '../../../shared/components/ui/textarea';
 import { toast } from 'sonner';
 import { clientesData as initialClientesData, Cliente } from '../../../data/clientes';
-import { usePermisos } from '../../../shared/hooks/usePermisos';
 import { departamentosColombia } from '../../../data/colombia';
+import {
+  useNavigate,
+  useLocation,
+  useParams,
+  useOutletContext,
+} from "react-router-dom";
+import type { AppOutletContext } from "../../../layouts/MainLayout";
 
-interface ClientesProps {
-  triggerCreate?: number;
-  selectedBodega?: string;
-}
+export default function Clientes() {
+  // ✅ router + bodega + flags URL
+  const navigate = useNavigate();
+  const location = useLocation();
+  const params = useParams<{ id: string }>();
 
-export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Principal' }: ClientesProps) {
-  const { clientes: permisos } = usePermisos();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [estadoFilter, setEstadoFilter] = useState<string>('todos');
+  const { selectedBodegaNombre } = useOutletContext<AppOutletContext>();
+  const selectedBodega = selectedBodegaNombre;
+
+  const isCrear = location.pathname.endsWith("/crear");
+  const isVer = location.pathname.endsWith("/ver");
+  const isEditar = location.pathname.endsWith("/editar");
+  const isEliminar = location.pathname.endsWith("/eliminar");
+
+  const closeToList = () => navigate("/app/clientes");
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [estadoFilter, setEstadoFilter] = useState<string>("todos");
   const [clientes, setClientes] = useState<Cliente[]>(initialClientesData);
-  const [showViewModal, setShowViewModal] = useState(false);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
-  const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null);
-  const [clienteParaCambioEstado, setClienteParaCambioEstado] = useState<Cliente | null>(null);
+  const [clienteParaCambioEstado, setClienteParaCambioEstado] =
+    useState<Cliente | null>(null);
+
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
+  // ✅ cliente seleccionado por URL (:id)
+  const clienteSeleccionado = useMemo(() => {
+    if (!params.id) return null;
+    return clientes.find((c) => c.id === params.id) ?? null;
+  }, [clientes, params.id]);
+
+  // ✅ si entran a /ver, /editar o /eliminar con id inválido → volver
+  useEffect(() => {
+    if (!isVer && !isEditar && !isEliminar) return;
+
+    if (!clienteSeleccionado) {
+      closeToList();
+      return;
+    }
+  }, [isVer, isEditar, isEliminar, clienteSeleccionado, closeToList]);
+
   // Form states
-  const [formTipoDoc, setFormTipoDoc] = useState('CC');
-  const [formNumeroDoc, setFormNumeroDoc] = useState('');
-  const [formNombre, setFormNombre] = useState('');
-  const [formEmail, setFormEmail] = useState('');
-  const [formTelefono, setFormTelefono] = useState('');
-  const [formTelefonoSecundario, setFormTelefonoSecundario] = useState('');
-  const [formDireccion, setFormDireccion] = useState('');
-  const [formDepartamento, setFormDepartamento] = useState('');
-  const [formCiudad, setFormCiudad] = useState('');
-  const [formTipoCliente, setFormTipoCliente] = useState('');
-  const [formNotas, setFormNotas] = useState('');
+  const [formTipoDoc, setFormTipoDoc] = useState("CC");
+  const [formNumeroDoc, setFormNumeroDoc] = useState("");
+  const [formNombre, setFormNombre] = useState("");
+  const [formEmail, setFormEmail] = useState("");
+  const [formTelefono, setFormTelefono] = useState("");
+  const [formTelefonoSecundario, setFormTelefonoSecundario] = useState("");
+  const [formDireccion, setFormDireccion] = useState("");
+  const [formDepartamento, setFormDepartamento] = useState("");
+  const [formCiudad, setFormCiudad] = useState("");
+  const [formTipoCliente, setFormTipoCliente] = useState("");
+  const [formNotas, setFormNotas] = useState("");
 
   // Estados para validaciones en tiempo real
   const [errors, setErrors] = useState({
-    tipoDoc: '',
-    numeroDoc: '',
-    nombre: '',
-    email: '',
-    telefono: '',
-    telefonoSecundario: '',
-    direccion: '',
-    departamento: '',
-    ciudad: '',
-    tipoCliente: '',
-    notas: ''
+    tipoDoc: "",
+    numeroDoc: "",
+    nombre: "",
+    email: "",
+    telefono: "",
+    telefonoSecundario: "",
+    direccion: "",
+    departamento: "",
+    ciudad: "",
+    tipoCliente: "",
+    notas: "",
   });
+
   const [touched, setTouched] = useState({
     tipoDoc: false,
     numeroDoc: false,
@@ -92,143 +122,137 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
     departamento: false,
     ciudad: false,
     tipoCliente: false,
-    notas: false
+    notas: false,
   });
 
   // Funciones de validación individuales
   const validateTipoDoc = (value: string) => {
     if (!value) {
-      return 'El tipo de documento es requerido';
+      return "El tipo de documento es requerido";
     }
-    return '';
+    return "";
   };
 
   const validateNumeroDoc = (value: string) => {
     if (!value.trim()) {
-      return 'El número de documento es requerido';
+      return "El número de documento es requerido";
     }
-    // Solo números y guiones
     const validPattern = /^[0-9-]+$/;
     if (!validPattern.test(value)) {
-      return 'Solo se permiten números y guiones';
+      return "Solo se permiten números y guiones";
     }
     if (value.length < 6) {
-      return 'Mínimo 6 caracteres';
+      return "Mínimo 6 caracteres";
     }
     if (value.length > 20) {
-      return 'Máximo 20 caracteres';
+      return "Máximo 20 caracteres";
     }
-    return '';
+    return "";
   };
 
   const validateNombre = (value: string) => {
     if (!value.trim()) {
-      return 'El nombre del cliente es requerido';
+      return "El nombre del cliente es requerido";
     }
-    // Solo letras y espacios
     const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/;
     if (!validPattern.test(value)) {
-      return 'Solo se permiten letras y espacios';
+      return "Solo se permiten letras y espacios";
     }
     if (value.trim().length < 3) {
-      return 'Mínimo 3 caracteres';
+      return "Mínimo 3 caracteres";
     }
     if (value.trim().length > 100) {
-      return 'Máximo 100 caracteres';
+      return "Máximo 100 caracteres";
     }
-    return '';
+    return "";
   };
 
   const validateEmail = (value: string) => {
     if (!value.trim()) {
-      return 'El email es requerido';
+      return "El email es requerido";
     }
-    if (!value.includes('@')) {
-      return 'El email debe contener un @';
+    if (!value.includes("@")) {
+      return "El email debe contener un @";
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(value)) {
-      return 'Formato de email inválido';
+      return "Formato de email inválido";
     }
-    return '';
+    return "";
   };
 
   const validateTelefono = (value: string) => {
     if (!value.trim()) {
-      return 'El teléfono es requerido';
+      return "El teléfono es requerido";
     }
-    // Exactamente 10 números
     const diezNumeros = /^[0-9]{10}$/;
     if (!diezNumeros.test(value)) {
-      return 'Debe tener exactamente 10 números';
+      return "Debe tener exactamente 10 números";
     }
-    return '';
+    return "";
   };
 
   const validateTelefonoSecundario = (value: string) => {
     if (!value.trim()) {
-      return ''; // El teléfono secundario es opcional
+      return "";
     }
-    // Exactamente 10 números
     const diezNumeros = /^[0-9]{10}$/;
     if (!diezNumeros.test(value)) {
-      return 'Debe tener exactamente 10 números';
+      return "Debe tener exactamente 10 números";
     }
-    return '';
+    return "";
   };
 
   const validateDireccion = (value: string) => {
     if (!value.trim()) {
-      return 'La dirección es requerida';
+      return "La dirección es requerida";
     }
-    // Permitir letras, números, espacios, guiones, comas, puntos y #
     const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s\-,#.]+$/;
     if (!validPattern.test(value)) {
-      return 'Solo se permiten letras, números, espacios, guiones, comas, puntos y #';
+      return "Solo se permiten letras, números, espacios, guiones, comas, puntos y #";
     }
     if (value.trim().length < 5) {
-      return 'Mínimo 5 caracteres';
+      return "Mínimo 5 caracteres";
     }
     if (value.trim().length > 200) {
-      return 'Máximo 200 caracteres';
+      return "Máximo 200 caracteres";
     }
-    return '';
+    return "";
   };
 
   const validateDepartamento = (value: string) => {
-    if (!value || value === '') {
-      return 'El departamento es requerido';
+    if (!value || value === "") {
+      return "El departamento es requerido";
     }
-    return '';
+    return "";
   };
 
   const validateCiudad = (value: string) => {
-    if (!value || value === '') {
-      return 'La ciudad es requerida';
+    if (!value || value === "") {
+      return "La ciudad es requerida";
     }
-    return '';
+    return "";
   };
 
   const validateTipoCliente = (value: string) => {
-    if (!value || value === '') {
-      return 'El tipo de cliente es requerido';
+    if (!value || value === "") {
+      return "El tipo de cliente es requerido";
     }
-    return '';
+    return "";
   };
 
   const validateNotas = (value: string) => {
     if (!value.trim()) {
-      return ''; // Las notas son opcionales
+      return "";
     }
-    // Permitir letras, números, espacios y puntuación común
     const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s.,;:()\-¿?¡!]+$/;
     if (!validPattern.test(value)) {
-      return 'Solo se permiten letras, números, espacios y puntuación básica';
+      return "Solo se permiten letras, números, espacios y puntuación básica";
     }
     if (value.trim().length > 500) {
-      return 'Máximo 500 caracteres';
+      return "Máximo 500 caracteres";
     }
-    return '';
+    return "";
   };
 
   // Handlers con validación en tiempo real
@@ -270,7 +294,10 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
   const handleTelefonoSecundarioChange = (value: string) => {
     setFormTelefonoSecundario(value);
     if (touched.telefonoSecundario) {
-      setErrors({ ...errors, telefonoSecundario: validateTelefonoSecundario(value) });
+      setErrors({
+        ...errors,
+        telefonoSecundario: validateTelefonoSecundario(value),
+      });
     }
   };
 
@@ -309,12 +336,6 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
     }
   };
 
-  // Handlers onBlur
-  const handleTipoDocBlur = () => {
-    setTouched({ ...touched, tipoDoc: true });
-    setErrors({ ...errors, tipoDoc: validateTipoDoc(formTipoDoc) });
-  };
-
   const handleNumeroDocBlur = () => {
     setTouched({ ...touched, numeroDoc: true });
     setErrors({ ...errors, numeroDoc: validateNumeroDoc(formNumeroDoc) });
@@ -337,27 +358,15 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
 
   const handleTelefonoSecundarioBlur = () => {
     setTouched({ ...touched, telefonoSecundario: true });
-    setErrors({ ...errors, telefonoSecundario: validateTelefonoSecundario(formTelefonoSecundario) });
+    setErrors({
+      ...errors,
+      telefonoSecundario: validateTelefonoSecundario(formTelefonoSecundario),
+    });
   };
 
   const handleDireccionBlur = () => {
     setTouched({ ...touched, direccion: true });
     setErrors({ ...errors, direccion: validateDireccion(formDireccion) });
-  };
-
-  const handleDepartamentoBlur = () => {
-    setTouched({ ...touched, departamento: true });
-    setErrors({ ...errors, departamento: validateDepartamento(formDepartamento) });
-  };
-
-  const handleCiudadBlur = () => {
-    setTouched({ ...touched, ciudad: true });
-    setErrors({ ...errors, ciudad: validateCiudad(formCiudad) });
-  };
-
-  const handleTipoClienteBlur = () => {
-    setTouched({ ...touched, tipoCliente: true });
-    setErrors({ ...errors, tipoCliente: validateTipoCliente(formTipoCliente) });
   };
 
   const handleNotasBlur = () => {
@@ -367,20 +376,20 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
 
   // Obtener municipios del departamento seleccionado
   const municipiosDisponibles = useMemo(() => {
-    const dept = departamentosColombia.find(d => d.nombre === formDepartamento);
+    const dept = departamentosColombia.find((d) => d.nombre === formDepartamento);
     return dept ? dept.municipios : [];
   }, [formDepartamento]);
 
   // Resetear municipio cuando cambia el departamento
   useEffect(() => {
-    setFormCiudad('');
+    setFormCiudad("");
   }, [formDepartamento]);
 
-  // Filtrar clientes - Búsqueda por TODOS los campos del listado
+  // Filtrar clientes
   const filteredClientes = useMemo(() => {
     return clientes
       .filter((cliente) => {
-        if (selectedBodega === 'Todas las bodegas') {
+        if (selectedBodega === "Todas las bodegas") {
           return true;
         }
         return cliente.bodega === selectedBodega;
@@ -393,11 +402,12 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
           cliente.numeroDocumento.toLowerCase().includes(searchLower) ||
           cliente.email.toLowerCase().includes(searchLower) ||
           cliente.telefono.toLowerCase().includes(searchLower) ||
-          (cliente.tipoCliente && cliente.tipoCliente.toLowerCase().includes(searchLower))
+          (cliente.tipoCliente &&
+            cliente.tipoCliente.toLowerCase().includes(searchLower))
         );
       })
       .filter((cliente) => {
-        if (estadoFilter === 'todos') {
+        if (estadoFilter === "todos") {
           return true;
         }
         return cliente.estado.toLowerCase() === estadoFilter;
@@ -410,102 +420,117 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
   const endIndex = startIndex + itemsPerPage;
   const currentClientes = filteredClientes.slice(startIndex, endIndex);
 
-  // Resetear a página 1 cuando cambia el filtro
-  useMemo(() => {
+  // Resetear a página 1 cuando cambia filtro
+  useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm]);
+  }, [searchTerm, estadoFilter, selectedBodega]);
 
+  // ✅ al entrar a /crear, limpiar el form
+  useEffect(() => {
+    if (!isCrear) return;
+
+    setFormTipoDoc("CC");
+    setFormNumeroDoc("");
+    setFormNombre("");
+    setFormEmail("");
+    setFormTelefono("");
+    setFormTelefonoSecundario("");
+    setFormDireccion("");
+    setFormDepartamento("");
+    setFormCiudad("");
+    setFormTipoCliente("");
+    setFormNotas("");
+
+    setErrors({
+      tipoDoc: "",
+      numeroDoc: "",
+      nombre: "",
+      email: "",
+      telefono: "",
+      telefonoSecundario: "",
+      direccion: "",
+      departamento: "",
+      ciudad: "",
+      tipoCliente: "",
+      notas: "",
+    });
+
+    setTouched({
+      tipoDoc: false,
+      numeroDoc: false,
+      nombre: false,
+      email: false,
+      telefono: false,
+      telefonoSecundario: false,
+      direccion: false,
+      departamento: false,
+      ciudad: false,
+      tipoCliente: false,
+      notas: false,
+    });
+  }, [isCrear]);
+
+  // ✅ al entrar a /editar, precargar formulario
+  useEffect(() => {
+    if (!isEditar) return;
+    if (!clienteSeleccionado) return;
+
+    setFormTipoDoc(clienteSeleccionado.tipoDocumento);
+    setFormNumeroDoc(clienteSeleccionado.numeroDocumento);
+    setFormNombre(clienteSeleccionado.nombre);
+    setFormEmail(clienteSeleccionado.email);
+    setFormTelefono(clienteSeleccionado.telefono);
+    setFormTelefonoSecundario(clienteSeleccionado.telefonoSecundario || "");
+    setFormDireccion(clienteSeleccionado.direccion);
+    setFormDepartamento(clienteSeleccionado.departamento || "");
+    setFormCiudad(clienteSeleccionado.ciudad);
+    setFormTipoCliente(clienteSeleccionado.tipoCliente || "");
+    setFormNotas(clienteSeleccionado.notas || "");
+
+    setErrors({
+      tipoDoc: "",
+      numeroDoc: "",
+      nombre: "",
+      email: "",
+      telefono: "",
+      telefonoSecundario: "",
+      direccion: "",
+      departamento: "",
+      ciudad: "",
+      tipoCliente: "",
+      notas: "",
+    });
+
+    setTouched({
+      tipoDoc: false,
+      numeroDoc: false,
+      nombre: false,
+      email: false,
+      telefono: false,
+      telefonoSecundario: false,
+      direccion: false,
+      departamento: false,
+      ciudad: false,
+      tipoCliente: false,
+      notas: false,
+    });
+  }, [isEditar, clienteSeleccionado]);
+
+  // Navegación (modales por URL)
   const handleView = (cliente: Cliente) => {
-    setSelectedCliente(cliente);
-    setShowViewModal(true);
+    navigate(`/app/clientes/${cliente.id}/ver`);
   };
 
   const handleCreate = () => {
-    setFormTipoDoc('CC');
-    setFormNumeroDoc('');
-    setFormNombre('');
-    setFormEmail('');
-    setFormTelefono('');
-    setFormTelefonoSecundario('');
-    setFormDireccion('');
-    setFormDepartamento('');
-    setFormCiudad('');
-    setFormTipoCliente('');
-    setFormNotas('');
-    setErrors({
-      tipoDoc: '',
-      numeroDoc: '',
-      nombre: '',
-      email: '',
-      telefono: '',
-      telefonoSecundario: '',
-      direccion: '',
-      departamento: '',
-      ciudad: '',
-      tipoCliente: '',
-      notas: ''
-    });
-    setTouched({
-      tipoDoc: false,
-      numeroDoc: false,
-      nombre: false,
-      email: false,
-      telefono: false,
-      telefonoSecundario: false,
-      direccion: false,
-      departamento: false,
-      ciudad: false,
-      tipoCliente: false,
-      notas: false
-    });
-    setShowCreateModal(true);
+    navigate("/app/clientes/crear");
   };
 
   const handleEdit = (cliente: Cliente) => {
-    setSelectedCliente(cliente);
-    setFormTipoDoc(cliente.tipoDocumento);
-    setFormNumeroDoc(cliente.numeroDocumento);
-    setFormNombre(cliente.nombre);
-    setFormEmail(cliente.email);
-    setFormTelefono(cliente.telefono);
-    setFormTelefonoSecundario(cliente.telefonoSecundario || '');
-    setFormDireccion(cliente.direccion);
-    setFormDepartamento(cliente.departamento || '');
-    setFormCiudad(cliente.ciudad);
-    setFormTipoCliente(cliente.tipoCliente);
-    setFormNotas(cliente.notas || '');
-    setErrors({
-      tipoDoc: '',
-      numeroDoc: '',
-      nombre: '',
-      email: '',
-      telefono: '',
-      telefonoSecundario: '',
-      direccion: '',
-      departamento: '',
-      ciudad: '',
-      tipoCliente: '',
-      notas: ''
-    });
-    setTouched({
-      tipoDoc: false,
-      numeroDoc: false,
-      nombre: false,
-      email: false,
-      telefono: false,
-      telefonoSecundario: false,
-      direccion: false,
-      departamento: false,
-      ciudad: false,
-      tipoCliente: false,
-      notas: false
-    });
-    setShowEditModal(true);
+    navigate(`/app/clientes/${cliente.id}/editar`);
   };
 
   const handleDelete = (cliente: Cliente) => {
-    setSelectedCliente(cliente);
-    setShowDeleteModal(true);
+    navigate(`/app/clientes/${cliente.id}/eliminar`);
   };
 
   const handleConfirmEstado = (cliente: Cliente) => {
@@ -514,40 +539,50 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
   };
 
   const validateForm = () => {
-    // Validar campos obligatorios
-    if (!formTipoDoc || !formNumeroDoc.trim() || !formNombre.trim() || !formEmail.trim() || 
-        !formTelefono.trim() || !formDireccion.trim() || !formDepartamento || !formCiudad || !formTipoCliente) {
-      toast.error('Por favor completa todos los campos obligatorios');
+    if (
+      !formTipoDoc ||
+      !formNumeroDoc.trim() ||
+      !formNombre.trim() ||
+      !formEmail.trim() ||
+      !formTelefono.trim() ||
+      !formDireccion.trim() ||
+      !formDepartamento ||
+      !formCiudad ||
+      !formTipoCliente
+    ) {
+      toast.error("Por favor completa todos los campos obligatorios");
       return false;
     }
 
-    // Validar número de documento (solo números y guiones)
     if (!/^[0-9-]+$/.test(formNumeroDoc)) {
-      toast.error('El número de documento solo debe contener números y guiones');
+      toast.error("El número de documento solo debe contener números y guiones");
       return false;
     }
 
-    // Validar email
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formEmail)) {
-      toast.error('El email no tiene un formato válido');
+      toast.error("El email no tiene un formato válido");
       return false;
     }
 
-    // Validar teléfono principal
     if (!/^[0-9\s\-()]+$/.test(formTelefono)) {
-      toast.error('El teléfono principal solo debe contener números, espacios, guiones y paréntesis');
+      toast.error(
+        "El teléfono principal solo debe contener números, espacios, guiones y paréntesis"
+      );
       return false;
     }
 
-    // Validar teléfono secundario si existe
-    if (formTelefonoSecundario.trim() && !/^[0-9\s\-()]+$/.test(formTelefonoSecundario)) {
-      toast.error('El teléfono secundario solo debe contener números, espacios, guiones y paréntesis');
+    if (
+      formTelefonoSecundario.trim() &&
+      !/^[0-9\s\-()]+$/.test(formTelefonoSecundario)
+    ) {
+      toast.error(
+        "El teléfono secundario solo debe contener números, espacios, guiones y paréntesis"
+      );
       return false;
     }
 
-    // Validar que nombre no contenga caracteres especiales peligrosos
     if (/[<>{}[\]\\\/]/.test(formNombre)) {
-      toast.error('El nombre contiene caracteres no permitidos');
+      toast.error("El nombre contiene caracteres no permitidos");
       return false;
     }
 
@@ -558,7 +593,7 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
     if (!validateForm()) return;
 
     const newCliente: Cliente = {
-      id: `CLI-${String(clientes.length + 1).padStart(3, '0')}`,
+      id: `CLI-${String(clientes.length + 1).padStart(3, "0")}`,
       tipoDocumento: formTipoDoc,
       numeroDocumento: formNumeroDoc.trim(),
       nombre: formNombre.trim(),
@@ -570,48 +605,52 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
       ciudad: formCiudad,
       tipoCliente: formTipoCliente,
       notas: formNotas.trim(),
-      fechaRegistro: new Date().toISOString().split('T')[0],
+      fechaRegistro: new Date().toISOString().split("T")[0],
       bodega: selectedBodega,
-      pais: 'Colombia',
-      estado: 'Activo',
+      pais: "Colombia",
+      estado: "Activo",
     };
 
     setClientes([...clientes, newCliente]);
-    setShowCreateModal(false);
+    closeToList();
     setShowSuccessModal(true);
   };
 
   const confirmEdit = () => {
-    if (!selectedCliente || !validateForm()) return;
+    if (!clienteSeleccionado || !validateForm()) return;
 
     setClientes(
       clientes.map((c) =>
-        c.id === selectedCliente.id
+        c.id === clienteSeleccionado.id
           ? {
-              ...c,
-              tipoDocumento: formTipoDoc,
-              numeroDocumento: formNumeroDoc.trim(),
-              nombre: formNombre.trim(),
-              email: formEmail.trim(),
-              telefono: formTelefono.trim(),
-              telefonoSecundario: formTelefonoSecundario.trim() || undefined,
-              direccion: formDireccion.trim(),
-              departamento: formDepartamento,
-              ciudad: formCiudad,
-              tipoCliente: formTipoCliente,
-              notas: formNotas.trim(),
-            }
+            ...c,
+            tipoDocumento: formTipoDoc,
+            numeroDocumento: formNumeroDoc.trim(),
+            nombre: formNombre.trim(),
+            email: formEmail.trim(),
+            telefono: formTelefono.trim(),
+            telefonoSecundario:
+              formTelefonoSecundario.trim() || undefined,
+            direccion: formDireccion.trim(),
+            departamento: formDepartamento,
+            ciudad: formCiudad,
+            tipoCliente: formTipoCliente,
+            notas: formNotas.trim(),
+          }
           : c
       )
     );
-    setShowEditModal(false);
-    toast.success('Cliente actualizado exitosamente');
+
+    closeToList();
+    toast.success("Cliente actualizado exitosamente");
   };
 
   const confirmDelete = () => {
-    setClientes(clientes.filter((c) => c.id !== selectedCliente?.id));
-    setShowDeleteModal(false);
-    toast.success('Cliente eliminado exitosamente');
+    if (!clienteSeleccionado) return;
+
+    setClientes(clientes.filter((c) => c.id !== clienteSeleccionado.id));
+    closeToList();
+    toast.success("Cliente eliminado exitosamente");
   };
 
   const confirmEstado = () => {
@@ -621,14 +660,18 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
       clientes.map((c) =>
         c.id === clienteParaCambioEstado.id
           ? {
-              ...c,
-              estado: c.estado === 'Activo' ? 'Inactivo' : 'Activo',
-            }
+            ...c,
+            estado: c.estado === "Activo" ? "Inactivo" : "Activo",
+          }
           : c
       )
     );
+
     setShowConfirmEstadoModal(false);
-    toast.success(`Estado del cliente cambiado a ${clienteParaCambioEstado.estado === 'Activo' ? 'Inactivo' : 'Activo'}`);
+    toast.success(
+      `Estado del cliente cambiado a ${clienteParaCambioEstado.estado === "Activo" ? "Inactivo" : "Activo"
+      }`
+    );
   };
 
   const handlePageChange = (page: number) => {
@@ -652,7 +695,10 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
       {/* Search Bar and Action Buttons */}
       <div className="flex items-center gap-4">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+          <Search
+            className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+            size={20}
+          />
           <Input
             placeholder="Buscar por nombre, tipo de documento, email, teléfono o tipo de cliente..."
             value={searchTerm}
@@ -660,49 +706,49 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
             className="pl-10"
           />
         </div>
-        
+
         {/* Filtro de Estado */}
         <div className="flex items-center gap-2 border border-gray-300 rounded-lg p-1 bg-gray-50">
           <Filter size={16} className="text-gray-500 ml-2" />
           <Button
             size="sm"
-            variant={estadoFilter === 'todos' ? 'default' : 'ghost'}
-            onClick={() => setEstadoFilter('todos')}
-            className={`h-8 ${
-              estadoFilter === 'todos'
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'hover:bg-gray-200'
-            }`}
+            variant={estadoFilter === "todos" ? "default" : "ghost"}
+            onClick={() => setEstadoFilter("todos")}
+            className={`h-8 ${estadoFilter === "todos"
+                ? "bg-blue-600 text-white hover:bg-blue-700"
+                : "hover:bg-gray-200"
+              }`}
           >
             Todos
           </Button>
           <Button
             size="sm"
-            variant={estadoFilter === 'activo' ? 'default' : 'ghost'}
-            onClick={() => setEstadoFilter('activo')}
-            className={`h-8 ${
-              estadoFilter === 'activo'
-                ? 'bg-green-600 text-white hover:bg-green-700'
-                : 'hover:bg-gray-200'
-            }`}
+            variant={estadoFilter === "activo" ? "default" : "ghost"}
+            onClick={() => setEstadoFilter("activo")}
+            className={`h-8 ${estadoFilter === "activo"
+                ? "bg-green-600 text-white hover:bg-green-700"
+                : "hover:bg-gray-200"
+              }`}
           >
             Activos
           </Button>
           <Button
             size="sm"
-            variant={estadoFilter === 'inactivo' ? 'default' : 'ghost'}
-            onClick={() => setEstadoFilter('inactivo')}
-            className={`h-8 ${
-              estadoFilter === 'inactivo'
-                ? 'bg-red-600 text-white hover:bg-red-700'
-                : 'hover:bg-gray-200'
-            }`}
+            variant={estadoFilter === "inactivo" ? "default" : "ghost"}
+            onClick={() => setEstadoFilter("inactivo")}
+            className={`h-8 ${estadoFilter === "inactivo"
+                ? "bg-red-600 text-white hover:bg-red-700"
+                : "hover:bg-gray-200"
+              }`}
           >
             Inactivos
           </Button>
         </div>
 
-        <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
+        <Button
+          onClick={handleCreate}
+          className="bg-blue-600 hover:bg-blue-700"
+        >
           <Plus size={18} className="mr-2" />
           Nuevo Cliente
         </Button>
@@ -728,7 +774,10 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
             <TableBody>
               {currentClientes.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-gray-500">
+                  <TableCell
+                    colSpan={9}
+                    className="text-center py-8 text-gray-500"
+                  >
                     No se encontraron clientes
                   </TableCell>
                 </TableRow>
@@ -736,13 +785,24 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
                 currentClientes.map((cliente, index) => (
                   <TableRow key={cliente.id} className="hover:bg-gray-50">
                     <TableCell>{startIndex + index + 1}</TableCell>
-                    <TableCell className="font-medium text-gray-900">{cliente.nombre}</TableCell>
+                    <TableCell className="font-medium text-gray-900">
+                      {cliente.nombre}
+                    </TableCell>
                     <TableCell>{cliente.tipoDocumento}</TableCell>
-                    <TableCell className="font-mono text-sm">{cliente.numeroDocumento}</TableCell>
-                    <TableCell className="text-gray-700">{cliente.email}</TableCell>
-                    <TableCell className="text-gray-700">{cliente.telefono}</TableCell>
+                    <TableCell className="font-mono text-sm">
+                      {cliente.numeroDocumento}
+                    </TableCell>
+                    <TableCell className="text-gray-700">
+                      {cliente.email}
+                    </TableCell>
+                    <TableCell className="text-gray-700">
+                      {cliente.telefono}
+                    </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                      <Badge
+                        variant="outline"
+                        className="bg-purple-50 text-purple-700 border-purple-200"
+                      >
                         {cliente.tipoCliente}
                       </Badge>
                     </TableCell>
@@ -751,11 +811,10 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
                         variant="ghost"
                         size="sm"
                         onClick={() => handleConfirmEstado(cliente)}
-                        className={`h-7 ${
-                          cliente.estado === 'Activo'
+                        className={`h-7 ${cliente.estado === "Activo"
                             ? "bg-green-100 text-green-800 hover:bg-green-200"
                             : "bg-red-100 text-red-800 hover:bg-red-200"
-                        }`}
+                          }`}
                       >
                         {cliente.estado}
                       </Button>
@@ -802,7 +861,8 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
         {filteredClientes.length > 0 && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
             <div className="text-sm text-gray-600">
-              Mostrando {startIndex + 1} - {Math.min(endIndex, filteredClientes.length)} de{' '}
+              Mostrando {startIndex + 1} -{" "}
+              {Math.min(endIndex, filteredClientes.length)} de{" "}
               {filteredClientes.length} clientes
             </div>
             <div className="flex items-center gap-2">
@@ -817,17 +877,19 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
                 Anterior
               </Button>
               <div className="flex items-center gap-1">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                  <Button
-                    key={page}
-                    variant={currentPage === page ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => handlePageChange(page)}
-                    className="h-8 w-8 p-0"
-                  >
-                    {page}
-                  </Button>
-                ))}
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                  (page) => (
+                    <Button
+                      key={page}
+                      variant={currentPage === page ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => handlePageChange(page)}
+                      className="h-8 w-8 p-0"
+                    >
+                      {page}
+                    </Button>
+                  )
+                )}
               </div>
               <Button
                 variant="outline"
@@ -844,9 +906,17 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
         )}
       </div>
 
-      {/* Modal Ver Detalles - DISEÑO MEJORADO */}
-      <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
-        <DialogContent className="max-w-6xl max-h-[85vh] overflow-y-auto" aria-describedby="view-cliente-description">
+      {/* Modal Ver Detalles */}
+      <Dialog
+        open={isVer}
+        onOpenChange={(open) => {
+          if (!open) closeToList();
+        }}
+      >
+        <DialogContent
+          className="max-w-6xl max-h-[85vh] overflow-y-auto"
+          aria-describedby="view-cliente-description"
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <User className="h-5 w-5 text-blue-600" />
@@ -856,33 +926,40 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
               Información completa del cliente
             </DialogDescription>
           </DialogHeader>
-          {selectedCliente && (
+          {clienteSeleccionado && (
             <div className="space-y-4">
-              {/* Información Principal */}
               <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-100">
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">{selectedCliente.nombre}</h3>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                  {clienteSeleccionado.nombre}
+                </h3>
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="outline" className="bg-white text-xs">
-                    {selectedCliente.tipoDocumento}: {selectedCliente.numeroDocumento}
+                    {clienteSeleccionado.tipoDocumento}:{" "}
+                    {clienteSeleccionado.numeroDocumento}
                   </Badge>
                   <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100 text-xs">
-                    {selectedCliente.tipoCliente}
+                    {clienteSeleccionado.tipoCliente}
                   </Badge>
-                  <Badge className="bg-green-100 text-green-800 hover:bg-green-100 text-xs">
-                    {selectedCliente.estado}
+                  <Badge
+                    className={`text-xs hover:bg-current ${clienteSeleccionado.estado === "Activo"
+                        ? "bg-green-100 text-green-800"
+                        : "bg-red-100 text-red-800"
+                      }`}
+                  >
+                    {clienteSeleccionado.estado}
                   </Badge>
                 </div>
               </div>
 
-              {/* Grid de información */}
               <div className="grid grid-cols-2 gap-3">
-                {/* Contacto */}
                 <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                   <div className="flex items-center gap-2 mb-1">
                     <Mail className="h-3.5 w-3.5 text-blue-600" />
                     <Label className="text-xs text-gray-500">Email</Label>
                   </div>
-                  <p className="text-sm font-medium text-gray-900">{selectedCliente.email}</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {clienteSeleccionado.email}
+                  </p>
                 </div>
 
                 <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
@@ -890,34 +967,45 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
                     <Phone className="h-3.5 w-3.5 text-blue-600" />
                     <Label className="text-xs text-gray-500">Teléfono</Label>
                   </div>
-                  <p className="text-sm font-medium text-gray-900">{selectedCliente.telefono}</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {clienteSeleccionado.telefono}
+                  </p>
                 </div>
 
-                {selectedCliente.telefonoSecundario && (
+                {clienteSeleccionado.telefonoSecundario && (
                   <div className="col-span-2 bg-gray-50 rounded-lg p-3 border border-gray-200">
                     <div className="flex items-center gap-2 mb-1">
                       <Phone className="h-3.5 w-3.5 text-blue-600" />
-                      <Label className="text-xs text-gray-500">Teléfono Secundario</Label>
+                      <Label className="text-xs text-gray-500">
+                        Teléfono Secundario
+                      </Label>
                     </div>
-                    <p className="text-sm font-medium text-gray-900">{selectedCliente.telefonoSecundario}</p>
+                    <p className="text-sm font-medium text-gray-900">
+                      {clienteSeleccionado.telefonoSecundario}
+                    </p>
                   </div>
                 )}
 
-                {/* Ubicación */}
                 <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                   <div className="flex items-center gap-2 mb-1">
                     <MapPin className="h-3.5 w-3.5 text-blue-600" />
                     <Label className="text-xs text-gray-500">Ciudad</Label>
                   </div>
-                  <p className="text-sm font-medium text-gray-900">{selectedCliente.ciudad}</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {clienteSeleccionado.ciudad}
+                  </p>
                 </div>
 
                 <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                   <div className="flex items-center gap-2 mb-1">
                     <MapPin className="h-3.5 w-3.5 text-blue-600" />
-                    <Label className="text-xs text-gray-500">Departamento</Label>
+                    <Label className="text-xs text-gray-500">
+                      Departamento
+                    </Label>
                   </div>
-                  <p className="text-sm font-medium text-gray-900">{selectedCliente.departamento || 'N/A'}</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {clienteSeleccionado.departamento || "N/A"}
+                  </p>
                 </div>
 
                 <div className="col-span-2 bg-gray-50 rounded-lg p-3 border border-gray-200">
@@ -925,24 +1013,27 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
                     <MapPin className="h-3.5 w-3.5 text-blue-600" />
                     <Label className="text-xs text-gray-500">Dirección</Label>
                   </div>
-                  <p className="text-sm font-medium text-gray-900">{selectedCliente.direccion}</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {clienteSeleccionado.direccion}
+                  </p>
                 </div>
               </div>
 
-              {/* Notas */}
-              {selectedCliente.notas && (
+              {clienteSeleccionado.notas && (
                 <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
                   <div className="flex items-center gap-2 mb-1">
                     <FileText className="h-3.5 w-3.5 text-amber-600" />
                     <Label className="text-xs text-gray-600">Notas</Label>
                   </div>
-                  <p className="text-sm text-gray-700">{selectedCliente.notas}</p>
+                  <p className="text-sm text-gray-700">
+                    {clienteSeleccionado.notas}
+                  </p>
                 </div>
               )}
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowViewModal(false)}>
+            <Button variant="outline" onClick={closeToList}>
               Cerrar
             </Button>
           </DialogFooter>
@@ -950,9 +1041,14 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
       </Dialog>
 
       {/* Modal Crear Cliente */}
-      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent 
-          className="max-w-6xl max-h-[90vh] overflow-y-auto" 
+      <Dialog
+        open={isCrear}
+        onOpenChange={(open) => {
+          if (!open) closeToList();
+        }}
+      >
+        <DialogContent
+          className="max-w-6xl max-h-[90vh] overflow-y-auto"
           aria-describedby="create-cliente-description"
           onInteractOutside={(e) => e.preventDefault()}
         >
@@ -963,7 +1059,6 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            {/* Tipo y Número de Documento */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="create-tipo-doc">Tipo de Documento *</Label>
@@ -997,7 +1092,6 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
               </div>
             </div>
 
-            {/* Nombre */}
             <div>
               <Label htmlFor="create-nombre">Nombre Completo *</Label>
               <Input
@@ -1012,7 +1106,6 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
               )}
             </div>
 
-            {/* Email y Tipo de Cliente */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="create-email">Email *</Label>
@@ -1030,7 +1123,10 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
               </div>
               <div>
                 <Label htmlFor="create-tipo-cliente">Tipo de Cliente *</Label>
-                <Select value={formTipoCliente} onValueChange={handleTipoClienteChange}>
+                <Select
+                  value={formTipoCliente}
+                  onValueChange={handleTipoClienteChange}
+                >
                   <SelectTrigger id="create-tipo-cliente">
                     <SelectValue placeholder="Selecciona el tipo" />
                   </SelectTrigger>
@@ -1042,12 +1138,13 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
                   </SelectContent>
                 </Select>
                 {errors.tipoCliente && touched.tipoCliente && (
-                  <p className="text-red-500 text-xs mt-1">{errors.tipoCliente}</p>
+                  <p className="text-red-500 text-xs mt-1">
+                    {errors.tipoCliente}
+                  </p>
                 )}
               </div>
             </div>
 
-            {/* Teléfonos */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="create-telefono">Teléfono Principal *</Label>
@@ -1063,25 +1160,33 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
                 )}
               </div>
               <div>
-                <Label htmlFor="create-telefono-sec">Teléfono Secundario (opcional)</Label>
+                <Label htmlFor="create-telefono-sec">
+                  Teléfono Secundario (opcional)
+                </Label>
                 <Input
                   id="create-telefono-sec"
                   value={formTelefonoSecundario}
-                  onChange={(e) => handleTelefonoSecundarioChange(e.target.value)}
+                  onChange={(e) =>
+                    handleTelefonoSecundarioChange(e.target.value)
+                  }
                   placeholder="301 987 6543"
                   onBlur={handleTelefonoSecundarioBlur}
                 />
                 {errors.telefonoSecundario && touched.telefonoSecundario && (
-                  <p className="text-red-500 text-xs mt-1">{errors.telefonoSecundario}</p>
+                  <p className="text-red-500 text-xs mt-1">
+                    {errors.telefonoSecundario}
+                  </p>
                 )}
               </div>
             </div>
 
-            {/* Departamento y Ciudad */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="create-departamento">Departamento *</Label>
-                <Select value={formDepartamento} onValueChange={handleDepartamentoChange}>
+                <Select
+                  value={formDepartamento}
+                  onValueChange={handleDepartamentoChange}
+                >
                   <SelectTrigger id="create-departamento">
                     <SelectValue placeholder="Selecciona un departamento" />
                   </SelectTrigger>
@@ -1094,13 +1199,15 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
                   </SelectContent>
                 </Select>
                 {errors.departamento && touched.departamento && (
-                  <p className="text-red-500 text-xs mt-1">{errors.departamento}</p>
+                  <p className="text-red-500 text-xs mt-1">
+                    {errors.departamento}
+                  </p>
                 )}
               </div>
               <div>
                 <Label htmlFor="create-ciudad">Ciudad / Municipio *</Label>
-                <Select 
-                  value={formCiudad} 
+                <Select
+                  value={formCiudad}
                   onValueChange={handleCiudadChange}
                   disabled={!formDepartamento}
                 >
@@ -1121,7 +1228,6 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
               </div>
             </div>
 
-            {/* Dirección */}
             <div>
               <Label htmlFor="create-direccion">Dirección *</Label>
               <Input
@@ -1136,7 +1242,6 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
               )}
             </div>
 
-            {/* Notas */}
             <div>
               <Label htmlFor="create-notas">Notas (opcional)</Label>
               <Textarea
@@ -1153,10 +1258,13 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateModal(false)}>
+            <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
-            <Button onClick={confirmCreate} className="bg-blue-600 hover:bg-blue-700">
+            <Button
+              onClick={confirmCreate}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
               Crear Cliente
             </Button>
           </DialogFooter>
@@ -1164,9 +1272,14 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
       </Dialog>
 
       {/* Modal Editar Cliente */}
-      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent 
-          className="max-w-6xl max-h-[90vh] overflow-y-auto" 
+      <Dialog
+        open={isEditar}
+        onOpenChange={(open) => {
+          if (!open) closeToList();
+        }}
+      >
+        <DialogContent
+          className="max-w-6xl max-h-[90vh] overflow-y-auto"
           aria-describedby="edit-cliente-description"
           onInteractOutside={(e) => e.preventDefault()}
         >
@@ -1177,7 +1290,6 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            {/* Tipo y Número de Documento */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="edit-tipo-doc">Tipo de Documento *</Label>
@@ -1211,7 +1323,6 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
               </div>
             </div>
 
-            {/* Nombre */}
             <div>
               <Label htmlFor="edit-nombre">Nombre Completo *</Label>
               <Input
@@ -1226,7 +1337,6 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
               )}
             </div>
 
-            {/* Email y Tipo de Cliente */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="edit-email">Email *</Label>
@@ -1244,7 +1354,10 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
               </div>
               <div>
                 <Label htmlFor="edit-tipo-cliente">Tipo de Cliente *</Label>
-                <Select value={formTipoCliente} onValueChange={handleTipoClienteChange}>
+                <Select
+                  value={formTipoCliente}
+                  onValueChange={handleTipoClienteChange}
+                >
                   <SelectTrigger id="edit-tipo-cliente">
                     <SelectValue placeholder="Selecciona el tipo" />
                   </SelectTrigger>
@@ -1256,12 +1369,13 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
                   </SelectContent>
                 </Select>
                 {errors.tipoCliente && touched.tipoCliente && (
-                  <p className="text-red-500 text-xs mt-1">{errors.tipoCliente}</p>
+                  <p className="text-red-500 text-xs mt-1">
+                    {errors.tipoCliente}
+                  </p>
                 )}
               </div>
             </div>
 
-            {/* Teléfonos */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="edit-telefono">Teléfono Principal *</Label>
@@ -1277,25 +1391,33 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
                 )}
               </div>
               <div>
-                <Label htmlFor="edit-telefono-sec">Teléfono Secundario (opcional)</Label>
+                <Label htmlFor="edit-telefono-sec">
+                  Teléfono Secundario (opcional)
+                </Label>
                 <Input
                   id="edit-telefono-sec"
                   value={formTelefonoSecundario}
-                  onChange={(e) => handleTelefonoSecundarioChange(e.target.value)}
+                  onChange={(e) =>
+                    handleTelefonoSecundarioChange(e.target.value)
+                  }
                   placeholder="301 987 6543"
                   onBlur={handleTelefonoSecundarioBlur}
                 />
                 {errors.telefonoSecundario && touched.telefonoSecundario && (
-                  <p className="text-red-500 text-xs mt-1">{errors.telefonoSecundario}</p>
+                  <p className="text-red-500 text-xs mt-1">
+                    {errors.telefonoSecundario}
+                  </p>
                 )}
               </div>
             </div>
 
-            {/* Departamento y Ciudad */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="edit-departamento">Departamento *</Label>
-                <Select value={formDepartamento} onValueChange={handleDepartamentoChange}>
+                <Select
+                  value={formDepartamento}
+                  onValueChange={handleDepartamentoChange}
+                >
                   <SelectTrigger id="edit-departamento">
                     <SelectValue placeholder="Selecciona un departamento" />
                   </SelectTrigger>
@@ -1308,13 +1430,15 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
                   </SelectContent>
                 </Select>
                 {errors.departamento && touched.departamento && (
-                  <p className="text-red-500 text-xs mt-1">{errors.departamento}</p>
+                  <p className="text-red-500 text-xs mt-1">
+                    {errors.departamento}
+                  </p>
                 )}
               </div>
               <div>
                 <Label htmlFor="edit-ciudad">Ciudad / Municipio *</Label>
-                <Select 
-                  value={formCiudad} 
+                <Select
+                  value={formCiudad}
                   onValueChange={handleCiudadChange}
                   disabled={!formDepartamento}
                 >
@@ -1335,7 +1459,6 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
               </div>
             </div>
 
-            {/* Dirección */}
             <div>
               <Label htmlFor="edit-direccion">Dirección *</Label>
               <Input
@@ -1350,7 +1473,6 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
               )}
             </div>
 
-            {/* Notas */}
             <div>
               <Label htmlFor="edit-notas">Notas (opcional)</Label>
               <Textarea
@@ -1367,10 +1489,13 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEditModal(false)}>
+            <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
-            <Button onClick={confirmEdit} className="bg-orange-600 hover:bg-orange-700">
+            <Button
+              onClick={confirmEdit}
+              className="bg-orange-600 hover:bg-orange-700"
+            >
               Guardar Cambios
             </Button>
           </DialogFooter>
@@ -1378,26 +1503,36 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
       </Dialog>
 
       {/* Modal Eliminar Cliente */}
-      <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
+      <Dialog
+        open={isEliminar}
+        onOpenChange={(open) => {
+          if (!open) closeToList();
+        }}
+      >
         <DialogContent aria-describedby="delete-cliente-description">
           <DialogHeader>
             <DialogTitle>Eliminar Cliente</DialogTitle>
             <DialogDescription id="delete-cliente-description">
-              ¿Estás seguro de que deseas eliminar este cliente? Esta acción no se puede deshacer.
+              ¿Estás seguro de que deseas eliminar este cliente? Esta acción no
+              se puede deshacer.
             </DialogDescription>
           </DialogHeader>
-          {selectedCliente && (
+          {clienteSeleccionado && (
             <div className="py-4">
               <p className="text-gray-700">
-                Cliente: <span className="font-semibold">{selectedCliente.nombre}</span>
+                Cliente:{" "}
+                <span className="font-semibold">
+                  {clienteSeleccionado.nombre}
+                </span>
               </p>
               <p className="text-gray-600 text-sm mt-1">
-                {selectedCliente.tipoDocumento}: {selectedCliente.numeroDocumento}
+                {clienteSeleccionado.tipoDocumento}:{" "}
+                {clienteSeleccionado.numeroDocumento}
               </p>
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDeleteModal(false)}>
+            <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
             <Button variant="destructive" onClick={confirmDelete}>
@@ -1409,20 +1544,31 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
 
       {/* Modal de Éxito */}
       <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
-        <DialogContent className="max-w-lg" aria-describedby="success-cliente-description">
+        <DialogContent
+          className="max-w-lg"
+          aria-describedby="success-cliente-description"
+        >
           <DialogHeader>
             <div className="flex justify-center mb-4">
               <div className="rounded-full bg-green-100 p-3">
                 <CheckCircle className="h-12 w-12 text-green-600" />
               </div>
             </div>
-            <DialogTitle className="text-center">¡Registro Exitoso!</DialogTitle>
-            <DialogDescription id="success-cliente-description" className="text-center">
+            <DialogTitle className="text-center">
+              ¡Registro Exitoso!
+            </DialogTitle>
+            <DialogDescription
+              id="success-cliente-description"
+              className="text-center"
+            >
               El cliente ha sido creado correctamente en el sistema
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex justify-center">
-            <Button onClick={handleSuccessModalClose} className="bg-green-600 hover:bg-green-700">
+            <Button
+              onClick={handleSuccessModalClose}
+              className="bg-green-600 hover:bg-green-700"
+            >
               Aceptar
             </Button>
           </DialogFooter>
@@ -1430,29 +1576,43 @@ export default function Clientes({ triggerCreate, selectedBodega = 'Bodega Princ
       </Dialog>
 
       {/* Modal Confirmar Cambio de Estado */}
-      <Dialog open={showConfirmEstadoModal} onOpenChange={setShowConfirmEstadoModal}>
+      <Dialog
+        open={showConfirmEstadoModal}
+        onOpenChange={setShowConfirmEstadoModal}
+      >
         <DialogContent aria-describedby="confirm-estado-description">
           <DialogHeader>
             <DialogTitle>Cambiar Estado del Cliente</DialogTitle>
             <DialogDescription id="confirm-estado-description">
-              ¿Estás seguro de que deseas cambiar el estado de este cliente? Esta acción no se puede deshacer.
+              ¿Estás seguro de que deseas cambiar el estado de este cliente? Esta
+              acción no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
           {clienteParaCambioEstado && (
             <div className="py-4">
               <p className="text-gray-700">
-                Cliente: <span className="font-semibold">{clienteParaCambioEstado.nombre}</span>
+                Cliente:{" "}
+                <span className="font-semibold">
+                  {clienteParaCambioEstado.nombre}
+                </span>
               </p>
               <p className="text-gray-600 text-sm mt-1">
-                {clienteParaCambioEstado.tipoDocumento}: {clienteParaCambioEstado.numeroDocumento}
+                {clienteParaCambioEstado.tipoDocumento}:{" "}
+                {clienteParaCambioEstado.numeroDocumento}
               </p>
               <p className="text-gray-600 text-sm mt-1">
-                Estado actual: <span className="font-semibold">{clienteParaCambioEstado.estado}</span>
+                Estado actual:{" "}
+                <span className="font-semibold">
+                  {clienteParaCambioEstado.estado}
+                </span>
               </p>
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowConfirmEstadoModal(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setShowConfirmEstadoModal(false)}
+            >
               Cancelar
             </Button>
             <Button variant="destructive" onClick={confirmEstado}>
