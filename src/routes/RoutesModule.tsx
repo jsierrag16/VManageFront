@@ -98,19 +98,19 @@ export default function RoutesModule() {
           <Route path="proveedores/:id/editar" element={<Proveedores />} />
           <Route path="proveedores/:id/eliminar" element={<Proveedores />} />
           
-          {/* ORDENES COMPRA PENDIENTE*/}
-          {/* <Route path="compras" element={< Compras/>} />
+          {/* ORDENES COMPRA */}
+          <Route path="compras" element={< Compras/>} />
           <Route path="compras/crear" element={< Compras />} />
           <Route path="compras/:id/ver" element={< Compras/>} />
           <Route path="compras/:id/editar" element={< Compras/>} />
-          <Route path="compras/:id/eliminar" element={< Compras/>} /> */}
+          <Route path="compras/:id/eliminar" element={< Compras/>} />
           
-          {/* REMISIONES COMPRA PENDIENTE*/}
+          {/* REMISIONES COMPRA PENDIENTE
           <Route path="remcompras" element={< RemisionesCompra/>} />
           <Route path="remcompras/crear" element={< RemisionesCompra/>} />
           <Route path="remcompras/:id/ver" element={< RemisionesCompra/>} />
           <Route path="remcompras/:id/editar" element={< RemisionesCompra/>} />
-          <Route path="remcompras:id/eliminar" element={< RemisionesCompra/>} />
+          <Route path="remcompras:id/eliminar" element={< RemisionesCompra/>} /> */}
 
           {/* CLIENTES PENDIENTE*/}
           <Route path="clientes" element={< Clientes/>} />
