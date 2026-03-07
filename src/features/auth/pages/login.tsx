@@ -9,7 +9,6 @@ import { Button } from '../../../shared/components/ui/button';
 import { Input } from '../../../shared/components/ui/input';
 import { Label } from '../../../shared/components/ui/label';
 import { Toaster } from '../../../shared/components/ui/sonner';
-import { ImageWithFallback } from '../../../shared/components/figma/ImageWithFallback';
 
 // Assets (Rutas ajustadas a tu estructura modular)
 import loginImage from '../../../assets/images/FondoLogin.png';
@@ -150,9 +149,8 @@ export default function Login() {
           transition={{ duration: 0.6 }}
           className="hidden md:flex md:w-[50%] relative overflow-hidden"
         >
-          <ImageWithFallback
+          <img
             src={loginImage}
-            fallbackSrc="https://images.unsplash.com/photo-1712732249476-83f7568a0b70?auto=format&fit=crop&q=80&w=1080"
             alt="Login"
             className="w-full h-full object-cover"
           />
@@ -213,10 +211,10 @@ export default function Login() {
                       onBlur={() => handleBlur('username')}
                       disabled={isLoading}
                       className={`h-11 pl-10 transition-all duration-200 ${errors.username && touched.username
-                          ? 'border-red-500 focus-visible:ring-red-500'
-                          : touched.username && !errors.username
-                            ? 'border-green-500 focus-visible:ring-green-500'
-                            : ''
+                        ? 'border-red-500 focus-visible:ring-red-500'
+                        : touched.username && !errors.username
+                          ? 'border-green-500 focus-visible:ring-green-500'
+                          : ''
                         }`}
                     />
                   </div>
@@ -249,10 +247,10 @@ export default function Login() {
                       onBlur={() => handleBlur('password')}
                       disabled={isLoading}
                       className={`h-11 pl-10 pr-10 transition-all duration-200 ${errors.password && touched.password
-                          ? 'border-red-500 focus-visible:ring-red-500'
-                          : touched.password && !errors.password
-                            ? 'border-green-500 focus-visible:ring-green-500'
-                            : ''
+                        ? 'border-red-500 focus-visible:ring-red-500'
+                        : touched.password && !errors.password
+                          ? 'border-green-500 focus-visible:ring-green-500'
+                          : ''
                         }`}
                     />
                     <button

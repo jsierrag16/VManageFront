@@ -4,7 +4,9 @@ import { Sidebar } from "./components/Sidebar";
 import { Navbar } from "./components/Navbar";
 import { Toaster } from "../shared/components/ui/sonner";
 import { useAuth } from "../shared/context/AuthContext";
-
+import { Traslado } from "../data/traslados";
+import { Producto } from "../data/productos";
+import { NotificationItem } from "../shared/notificaciones/types/notification.types";
 
 export type AppOutletContext = {
   currentUser: any;
@@ -14,14 +16,13 @@ export type AppOutletContext = {
   vManageLogo?: string;
   vManageLogoSmall?: string;
   gvmLogo?: string;
-  traslados?: any[];
-  productos?: any[];
+  traslados?: Traslado[];
+  productos?: Producto[];
   selectedBodegaId: number;
   selectedBodegaNombre: string;
   bodegasDisponibles: { id: number; nombre: string }[];
   isBodegaFijada: boolean;
 };
-
 
 type MainLayoutProps = {
   currentUser: any;
@@ -31,8 +32,8 @@ type MainLayoutProps = {
   vManageLogo?: string;
   vManageLogoSmall?: string;
   gvmLogo?: string;
-  traslados?: any[];
-  productos?: any[];
+  traslados?: Traslado[];
+  productos?: Producto[];
 };
 
 export default function MainLayout({
@@ -62,10 +63,32 @@ export default function MainLayout({
       bodegasDisponibles[0]?.nombre ||
       "Sin bodega";
 
+  const handleNavigateToTraslados = (notification?: NotificationItem) => {
+    const trasladoId = notification?.action?.entityId;
+
+    if (!trasladoId) {
+      navigate("/app/traslados");
+      return;
+    }
+
+    navigate(`/app/traslados/${trasladoId}/ver`);
+  };
+
+  const handleNavigateToExistencias = (notification?: NotificationItem) => {
+    const productoId = notification?.action?.entityId;
+
+    if (!productoId) {
+      navigate("/app/productos");
+      return;
+    }
+
+    navigate(`/app/productos/${productoId}/ver`);
+  };
 
   return (
     <>
       <Toaster richColors position="top-center" />
+
       <div className="min-h-screen bg-gray-50 flex">
         <Sidebar
           isOpen={isSidebarOpen}
@@ -88,10 +111,9 @@ export default function MainLayout({
             onOpenProfile={() => navigate("/app/perfil")}
             traslados={traslados}
             productos={productos}
-            onNavigateToTraslados={() => navigate("/app/traslados")}
-            onNavigateToExistencias={() => navigate("/app/productos")}
+            onNavigateToTraslados={handleNavigateToTraslados}
+            onNavigateToExistencias={handleNavigateToExistencias}
           />
-
 
           <main className="flex-1 p-4 lg:p-8">
             <Outlet

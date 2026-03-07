@@ -1,6 +1,10 @@
 import { Menu, Building2, ChevronDown, Edit, LogOut } from "lucide-react";
 import { motion } from "motion/react";
-import { Avatar, AvatarFallback, AvatarImage } from "../../shared/components/ui/avatar";
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "../../shared/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,25 +13,28 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "../../shared/components/ui/dropdown-menu";
-import Notificaciones from "../../features/dashboard/components/Notificaciones";
+import Notificaciones from "../../shared/notificaciones/Notificaciones";
 import { useAuth } from "../../shared/context/AuthContext";
+import { Traslado } from "../../data/traslados";
+import { Producto } from "../../data/productos";
+import { NotificationItem } from "../../shared/notificaciones/types/notification.types";
 
 interface NavbarProps {
   onSidebarToggle: () => void;
   onMobileMenuToggle: () => void;
-
-  // ❌ ya no lo necesitamos (causaba el warning si no lo usas)
-  // isSidebarOpen: boolean;
-
-  currentUser: any;
-
+  currentUser: {
+    nombre?: string;
+    apellido?: string;
+    email?: string;
+    rol?: string;
+    avatarUrl?: string;
+  } | null;
   onLogout: () => void;
   onOpenProfile: () => void;
-
-  traslados: any[];
-  productos: any[];
-  onNavigateToTraslados: () => void;
-  onNavigateToExistencias: () => void;
+  traslados: Traslado[];
+  productos: Producto[];
+  onNavigateToTraslados: (notification?: NotificationItem) => void;
+  onNavigateToExistencias: (notification?: NotificationItem) => void;
 }
 
 export function Navbar({
@@ -41,7 +48,12 @@ export function Navbar({
   onNavigateToTraslados,
   onNavigateToExistencias,
 }: NavbarProps) {
-  const { bodegasDisponibles, selectedBodegaId, setSelectedBodegaId, isBodegaFijada } = useAuth();
+  const {
+    bodegasDisponibles,
+    selectedBodegaId,
+    setSelectedBodegaId,
+    isBodegaFijada,
+  } = useAuth();
 
   const tieneVariasBodegas = bodegasDisponibles.length >= 2;
 
@@ -60,31 +72,34 @@ export function Navbar({
     <header className="sticky top-0 z-20 bg-blue-600 border-b border-blue-700 shadow-md">
       <div className="flex items-center justify-between pl-1 pr-2 lg:pl-2 lg:pr-8 py-2.5">
         <div className="flex items-center">
-          {/* Mobile Menu Button */}
           <button
             onClick={onMobileMenuToggle}
             className="lg:hidden p-2 hover:bg-blue-700 rounded-lg transition-colors text-white"
+            type="button"
           >
             <Menu size={22} />
           </button>
 
-          {/* Desktop Toggle */}
           <motion.button
             onClick={onSidebarToggle}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             className="hidden lg:flex p-2 hover:bg-blue-700 rounded-lg transition-colors text-white"
+            type="button"
           >
             <Menu size={22} />
           </motion.button>
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Selector de Bodega */}
           {opciones.length > 0 && (
             <DropdownMenu>
-              <DropdownMenuTrigger asChild disabled={isBodegaFijada || !tieneVariasBodegas}>
+              <DropdownMenuTrigger
+                asChild
+                disabled={isBodegaFijada || !tieneVariasBodegas}
+              >
                 <button
+                  type="button"
                   className={`flex items-center gap-2 p-2 px-3 rounded-lg transition-colors text-white ${
                     isBodegaFijada || !tieneVariasBodegas
                       ? "opacity-80 cursor-not-allowed"
@@ -97,7 +112,9 @@ export function Navbar({
                   }
                 >
                   <Building2 size={20} />
-                  <span className="hidden lg:block text-sm">{selectedNombre}</span>
+                  <span className="hidden lg:block text-sm">
+                    {selectedNombre}
+                  </span>
                   <ChevronDown size={16} className="hidden lg:block" />
                 </button>
               </DropdownMenuTrigger>
@@ -114,7 +131,9 @@ export function Navbar({
                     >
                       <div className="flex justify-between w-full">
                         <span>{bodega.nombre}</span>
-                        {selectedBodegaId === bodega.id && <span className="text-blue-600">✓</span>}
+                        {selectedBodegaId === bodega.id && (
+                          <span className="text-blue-600">✓</span>
+                        )}
                       </div>
                     </DropdownMenuItem>
                   ))}
@@ -123,7 +142,6 @@ export function Navbar({
             </DropdownMenu>
           )}
 
-          {/* ✅ Notificaciones (ya NO recibe selectedBodega) */}
           <Notificaciones
             traslados={traslados}
             productos={productos}
@@ -131,41 +149,60 @@ export function Navbar({
             onNavigateToExistencias={onNavigateToExistencias}
           />
 
-          {/* User Menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-3 hover:bg-blue-700 px-3 py-2 rounded-lg transition-colors">
+              <button
+                className="flex items-center gap-3 hover:bg-blue-700 px-3 py-2 rounded-lg transition-colors"
+                type="button"
+              >
                 <Avatar className="h-8 w-8">
                   <AvatarImage src={currentUser?.avatarUrl || ""} />
                   <AvatarFallback className="bg-white text-blue-600">
                     {currentUser?.nombre?.charAt(0) || "U"}
                   </AvatarFallback>
                 </Avatar>
+
                 <div className="hidden md:block text-white text-left">
                   <p className="text-sm">
                     {currentUser?.nombre} {currentUser?.apellido}
                   </p>
                   <p className="text-xs text-blue-100">{currentUser?.rol}</p>
                 </div>
+
                 <ChevronDown size={16} className="text-white hidden md:block" />
               </button>
             </DropdownMenuTrigger>
+
             <DropdownMenuContent className="w-64" align="end">
               <DropdownMenuLabel>
                 <div className="flex flex-col space-y-1">
                   <p className="text-sm font-medium">
                     {currentUser?.nombre} {currentUser?.apellido}
                   </p>
-                  <p className="text-xs text-muted-foreground">{currentUser?.email}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {currentUser?.email}
+                  </p>
                 </div>
               </DropdownMenuLabel>
+
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={onOpenProfile} className="cursor-pointer">
-                <Edit size={16} className="mr-2" /> Editar perfil
+
+              <DropdownMenuItem
+                onClick={onOpenProfile}
+                className="cursor-pointer"
+              >
+                <Edit size={16} className="mr-2" />
+                Editar perfil
               </DropdownMenuItem>
+
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={onLogout} className="cursor-pointer text-red-600">
-                <LogOut size={16} className="mr-2" /> Cerrar sesión
+
+              <DropdownMenuItem
+                onClick={onLogout}
+                className="cursor-pointer text-red-600"
+              >
+                <LogOut size={16} className="mr-2" />
+                Cerrar sesión
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
