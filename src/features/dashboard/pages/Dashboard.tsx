@@ -1,54 +1,21 @@
 import { useState, useMemo } from "react";
-import { useOutletContext } from "react-router-dom";
 import { motion } from "motion/react";
 import { toast } from "sonner";
-
-import type { AppOutletContext } from "../../../layouts/MainLayout";
 import { useAuth } from "../../../shared/context/AuthContext";
 import { bodegasData } from "../../../data/bodegas";
 
 // Componentes
 import { StatsCard } from "../components/StatsCard";
-import { DashboardCharts } from "../components/DashboardCharts";
-
-// Páginas / Secciones
-import Clientes from "../../clientes/pages/Clientes";
-import Proveedores from "../../proveedores/pages/Proveedores";
-import Existencias from "../../productos/pages/Productos";
-import Compras from "../../compras/pages/Compras";
-import RemisionesCompra from "../../remisiones/pages/RemisionesCompra";
-import Ordenes, { ordenesData } from "../../ordenes/pages/Ordenes";
-import Remisiones from "../../remisiones/pages/Remisiones";
-import PagosAbonos from "../../pagosAbonos/pages/PagosAbonos";
-import Cotizaciones from "../../cotizaciones/pages/Cotizaciones";
-import Usuarios from "../../usuarios/pages/Usuarios";
-import Roles from "../../roles/pages/Roles";
-import Bodegas from "../../bodegas/pages/Bodegas";
-import Traslados from "../../traslados/pages/Traslados";
-import Perfil from "../../perfil/pages/Perfil";
+import { ordenesData } from "../../../data/ordenes";
 
 // Contextos y Datos
 import { useTraslados } from "../../../shared/context/TrasladosContext";
 import { useProductos } from "../../../shared/context/ProductosContext";
 import { clientesData } from "../../../data/clientes";
 
-// Datos de ejemplo para las gráficas
-const salesData = [
-  { name: "Ene", ventas: 1475000, compras: 850000 },
-  { name: "Feb", ventas: 944000, compras: 620000 },
-  { name: "Mar", ventas: 2075000, compras: 1180000 },
-  { name: "Abr", ventas: 1850000, compras: 1050000 },
-  { name: "May", ventas: 2200000, compras: 1300000 },
-  { name: "Jun", ventas: 2650000, compras: 1580000 },
-  { name: "Jul", ventas: 2890000, compras: 1720000 },
-];
 
 export default function Dashboard() {
-  const outlet = useOutletContext<AppOutletContext>();
-  const { setUsuario, selectedBodegaId } = useAuth();
-
-  const currentUser = outlet.currentUser;
-  const onUserUpdate = setUsuario;
+  const { selectedBodegaId } = useAuth();
 
   // ✅ Convertimos el ID global a nombre (porque tus datos filtran por nombre)
   const selectedBodegaNombre = useMemo(() => {
@@ -104,10 +71,10 @@ export default function Dashboard() {
       selectedBodegaNombre === "Todas las bodegas"
         ? traslados
         : traslados.filter(
-            (t: any) =>
-              t.bodegaOrigen === selectedBodegaNombre ||
-              t.bodegaDestino === selectedBodegaNombre
-          );
+          (t: any) =>
+            t.bodegaOrigen === selectedBodegaNombre ||
+            t.bodegaDestino === selectedBodegaNombre
+        );
 
     const totalVentas = ordenesFiltradas.reduce((sum, o) => sum + o.total, 0);
     const totalClientes = clientesFiltrados.length;
@@ -161,32 +128,6 @@ export default function Dashboard() {
       },
     };
   }, [selectedBodegaNombre, traslados, productos]);
-
-  const inventoryData = useMemo(() => {
-    const categorias: Record<string, number> = {};
-
-    productos.forEach((producto: any) => {
-      const stockPorBodega = producto.lotes
-        .filter(
-          (lote: any) =>
-            selectedBodegaNombre === "Todas las bodegas" ||
-            lote.bodega === selectedBodegaNombre
-        )
-        .reduce((sum: number, lote: any) => sum + lote.cantidadDisponible, 0);
-
-      if (!categorias[producto.categoria]) categorias[producto.categoria] = 0;
-      categorias[producto.categoria] += stockPorBodega;
-    });
-
-    return Object.entries(categorias).map(([name, stock]) => ({ name, stock }));
-  }, [selectedBodegaNombre, productos]);
-
-  const revenueData = useMemo(() => {
-    return salesData.map((item) => ({
-      name: item.name,
-      ingresos: item.ventas * 0.35,
-    }));
-  }, []);
 
   return (
     <motion.div
@@ -253,39 +194,7 @@ export default function Dashboard() {
               }}
             />
           </div>
-
-          <DashboardCharts
-            salesData={salesData}
-            inventoryData={inventoryData}
-            revenueData={revenueData}
-          />
         </div>
-      )}
-
-      {activeSection === "existencias" && (
-        <Existencias
-          selectedBodega={selectedBodegaNombre}
-          onNavigateToTraslados={() => setActiveSection("traslados")}
-        />
-      )}
-      {activeSection === "traslados" && <Traslados selectedBodega={selectedBodegaNombre} />}
-      {activeSection === "bodegas" && <Bodegas />}
-      {activeSection === "proveedores" && <Proveedores selectedBodega={selectedBodegaNombre} />}
-      {activeSection === "ordenescompra" && <Compras selectedBodega={selectedBodegaNombre} />}
-      {activeSection === "remisionescompra" && <RemisionesCompra selectedBodega={selectedBodegaNombre} />}
-      {activeSection === "clientes" && <Clientes selectedBodega={selectedBodegaNombre} />}
-      {activeSection === "cotizaciones" && <Cotizaciones selectedBodega={selectedBodegaNombre} />}
-      {activeSection === "ordenes" && <Ordenes currentUser={currentUser} selectedBodega={selectedBodegaNombre} />}
-      {activeSection === "remisiones" && <Remisiones currentUser={currentUser} selectedBodega={selectedBodegaNombre} />}
-      {activeSection === "pagos" && <PagosAbonos currentUser={currentUser} selectedBodega={selectedBodegaNombre} />}
-      {activeSection === "roles" && <Roles />}
-      {activeSection === "usuarios" && <Usuarios selectedBodega={selectedBodegaNombre} />}
-      {activeSection === "perfil" && (
-        <Perfil
-          currentUser={currentUser}
-          onBack={() => setActiveSection("dashboard")}
-          onUserUpdate={onUserUpdate}
-        />
       )}
     </motion.div>
   );

@@ -126,26 +126,26 @@ export default function RoutesModule() {
           <Route path="cotizaciones/:id/editar" element={< Cotizaciones/>} />
           <Route path="cotizaciones/:id/eliminar" element={< Cotizaciones/>} />
 
-          {/* ORDENES VENTA PENDIENTE*/}
+          {/* ORDENES VENTA */}
           <Route path="ordenes" element={< Ordenes/>} />
           <Route path="ordenes/crear" element={< Ordenes/>} />
           <Route path="ordenes/:id/ver" element={< Ordenes/>} />
           <Route path="ordenes/:id/editar" element={< Ordenes/>} />
           <Route path="ordenes/:id/eliminar" element={<  Ordenes/>} />
 
-          {/* REMISIONES VENTA PENDIENTE*/}
+          {/* REMISIONES VENTA */}
           <Route path="remisiones" element={< Remisiones/>} />
           <Route path="remisiones/crear" element={<Remisiones/>} />
           <Route path="remisiones/:id/ver" element={<Remisiones/>} />
           <Route path="remisiones/:id/editar" element={<Remisiones/>} />
           <Route path="remisiones/:id/eliminar" element={< Remisiones/>} />
 
-          {/* PAGOS PENDIENTE*/}
+          {/* PAGOS */}
           <Route path="pagos" element={<PagosAbonos/>} />
           <Route path="pagos/crear" element={<PagosAbonos/>} />
           <Route path="pagos/:id/ver" element={<PagosAbonos/>} />
           <Route path="pagos/:id/editar" element={<PagosAbonos/>} />
-          <Route path="pagos/:id/eliminar" element={< PagosAbonos/>} />
+          <Route path="pagos/:id/abonar" element={< PagosAbonos/>} />
 
           {/* ROLES */}
           <Route path="roles" element={< Roles/>} />
