@@ -22,7 +22,7 @@ export function TrasladosProvider({ children }: { children: ReactNode }) {
     setTraslados(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
   };
 
-  const updateProductos = (productos: Producto[]) => {
+  const updateProductos = (_productos: Producto[]) => {
     // Esta función se puede usar para sincronizar el inventario si es necesario
     // Implementación futura si se requiere
   };

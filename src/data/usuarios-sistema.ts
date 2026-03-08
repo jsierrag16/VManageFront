@@ -1,4 +1,4 @@
-import { Permisos } from "./roles";
+import { Permisos, createEmptyPermisos, createFullPermisos } from "./roles";
 
 export interface UsuarioSistema {
   id: number;
@@ -29,31 +29,8 @@ export const usuariosSistema: UsuarioSistema[] = [
     telefono: "3001234567",
     rol: "Administrador",
     estado: true,
-    bodegasIds: [1, 2, 3, 4], // ✅ Acceso a todas las bodegas
-    permisos: {
-      dashboard: { acceder: true },
-      inventario: {
-        existencias: { crear: true },
-        productos: { crear: true, darDeBaja: true },
-        traslados: { crear: true },
-        bodegas: { crear: true, editar: true, eliminar: true },
-      },
-      compras: {
-        proveedores: { crear: true, editar: true, eliminar: true },
-        ordenesCompra: { crear: true, editar: true, eliminar: true, cambiarEstado: true },
-        remisionesCompra: { crear: true, editar: true, eliminar: true, cambiarEstado: true },
-      },
-      ventas: {
-        clientes: { crear: true, editar: true, eliminar: true },
-        ordenes: { crear: true, editar: true, eliminar: true, cambiarEstado: true },
-        remisionesVenta: { crear: true, editar: true, eliminar: true, cambiarEstado: true },
-        pagosAbonos: { crear: true, editar: true, eliminar: true, cambiarEstado: true },
-      },
-      configuracion: {
-        roles: { crear: true, editar: true, eliminar: true, inhabilitar: true },
-      },
-      usuarios: { crear: true, editar: true, eliminar: true, inhabilitar: true },
-    },
+    bodegasIds: [1, 2, 3, 4],
+    permisos: createFullPermisos(),
   },
   {
     id: 2,
@@ -65,30 +42,58 @@ export const usuariosSistema: UsuarioSistema[] = [
     telefono: "3109876543",
     rol: "Vendedor",
     estado: true,
-    bodegasIds: [2], // ✅ Solo Bodega 2
+    bodegasIds: [2],
     permisos: {
+      ...createEmptyPermisos(),
       dashboard: { acceder: true },
-      inventario: {
-        existencias: { crear: false },
-        productos: { crear: false, darDeBaja: false },
-        traslados: { crear: false },
-        bodegas: { crear: false, editar: false, eliminar: false },
-      },
-      compras: {
-        proveedores: { crear: false, editar: false, eliminar: false },
-        ordenesCompra: { crear: false, editar: false, eliminar: false, cambiarEstado: false },
-        remisionesCompra: { crear: false, editar: false, eliminar: false, cambiarEstado: false },
+      existencias: {
+        ...createEmptyPermisos().existencias,
+        productos: {
+          ver: true,
+          crear: false,
+          editar: false,
+          cambiarEstado: false,
+        },
       },
       ventas: {
-        clientes: { crear: true, editar: true, eliminar: false },
-        ordenes: { crear: true, editar: true, eliminar: false, cambiarEstado: true },
-        remisionesVenta: { crear: true, editar: false, eliminar: false, cambiarEstado: false },
-        pagosAbonos: { crear: true, editar: false, eliminar: false, cambiarEstado: false },
+        clientes: {
+          ver: true,
+          crear: true,
+          editar: true,
+          cambiarEstado: false,
+          eliminar: false,
+        },
+        cotizaciones: {
+          ver: true,
+          crear: true,
+          descargar: true,
+          editar: true,
+          cambiarEstado: true,
+          anular: true,
+        },
+        ordenesVenta: {
+          ver: true,
+          crear: true,
+          descargar: true,
+          editar: true,
+          cambiarEstado: true,
+          anular: false,
+        },
+        remisionesVenta: {
+          ver: true,
+          crear: true,
+          descargar: true,
+          editar: false,
+          cambiarEstado: false,
+          anular: false,
+        },
+        pagos: {
+          ver: true,
+          crear: true,
+          agregarAbonos: true,
+          anular: false,
+        },
       },
-      configuracion: {
-        roles: { crear: false, editar: false, eliminar: false, inhabilitar: false },
-      },
-      usuarios: { crear: false, editar: false, eliminar: false, inhabilitar: false },
     },
   },
   {
@@ -101,30 +106,96 @@ export const usuariosSistema: UsuarioSistema[] = [
     telefono: "3201122334",
     rol: "Auxiliar Administrativo",
     estado: true,
-    bodegasIds: [1], // ✅ Solo Bodega 1
+    bodegasIds: [1],
     permisos: {
+      ...createEmptyPermisos(),
       dashboard: { acceder: true },
-      inventario: {
-        existencias: { crear: true },
-        productos: { crear: true, darDeBaja: false },
-        traslados: { crear: true },
-        bodegas: { crear: false, editar: false, eliminar: false },
+      existencias: {
+        productos: {
+          ver: true,
+          crear: true,
+          editar: true,
+          cambiarEstado: false,
+        },
+        traslados: {
+          ver: true,
+          crear: true,
+          editar: true,
+          cambiarEstado: true,
+          anular: false,
+        },
+        bodegas: {
+          ver: true,
+          crear: false,
+          editar: false,
+          cambiarEstado: false,
+          eliminar: false,
+        },
       },
       compras: {
-        proveedores: { crear: true, editar: true, eliminar: false },
-        ordenesCompra: { crear: true, editar: true, eliminar: false, cambiarEstado: true },
-        remisionesCompra: { crear: true, editar: true, eliminar: false, cambiarEstado: true },
+        proveedores: {
+          ver: true,
+          crear: true,
+          editar: true,
+          cambiarEstado: true,
+          eliminar: false,
+        },
+        ordenesCompra: {
+          ver: true,
+          crear: true,
+          descargar: true,
+          editar: true,
+          cambiarEstado: true,
+          anular: false,
+        },
+        remisionesCompra: {
+          ver: true,
+          crear: true,
+          descargar: true,
+          editar: true,
+          cambiarEstado: true,
+          anular: false,
+        },
       },
       ventas: {
-        clientes: { crear: true, editar: true, eliminar: false },
-        ordenes: { crear: true, editar: true, eliminar: false, cambiarEstado: true },
-        remisionesVenta: { crear: true, editar: true, eliminar: false, cambiarEstado: true },
-        pagosAbonos: { crear: true, editar: true, eliminar: false, cambiarEstado: true },
+        clientes: {
+          ver: true,
+          crear: true,
+          editar: true,
+          cambiarEstado: true,
+          eliminar: false,
+        },
+        cotizaciones: {
+          ver: true,
+          crear: true,
+          descargar: true,
+          editar: true,
+          cambiarEstado: true,
+          anular: false,
+        },
+        ordenesVenta: {
+          ver: true,
+          crear: true,
+          descargar: true,
+          editar: true,
+          cambiarEstado: true,
+          anular: false,
+        },
+        remisionesVenta: {
+          ver: true,
+          crear: true,
+          descargar: true,
+          editar: true,
+          cambiarEstado: true,
+          anular: false,
+        },
+        pagos: {
+          ver: true,
+          crear: true,
+          agregarAbonos: true,
+          anular: false,
+        },
       },
-      configuracion: {
-        roles: { crear: false, editar: false, eliminar: false, inhabilitar: false },
-      },
-      usuarios: { crear: false, editar: false, eliminar: false, inhabilitar: false },
     },
   },
   {
@@ -137,30 +208,54 @@ export const usuariosSistema: UsuarioSistema[] = [
     telefono: "3155667788",
     rol: "Auxiliar de Bodega",
     estado: true,
-    bodegasIds: [3], // ✅ Solo Bodega 3
+    bodegasIds: [3],
     permisos: {
+      ...createEmptyPermisos(),
       dashboard: { acceder: true },
-      inventario: {
-        existencias: { crear: true },
-        productos: { crear: false, darDeBaja: false },
-        traslados: { crear: true },
-        bodegas: { crear: false, editar: false, eliminar: false },
+      existencias: {
+        productos: {
+          ver: true,
+          crear: false,
+          editar: false,
+          cambiarEstado: false,
+        },
+        traslados: {
+          ver: true,
+          crear: true,
+          editar: true,
+          cambiarEstado: true,
+          anular: true,
+        },
+        bodegas: {
+          ver: true,
+          crear: false,
+          editar: false,
+          cambiarEstado: false,
+          eliminar: false,
+        },
       },
       compras: {
-        proveedores: { crear: false, editar: false, eliminar: false },
-        ordenesCompra: { crear: false, editar: false, eliminar: false, cambiarEstado: false },
-        remisionesCompra: { crear: true, editar: false, eliminar: false, cambiarEstado: false },
+        ...createEmptyPermisos().compras,
+        remisionesCompra: {
+          ver: true,
+          crear: true,
+          descargar: true,
+          editar: false,
+          cambiarEstado: false,
+          anular: false,
+        },
       },
       ventas: {
-        clientes: { crear: false, editar: false, eliminar: false },
-        ordenes: { crear: false, editar: false, eliminar: false, cambiarEstado: false },
-        remisionesVenta: { crear: true, editar: false, eliminar: false, cambiarEstado: false },
-        pagosAbonos: { crear: false, editar: false, eliminar: false, cambiarEstado: false },
+        ...createEmptyPermisos().ventas,
+        remisionesVenta: {
+          ver: true,
+          crear: true,
+          descargar: true,
+          editar: false,
+          cambiarEstado: false,
+          anular: false,
+        },
       },
-      configuracion: {
-        roles: { crear: false, editar: false, eliminar: false, inhabilitar: false },
-      },
-      usuarios: { crear: false, editar: false, eliminar: false, inhabilitar: false },
     },
   },
   {
@@ -173,30 +268,42 @@ export const usuariosSistema: UsuarioSistema[] = [
     telefono: "3186677889",
     rol: "Conductor",
     estado: true,
-    bodegasIds: [1], // ✅ Solo Bodega 1
+    bodegasIds: [1],
     permisos: {
+      ...createEmptyPermisos(),
       dashboard: { acceder: true },
-      inventario: {
-        existencias: { crear: false },
-        productos: { crear: false, darDeBaja: false },
-        traslados: { crear: false },
-        bodegas: { crear: false, editar: false, eliminar: false },
+      existencias: {
+        ...createEmptyPermisos().existencias,
+        traslados: {
+          ver: true,
+          crear: false,
+          editar: false,
+          cambiarEstado: true,
+          anular: false,
+        },
       },
       compras: {
-        proveedores: { crear: false, editar: false, eliminar: false },
-        ordenesCompra: { crear: false, editar: false, eliminar: false, cambiarEstado: false },
-        remisionesCompra: { crear: false, editar: false, eliminar: false, cambiarEstado: false },
+        ...createEmptyPermisos().compras,
+        remisionesCompra: {
+          ver: true,
+          crear: false,
+          descargar: true,
+          editar: false,
+          cambiarEstado: true,
+          anular: false,
+        },
       },
       ventas: {
-        clientes: { crear: false, editar: false, eliminar: false },
-        ordenes: { crear: false, editar: false, eliminar: false, cambiarEstado: false },
-        remisionesVenta: { crear: false, editar: false, eliminar: false, cambiarEstado: false },
-        pagosAbonos: { crear: false, editar: false, eliminar: false, cambiarEstado: false },
+        ...createEmptyPermisos().ventas,
+        remisionesVenta: {
+          ver: true,
+          crear: false,
+          descargar: true,
+          editar: false,
+          cambiarEstado: true,
+          anular: false,
+        },
       },
-      configuracion: {
-        roles: { crear: false, editar: false, eliminar: false, inhabilitar: false },
-      },
-      usuarios: { crear: false, editar: false, eliminar: false, inhabilitar: false },
     },
   },
 ];

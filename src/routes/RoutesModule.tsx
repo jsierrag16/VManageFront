@@ -82,7 +82,7 @@ export default function RoutesModule() {
           <Route path="traslados/crear" element={<Traslados />} />
           <Route path="traslados/:id/ver" element={<Traslados />} />
           <Route path="traslados/:id/editar" element={<Traslados />} />
-          <Route path="traslados/:id/cancelar" element={<Traslados />} />
+          <Route path="traslados/:id/anular" element={<Traslados />} />
 
           <Route path="bodegas" element={<Bodegas />} />
           <Route path="bodegas/crear" element={<Bodegas />} />

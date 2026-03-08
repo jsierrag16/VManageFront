@@ -185,10 +185,18 @@ export default function Roles() {
   };
 
   // Verificar permisos del usuario
-  const puedeCrear = tienePermiso("configuracion", "roles", "crear");
-  const puedeEditar = tienePermiso("configuracion", "roles", "editar");
-  const puedeEliminar = tienePermiso("configuracion", "roles", "eliminar");
-  const puedeInhabilitar = tienePermiso("configuracion", "roles", "inhabilitar");
+  const puedeCrear = tienePermiso("administracion", "roles", "crear");
+  const puedeEditar = tienePermiso("administracion", "roles", "editar");
+  const puedeEliminar = tienePermiso("administracion", "roles", "eliminar");
+  const puedeCambiarEstado = tienePermiso("administracion", "roles", "cambiarEstado");
+
+  useEffect(() => {
+    if (!isVer && !isEliminar) return;
+
+    if (!rolSeleccionado) {
+      closeToList();
+    }
+  }, [isVer, isEliminar, rolSeleccionado]);
 
   // Filtrar roles
   const filteredRoles = useMemo(() => {
@@ -355,120 +363,199 @@ export default function Roles() {
     setFormPermisos(newPermisos);
   };
 
-  // Función para seleccionar/deseleccionar todos los permisos de un módulo
   const toggleModulePermissions = (module: string) => {
     const newPermisos = JSON.parse(JSON.stringify(formPermisos));
-
-    // Verificar si todos los permisos del módulo están activos
     const allChecked = isModuleFullyChecked(module);
 
-    // Alternar todos los permisos del módulo
     if (module === "dashboard") {
       newPermisos.dashboard.acceder = !allChecked;
-    } else if (module === "inventario") {
-      newPermisos.inventario.existencias.crear = !allChecked;
-      newPermisos.inventario.productos.crear = !allChecked;
-      newPermisos.inventario.productos.darDeBaja = !allChecked;
-      newPermisos.inventario.traslados.crear = !allChecked;
-      newPermisos.inventario.bodegas.crear = !allChecked;
-      newPermisos.inventario.bodegas.editar = !allChecked;
-      newPermisos.inventario.bodegas.eliminar = !allChecked;
-    } else if (module === "compras") {
+    }
+
+    if (module === "existencias") {
+      newPermisos.existencias.productos.ver = !allChecked;
+      newPermisos.existencias.productos.crear = !allChecked;
+      newPermisos.existencias.productos.editar = !allChecked;
+      newPermisos.existencias.productos.cambiarEstado = !allChecked;
+
+      newPermisos.existencias.traslados.ver = !allChecked;
+      newPermisos.existencias.traslados.crear = !allChecked;
+      newPermisos.existencias.traslados.editar = !allChecked;
+      newPermisos.existencias.traslados.cambiarEstado = !allChecked;
+      newPermisos.existencias.traslados.anular = !allChecked;
+
+      newPermisos.existencias.bodegas.ver = !allChecked;
+      newPermisos.existencias.bodegas.crear = !allChecked;
+      newPermisos.existencias.bodegas.editar = !allChecked;
+      newPermisos.existencias.bodegas.cambiarEstado = !allChecked;
+      newPermisos.existencias.bodegas.eliminar = !allChecked;
+    }
+
+    if (module === "compras") {
+      newPermisos.compras.proveedores.ver = !allChecked;
       newPermisos.compras.proveedores.crear = !allChecked;
       newPermisos.compras.proveedores.editar = !allChecked;
+      newPermisos.compras.proveedores.cambiarEstado = !allChecked;
       newPermisos.compras.proveedores.eliminar = !allChecked;
+
+      newPermisos.compras.ordenesCompra.ver = !allChecked;
       newPermisos.compras.ordenesCompra.crear = !allChecked;
+      newPermisos.compras.ordenesCompra.descargar = !allChecked;
       newPermisos.compras.ordenesCompra.editar = !allChecked;
-      newPermisos.compras.ordenesCompra.eliminar = !allChecked;
       newPermisos.compras.ordenesCompra.cambiarEstado = !allChecked;
+      newPermisos.compras.ordenesCompra.anular = !allChecked;
+
+      newPermisos.compras.remisionesCompra.ver = !allChecked;
       newPermisos.compras.remisionesCompra.crear = !allChecked;
+      newPermisos.compras.remisionesCompra.descargar = !allChecked;
       newPermisos.compras.remisionesCompra.editar = !allChecked;
-      newPermisos.compras.remisionesCompra.eliminar = !allChecked;
       newPermisos.compras.remisionesCompra.cambiarEstado = !allChecked;
-    } else if (module === "ventas") {
+      newPermisos.compras.remisionesCompra.anular = !allChecked;
+    }
+
+    if (module === "ventas") {
+      newPermisos.ventas.clientes.ver = !allChecked;
       newPermisos.ventas.clientes.crear = !allChecked;
       newPermisos.ventas.clientes.editar = !allChecked;
+      newPermisos.ventas.clientes.cambiarEstado = !allChecked;
       newPermisos.ventas.clientes.eliminar = !allChecked;
-      newPermisos.ventas.ordenes.crear = !allChecked;
-      newPermisos.ventas.ordenes.editar = !allChecked;
-      newPermisos.ventas.ordenes.eliminar = !allChecked;
+
+      newPermisos.ventas.cotizaciones.ver = !allChecked;
+      newPermisos.ventas.cotizaciones.crear = !allChecked;
+      newPermisos.ventas.cotizaciones.descargar = !allChecked;
+      newPermisos.ventas.cotizaciones.editar = !allChecked;
+      newPermisos.ventas.cotizaciones.cambiarEstado = !allChecked;
+      newPermisos.ventas.cotizaciones.anular = !allChecked;
+
+      newPermisos.ventas.ordenesVenta.ver = !allChecked;
+      newPermisos.ventas.ordenesVenta.crear = !allChecked;
+      newPermisos.ventas.ordenesVenta.descargar = !allChecked;
+      newPermisos.ventas.ordenesVenta.editar = !allChecked;
+      newPermisos.ventas.ordenesVenta.cambiarEstado = !allChecked;
+      newPermisos.ventas.ordenesVenta.anular = !allChecked;
+
+      newPermisos.ventas.remisionesVenta.ver = !allChecked;
       newPermisos.ventas.remisionesVenta.crear = !allChecked;
+      newPermisos.ventas.remisionesVenta.descargar = !allChecked;
       newPermisos.ventas.remisionesVenta.editar = !allChecked;
-      newPermisos.ventas.remisionesVenta.eliminar = !allChecked;
-      newPermisos.ventas.pagosAbonos.crear = !allChecked;
-      newPermisos.ventas.pagosAbonos.editar = !allChecked;
-      newPermisos.ventas.pagosAbonos.eliminar = !allChecked;
-    } else if (module === "configuracion") {
-      newPermisos.configuracion.roles.crear = !allChecked;
-      newPermisos.configuracion.roles.editar = !allChecked;
-      newPermisos.configuracion.roles.inhabilitar = !allChecked;
-    } else if (module === "usuarios") {
-      newPermisos.usuarios.crear = !allChecked;
-      newPermisos.usuarios.editar = !allChecked;
-      newPermisos.usuarios.eliminar = !allChecked;
-      newPermisos.usuarios.cambiarEstado = !allChecked;
+      newPermisos.ventas.remisionesVenta.cambiarEstado = !allChecked;
+      newPermisos.ventas.remisionesVenta.anular = !allChecked;
+
+      newPermisos.ventas.pagos.ver = !allChecked;
+      newPermisos.ventas.pagos.crear = !allChecked;
+      newPermisos.ventas.pagos.agregarAbonos = !allChecked;
+      newPermisos.ventas.pagos.anular = !allChecked;
+    }
+
+    if (module === "administracion") {
+      newPermisos.administracion.roles.ver = !allChecked;
+      newPermisos.administracion.roles.crear = !allChecked;
+      newPermisos.administracion.roles.editar = !allChecked;
+      newPermisos.administracion.roles.cambiarEstado = !allChecked;
+      newPermisos.administracion.roles.eliminar = !allChecked;
+
+      newPermisos.administracion.usuarios.ver = !allChecked;
+      newPermisos.administracion.usuarios.crear = !allChecked;
+      newPermisos.administracion.usuarios.editar = !allChecked;
+      newPermisos.administracion.usuarios.cambiarEstado = !allChecked;
+      newPermisos.administracion.usuarios.restablecerContrasena = !allChecked;
     }
 
     setFormPermisos(newPermisos);
   };
 
-  // Función para verificar si todos los permisos de un módulo están activos
   const isModuleFullyChecked = (module: string): boolean => {
     if (module === "dashboard") {
       return formPermisos.dashboard.acceder;
-    } else if (module === "inventario") {
+    }
+
+    if (module === "existencias") {
       return (
-        formPermisos.inventario.existencias.crear &&
-        formPermisos.inventario.productos.crear &&
-        formPermisos.inventario.productos.darDeBaja &&
-        formPermisos.inventario.traslados.crear &&
-        formPermisos.inventario.bodegas.crear &&
-        formPermisos.inventario.bodegas.editar &&
-        formPermisos.inventario.bodegas.eliminar
-      );
-    } else if (module === "compras") {
-      return (
-        formPermisos.compras.proveedores.crear &&
-        formPermisos.compras.proveedores.editar &&
-        formPermisos.compras.proveedores.eliminar &&
-        formPermisos.compras.ordenesCompra.crear &&
-        formPermisos.compras.ordenesCompra.editar &&
-        formPermisos.compras.ordenesCompra.eliminar &&
-        formPermisos.compras.ordenesCompra.cambiarEstado &&
-        formPermisos.compras.remisionesCompra.crear &&
-        formPermisos.compras.remisionesCompra.editar &&
-        formPermisos.compras.remisionesCompra.eliminar &&
-        formPermisos.compras.remisionesCompra.cambiarEstado
-      );
-    } else if (module === "ventas") {
-      return (
-        formPermisos.ventas.clientes.crear &&
-        formPermisos.ventas.clientes.editar &&
-        formPermisos.ventas.clientes.eliminar &&
-        formPermisos.ventas.ordenes.crear &&
-        formPermisos.ventas.ordenes.editar &&
-        formPermisos.ventas.ordenes.eliminar &&
-        formPermisos.ventas.remisionesVenta.crear &&
-        formPermisos.ventas.remisionesVenta.editar &&
-        formPermisos.ventas.remisionesVenta.eliminar &&
-        formPermisos.ventas.pagosAbonos.crear &&
-        formPermisos.ventas.pagosAbonos.editar &&
-        formPermisos.ventas.pagosAbonos.eliminar
-      );
-    } else if (module === "configuracion") {
-      return (
-        formPermisos.configuracion.roles.crear &&
-        formPermisos.configuracion.roles.editar &&
-        formPermisos.configuracion.roles.inhabilitar
-      );
-    } else if (module === "usuarios") {
-      return (
-        formPermisos.usuarios.crear &&
-        formPermisos.usuarios.editar &&
-        formPermisos.usuarios.eliminar &&
-        formPermisos.usuarios.inhabilitar
+        formPermisos.existencias.productos.ver &&
+        formPermisos.existencias.productos.crear &&
+        formPermisos.existencias.productos.editar &&
+        formPermisos.existencias.productos.cambiarEstado &&
+        formPermisos.existencias.traslados.ver &&
+        formPermisos.existencias.traslados.crear &&
+        formPermisos.existencias.traslados.editar &&
+        formPermisos.existencias.traslados.cambiarEstado &&
+        formPermisos.existencias.traslados.anular &&
+        formPermisos.existencias.bodegas.ver &&
+        formPermisos.existencias.bodegas.crear &&
+        formPermisos.existencias.bodegas.editar &&
+        formPermisos.existencias.bodegas.cambiarEstado &&
+        formPermisos.existencias.bodegas.eliminar
       );
     }
+
+    if (module === "compras") {
+      return (
+        formPermisos.compras.proveedores.ver &&
+        formPermisos.compras.proveedores.crear &&
+        formPermisos.compras.proveedores.editar &&
+        formPermisos.compras.proveedores.cambiarEstado &&
+        formPermisos.compras.proveedores.eliminar &&
+        formPermisos.compras.ordenesCompra.ver &&
+        formPermisos.compras.ordenesCompra.crear &&
+        formPermisos.compras.ordenesCompra.descargar &&
+        formPermisos.compras.ordenesCompra.editar &&
+        formPermisos.compras.ordenesCompra.cambiarEstado &&
+        formPermisos.compras.ordenesCompra.anular &&
+        formPermisos.compras.remisionesCompra.ver &&
+        formPermisos.compras.remisionesCompra.crear &&
+        formPermisos.compras.remisionesCompra.descargar &&
+        formPermisos.compras.remisionesCompra.editar &&
+        formPermisos.compras.remisionesCompra.cambiarEstado &&
+        formPermisos.compras.remisionesCompra.anular
+      );
+    }
+
+    if (module === "ventas") {
+      return (
+        formPermisos.ventas.clientes.ver &&
+        formPermisos.ventas.clientes.crear &&
+        formPermisos.ventas.clientes.editar &&
+        formPermisos.ventas.clientes.cambiarEstado &&
+        formPermisos.ventas.clientes.eliminar &&
+        formPermisos.ventas.cotizaciones.ver &&
+        formPermisos.ventas.cotizaciones.crear &&
+        formPermisos.ventas.cotizaciones.descargar &&
+        formPermisos.ventas.cotizaciones.editar &&
+        formPermisos.ventas.cotizaciones.cambiarEstado &&
+        formPermisos.ventas.cotizaciones.anular &&
+        formPermisos.ventas.ordenesVenta.ver &&
+        formPermisos.ventas.ordenesVenta.crear &&
+        formPermisos.ventas.ordenesVenta.descargar &&
+        formPermisos.ventas.ordenesVenta.editar &&
+        formPermisos.ventas.ordenesVenta.cambiarEstado &&
+        formPermisos.ventas.ordenesVenta.anular &&
+        formPermisos.ventas.remisionesVenta.ver &&
+        formPermisos.ventas.remisionesVenta.crear &&
+        formPermisos.ventas.remisionesVenta.descargar &&
+        formPermisos.ventas.remisionesVenta.editar &&
+        formPermisos.ventas.remisionesVenta.cambiarEstado &&
+        formPermisos.ventas.remisionesVenta.anular &&
+        formPermisos.ventas.pagos.ver &&
+        formPermisos.ventas.pagos.crear &&
+        formPermisos.ventas.pagos.agregarAbonos &&
+        formPermisos.ventas.pagos.anular
+      );
+    }
+
+    if (module === "administracion") {
+      return (
+        formPermisos.administracion.roles.ver &&
+        formPermisos.administracion.roles.crear &&
+        formPermisos.administracion.roles.editar &&
+        formPermisos.administracion.roles.cambiarEstado &&
+        formPermisos.administracion.roles.eliminar &&
+        formPermisos.administracion.usuarios.ver &&
+        formPermisos.administracion.usuarios.crear &&
+        formPermisos.administracion.usuarios.editar &&
+        formPermisos.administracion.usuarios.cambiarEstado &&
+        formPermisos.administracion.usuarios.restablecerContrasena
+      );
+    }
+
     return false;
   };
 
@@ -588,7 +675,7 @@ export default function Roles() {
                           className="text-gray-500"
                         />
                         <Badge
-                          className={`${getRolColor(rol.nombre)} hover:${getRolColor(rol.nombre)}`}
+                          className={getRolColor(rol.nombre)}
                         >
                           {rol.nombre}
                         </Badge>
@@ -602,7 +689,7 @@ export default function Roles() {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleToggleEstado(rol)}
-                        disabled={!puedeInhabilitar}
+                        disabled={!puedeCambiarEstado}
                         className={`h-7 ${rol.estado
                           ? "bg-green-100 text-green-800 hover:bg-green-200"
                           : "bg-red-100 text-red-800 hover:bg-red-200"
@@ -719,7 +806,7 @@ export default function Roles() {
         <DialogContent
           className="max-w-6xl max-h-[90vh] overflow-y-auto"
           aria-describedby="view-rol-description"
-          onInteractOutside={(e) => e.preventDefault()}   // ✅ no cerrar por fuera
+          onInteractOutside={(e) => e.preventDefault()}
         >
           <DialogHeader>
             <DialogTitle>Detalles del Rol</DialogTitle>
@@ -734,11 +821,7 @@ export default function Roles() {
                 <div>
                   <Label className="text-gray-500">Nombre del Rol</Label>
                   <div className="mt-1">
-                    <Badge
-                      className={`${getRolColor(rolSeleccionado.nombre)} hover:${getRolColor(
-                        rolSeleccionado.nombre
-                      )}`}
-                    >
+                    <Badge className={getRolColor(rolSeleccionado.nombre)}>
                       {rolSeleccionado.nombre}
                     </Badge>
                   </div>
@@ -780,52 +863,33 @@ export default function Roles() {
                   <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
                     <h5 className="font-semibold text-sm mb-2">Dashboard</h5>
                     <div className="text-sm text-gray-700 space-y-1">
-                      <p>
-                        • Acceder:{" "}
-                        {rolSeleccionado.permisos.dashboard.acceder ? "✓" : "✗"}
-                      </p>
+                      <p>• Acceder: {rolSeleccionado.permisos.dashboard.acceder ? "✓" : "✗"}</p>
                     </div>
                   </div>
 
-                  {/* Inventario */}
+                  {/* Existencias */}
                   <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                    <h5 className="font-semibold text-sm mb-2">Inventario</h5>
+                    <h5 className="font-semibold text-sm mb-2">Existencias</h5>
                     <div className="text-sm text-gray-700 space-y-1">
-                      <p className="font-medium">Existencias:</p>
-                      <p className="pl-2">
-                        • Crear:{" "}
-                        {rolSeleccionado.permisos.inventario.existencias.crear ? "✓" : "✗"}
-                      </p>
-
                       <p className="font-medium">Productos:</p>
-                      <p className="pl-2">
-                        • Crear:{" "}
-                        {rolSeleccionado.permisos.inventario.productos.crear ? "✓" : "✗"}
-                      </p>
-                      <p className="pl-2">
-                        • Dar de Baja:{" "}
-                        {rolSeleccionado.permisos.inventario.productos.darDeBaja ? "✓" : "✗"}
-                      </p>
+                      <p className="pl-2">• Ver: {rolSeleccionado.permisos.existencias.productos.ver ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Crear: {rolSeleccionado.permisos.existencias.productos.crear ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Editar: {rolSeleccionado.permisos.existencias.productos.editar ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Cambiar Estado: {rolSeleccionado.permisos.existencias.productos.cambiarEstado ? "✓" : "✗"}</p>
 
-                      <p className="font-medium">Traslados:</p>
-                      <p className="pl-2">
-                        • Crear:{" "}
-                        {rolSeleccionado.permisos.inventario.traslados.crear ? "✓" : "✗"}
-                      </p>
+                      <p className="font-medium mt-2">Traslados:</p>
+                      <p className="pl-2">• Ver: {rolSeleccionado.permisos.existencias.traslados.ver ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Crear: {rolSeleccionado.permisos.existencias.traslados.crear ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Editar: {rolSeleccionado.permisos.existencias.traslados.editar ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Cambiar Estado: {rolSeleccionado.permisos.existencias.traslados.cambiarEstado ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Anular: {rolSeleccionado.permisos.existencias.traslados.anular ? "✓" : "✗"}</p>
 
-                      <p className="font-medium">Bodegas:</p>
-                      <p className="pl-2">
-                        • Crear:{" "}
-                        {rolSeleccionado.permisos.inventario.bodegas.crear ? "✓" : "✗"}
-                      </p>
-                      <p className="pl-2">
-                        • Editar:{" "}
-                        {rolSeleccionado.permisos.inventario.bodegas.editar ? "✓" : "✗"}
-                      </p>
-                      <p className="pl-2">
-                        • Eliminar:{" "}
-                        {rolSeleccionado.permisos.inventario.bodegas.eliminar ? "✓" : "✗"}
-                      </p>
+                      <p className="font-medium mt-2">Bodegas:</p>
+                      <p className="pl-2">• Ver: {rolSeleccionado.permisos.existencias.bodegas.ver ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Crear: {rolSeleccionado.permisos.existencias.bodegas.crear ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Editar: {rolSeleccionado.permisos.existencias.bodegas.editar ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Cambiar Estado: {rolSeleccionado.permisos.existencias.bodegas.cambiarEstado ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Eliminar: {rolSeleccionado.permisos.existencias.bodegas.eliminar ? "✓" : "✗"}</p>
                     </div>
                   </div>
 
@@ -834,54 +898,27 @@ export default function Roles() {
                     <h5 className="font-semibold text-sm mb-2">Compras</h5>
                     <div className="text-sm text-gray-700 space-y-1">
                       <p className="font-medium">Proveedores:</p>
-                      <p className="pl-2">
-                        • Crear:{" "}
-                        {rolSeleccionado.permisos.compras.proveedores.crear ? "✓" : "✗"}
-                      </p>
-                      <p className="pl-2">
-                        • Editar:{" "}
-                        {rolSeleccionado.permisos.compras.proveedores.editar ? "✓" : "✗"}
-                      </p>
-                      <p className="pl-2">
-                        • Eliminar:{" "}
-                        {rolSeleccionado.permisos.compras.proveedores.eliminar ? "✓" : "✗"}
-                      </p>
+                      <p className="pl-2">• Ver: {rolSeleccionado.permisos.compras.proveedores.ver ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Crear: {rolSeleccionado.permisos.compras.proveedores.crear ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Editar: {rolSeleccionado.permisos.compras.proveedores.editar ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Cambiar Estado: {rolSeleccionado.permisos.compras.proveedores.cambiarEstado ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Eliminar: {rolSeleccionado.permisos.compras.proveedores.eliminar ? "✓" : "✗"}</p>
 
-                      <p className="font-medium">Órdenes de Compra:</p>
-                      <p className="pl-2">
-                        • Crear:{" "}
-                        {rolSeleccionado.permisos.compras.ordenesCompra.crear ? "✓" : "✗"}
-                      </p>
-                      <p className="pl-2">
-                        • Editar:{" "}
-                        {rolSeleccionado.permisos.compras.ordenesCompra.editar ? "✓" : "✗"}
-                      </p>
-                      <p className="pl-2">
-                        • Eliminar:{" "}
-                        {rolSeleccionado.permisos.compras.ordenesCompra.eliminar ? "✓" : "✗"}
-                      </p>
-                      <p className="pl-2">
-                        • Cambiar Estado:{" "}
-                        {rolSeleccionado.permisos.compras.ordenesCompra.cambiarEstado ? "✓" : "✗"}
-                      </p>
+                      <p className="font-medium mt-2">Órdenes de Compra:</p>
+                      <p className="pl-2">• Ver: {rolSeleccionado.permisos.compras.ordenesCompra.ver ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Crear: {rolSeleccionado.permisos.compras.ordenesCompra.crear ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Descargar: {rolSeleccionado.permisos.compras.ordenesCompra.descargar ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Editar: {rolSeleccionado.permisos.compras.ordenesCompra.editar ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Cambiar Estado: {rolSeleccionado.permisos.compras.ordenesCompra.cambiarEstado ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Anular: {rolSeleccionado.permisos.compras.ordenesCompra.anular ? "✓" : "✗"}</p>
 
-                      <p className="font-medium">Remisiones de Compra:</p>
-                      <p className="pl-2">
-                        • Crear:{" "}
-                        {rolSeleccionado.permisos.compras.remisionesCompra.crear ? "✓" : "✗"}
-                      </p>
-                      <p className="pl-2">
-                        • Editar:{" "}
-                        {rolSeleccionado.permisos.compras.remisionesCompra.editar ? "✓" : "✗"}
-                      </p>
-                      <p className="pl-2">
-                        • Eliminar:{" "}
-                        {rolSeleccionado.permisos.compras.remisionesCompra.eliminar ? "✓" : "✗"}
-                      </p>
-                      <p className="pl-2">
-                        • Cambiar Estado:{" "}
-                        {rolSeleccionado.permisos.compras.remisionesCompra.cambiarEstado ? "✓" : "✗"}
-                      </p>
+                      <p className="font-medium mt-2">Remisiones de Compra:</p>
+                      <p className="pl-2">• Ver: {rolSeleccionado.permisos.compras.remisionesCompra.ver ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Crear: {rolSeleccionado.permisos.compras.remisionesCompra.crear ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Descargar: {rolSeleccionado.permisos.compras.remisionesCompra.descargar ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Editar: {rolSeleccionado.permisos.compras.remisionesCompra.editar ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Cambiar Estado: {rolSeleccionado.permisos.compras.remisionesCompra.cambiarEstado ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Anular: {rolSeleccionado.permisos.compras.remisionesCompra.anular ? "✓" : "✗"}</p>
                     </div>
                   </div>
 
@@ -890,94 +927,61 @@ export default function Roles() {
                     <h5 className="font-semibold text-sm mb-2">Ventas</h5>
                     <div className="text-sm text-gray-700 space-y-1">
                       <p className="font-medium">Clientes:</p>
-                      <p className="pl-2">
-                        • Crear:{" "}
-                        {rolSeleccionado.permisos.ventas.clientes.crear ? "✓" : "✗"}
-                      </p>
-                      <p className="pl-2">
-                        • Editar:{" "}
-                        {rolSeleccionado.permisos.ventas.clientes.editar ? "✓" : "✗"}
-                      </p>
-                      <p className="pl-2">
-                        • Eliminar:{" "}
-                        {rolSeleccionado.permisos.ventas.clientes.eliminar ? "✓" : "✗"}
-                      </p>
+                      <p className="pl-2">• Ver: {rolSeleccionado.permisos.ventas.clientes.ver ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Crear: {rolSeleccionado.permisos.ventas.clientes.crear ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Editar: {rolSeleccionado.permisos.ventas.clientes.editar ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Cambiar Estado: {rolSeleccionado.permisos.ventas.clientes.cambiarEstado ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Eliminar: {rolSeleccionado.permisos.ventas.clientes.eliminar ? "✓" : "✗"}</p>
 
-                      <p className="font-medium">Órdenes:</p>
-                      <p className="pl-2">
-                        • Crear:{" "}
-                        {rolSeleccionado.permisos.ventas.ordenes.crear ? "✓" : "✗"}
-                      </p>
-                      <p className="pl-2">
-                        • Editar:{" "}
-                        {rolSeleccionado.permisos.ventas.ordenes.editar ? "✓" : "✗"}
-                      </p>
-                      <p className="pl-2">
-                        • Eliminar:{" "}
-                        {rolSeleccionado.permisos.ventas.ordenes.eliminar ? "✓" : "✗"}
-                      </p>
+                      <p className="font-medium mt-2">Cotizaciones:</p>
+                      <p className="pl-2">• Ver: {rolSeleccionado.permisos.ventas.cotizaciones.ver ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Crear: {rolSeleccionado.permisos.ventas.cotizaciones.crear ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Descargar: {rolSeleccionado.permisos.ventas.cotizaciones.descargar ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Editar: {rolSeleccionado.permisos.ventas.cotizaciones.editar ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Cambiar Estado: {rolSeleccionado.permisos.ventas.cotizaciones.cambiarEstado ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Anular: {rolSeleccionado.permisos.ventas.cotizaciones.anular ? "✓" : "✗"}</p>
 
-                      <p className="font-medium">Remisiones de Venta:</p>
-                      <p className="pl-2">
-                        • Crear:{" "}
-                        {rolSeleccionado.permisos.ventas.remisionesVenta.crear ? "✓" : "✗"}
-                      </p>
-                      <p className="pl-2">
-                        • Editar:{" "}
-                        {rolSeleccionado.permisos.ventas.remisionesVenta.editar ? "✓" : "✗"}
-                      </p>
-                      <p className="pl-2">
-                        • Eliminar:{" "}
-                        {rolSeleccionado.permisos.ventas.remisionesVenta.eliminar ? "✓" : "✗"}
-                      </p>
+                      <p className="font-medium mt-2">Órdenes de Venta:</p>
+                      <p className="pl-2">• Ver: {rolSeleccionado.permisos.ventas.ordenesVenta.ver ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Crear: {rolSeleccionado.permisos.ventas.ordenesVenta.crear ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Descargar: {rolSeleccionado.permisos.ventas.ordenesVenta.descargar ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Editar: {rolSeleccionado.permisos.ventas.ordenesVenta.editar ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Cambiar Estado: {rolSeleccionado.permisos.ventas.ordenesVenta.cambiarEstado ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Anular: {rolSeleccionado.permisos.ventas.ordenesVenta.anular ? "✓" : "✗"}</p>
 
-                      <p className="font-medium">Pagos y Abonos:</p>
-                      <p className="pl-2">
-                        • Crear:{" "}
-                        {rolSeleccionado.permisos.ventas.pagosAbonos.crear ? "✓" : "✗"}
-                      </p>
-                      <p className="pl-2">
-                        • Editar:{" "}
-                        {rolSeleccionado.permisos.ventas.pagosAbonos.editar ? "✓" : "✗"}
-                      </p>
-                      <p className="pl-2">
-                        • Eliminar:{" "}
-                        {rolSeleccionado.permisos.ventas.pagosAbonos.eliminar ? "✓" : "✗"}
-                      </p>
+                      <p className="font-medium mt-2">Remisiones de Venta:</p>
+                      <p className="pl-2">• Ver: {rolSeleccionado.permisos.ventas.remisionesVenta.ver ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Crear: {rolSeleccionado.permisos.ventas.remisionesVenta.crear ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Descargar: {rolSeleccionado.permisos.ventas.remisionesVenta.descargar ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Editar: {rolSeleccionado.permisos.ventas.remisionesVenta.editar ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Cambiar Estado: {rolSeleccionado.permisos.ventas.remisionesVenta.cambiarEstado ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Anular: {rolSeleccionado.permisos.ventas.remisionesVenta.anular ? "✓" : "✗"}</p>
+
+                      <p className="font-medium mt-2">Pagos:</p>
+                      <p className="pl-2">• Ver: {rolSeleccionado.permisos.ventas.pagos.ver ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Crear: {rolSeleccionado.permisos.ventas.pagos.crear ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Agregar Abonos: {rolSeleccionado.permisos.ventas.pagos.agregarAbonos ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Anular: {rolSeleccionado.permisos.ventas.pagos.anular ? "✓" : "✗"}</p>
                     </div>
                   </div>
 
-                  {/* Configuración */}
+                  {/* Administración */}
                   <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                    <h5 className="font-semibold text-sm mb-2">Configuración</h5>
+                    <h5 className="font-semibold text-sm mb-2">Administración</h5>
                     <div className="text-sm text-gray-700 space-y-1">
                       <p className="font-medium">Roles:</p>
-                      <p className="pl-2">
-                        • Crear:{" "}
-                        {rolSeleccionado.permisos.configuracion.roles.crear ? "✓" : "✗"}
-                      </p>
-                      <p className="pl-2">
-                        • Editar:{" "}
-                        {rolSeleccionado.permisos.configuracion.roles.editar ? "✓" : "✗"}
-                      </p>
-                      <p className="pl-2">
-                        • Inhabilitar:{" "}
-                        {rolSeleccionado.permisos.configuracion.roles.inhabilitar ? "✓" : "✗"}
-                      </p>
-                    </div>
-                  </div>
+                      <p className="pl-2">• Ver: {rolSeleccionado.permisos.administracion.roles.ver ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Crear: {rolSeleccionado.permisos.administracion.roles.crear ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Editar: {rolSeleccionado.permisos.administracion.roles.editar ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Cambiar Estado: {rolSeleccionado.permisos.administracion.roles.cambiarEstado ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Eliminar: {rolSeleccionado.permisos.administracion.roles.eliminar ? "✓" : "✗"}</p>
 
-                  {/* Usuarios */}
-                  <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                    <h5 className="font-semibold text-sm mb-2">Usuarios</h5>
-                    <div className="text-sm text-gray-700 space-y-1">
-                      <p>• Crear: {rolSeleccionado.permisos.usuarios.crear ? "✓" : "✗"}</p>
-                      <p>• Editar: {rolSeleccionado.permisos.usuarios.editar ? "✓" : "✗"}</p>
-                      <p>• Eliminar: {rolSeleccionado.permisos.usuarios.eliminar ? "✓" : "✗"}</p>
-                      <p>
-                        • Cambiar Estado:{" "}
-                        {rolSeleccionado.permisos.usuarios.inhabilitar ? "✓" : "✗"}
-                      </p>
+                      <p className="font-medium mt-2">Usuarios:</p>
+                      <p className="pl-2">• Ver: {rolSeleccionado.permisos.administracion.usuarios.ver ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Crear: {rolSeleccionado.permisos.administracion.usuarios.crear ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Editar: {rolSeleccionado.permisos.administracion.usuarios.editar ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Cambiar Estado: {rolSeleccionado.permisos.administracion.usuarios.cambiarEstado ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Restablecer Contraseña: {rolSeleccionado.permisos.administracion.usuarios.restablecerContrasena ? "✓" : "✗"}</p>
                     </div>
                   </div>
                 </div>
@@ -1220,7 +1224,7 @@ export default function Roles() {
             </Button>
             <Button
               onClick={confirmToggleEstado}
-              disabled={!rolParaCambioEstado || !puedeInhabilitar}
+              disabled={!rolParaCambioEstado || !puedeCambiarEstado}
               className={
                 rolParaCambioEstado && rolParaCambioEstado.estado
                   ? "bg-red-600 hover:bg-red-700"     // si está activo, vas a DESACTIVAR

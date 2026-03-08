@@ -18,6 +18,7 @@ import {
   X,
   Clock,
   Trash2,
+  Edit,
   PlusCircle,
   Truck,
   XCircle,
@@ -82,18 +83,17 @@ export default function Traslados({
   const [showViewModal, setShowViewModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
-  const [showCancelarModal, setShowCancelarModal] = useState(false);
+  const [showAnularModal, setShowAnularModal] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
   const [selectedTraslado, setSelectedTraslado] = useState<Traslado | null>(
     null
   );
 
-
-
-  type EstadoTraslado = "Pendiente" | "Enviado" | "Recibido" | "Cancelado";
+  type EstadoTraslado = "Pendiente" | "Enviado" | "Recibido" | "Anulado";
   const [nuevoEstado, setNuevoEstado] = useState<EstadoTraslado | null>(null);
 
-  const [motivoCancelacion, setMotivoCancelacion] = useState("");
+  const [motivoAnulacion, setMotivoAnulacion] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
@@ -106,7 +106,7 @@ export default function Traslados({
   const isCrearRoute = path.endsWith("/traslados/crear");
   const isVerRoute = Boolean(id) && path.endsWith("/ver");
   const isEditarRoute = Boolean(id) && path.endsWith("/editar");
-  const isCancelarRoute = Boolean(id) && path.endsWith("/cancelar");
+  const isAnularRoute = Boolean(id) && path.endsWith("/anular");
 
   const trasladoByRoute = useMemo(() => {
     if (!id) return null;
@@ -119,7 +119,7 @@ export default function Traslados({
     // ✅ reset UI para evitar modales cruzados
     setShowCreateModal(false);
     setShowViewModal(false);
-    setShowCancelarModal(false);
+    setShowAnularModal(false);
     setShowConfirmEstadoModal(false);
     setSelectedTraslado(null);
     setNuevoEstado(null);
@@ -133,6 +133,9 @@ export default function Traslados({
           ? selectedBodega
           : state?.bodegaOrigen ??
           (selectedBodega === "Todas las bodegas" ? "" : selectedBodega);
+
+      setIsEditing(false);
+      setSelectedTraslado(null);
 
       setFormBodegaOrigen(bodegaInicial);
       setFormBodegaDestino("");
@@ -158,49 +161,58 @@ export default function Traslados({
       return;
     }
 
-    // ✅ EDITAR (tu lógica actual)
+    // ✅ EDITAR (solo si está Pendiente)
     if (isEditarRoute) {
       if (!trasladoByRoute) {
         toast.error("Traslado no encontrado");
         goList();
         return;
       }
-      if (trasladoByRoute.estado === "Pendiente") {
-        toast.error("No puedes editar un traslado en estado Pendiente");
+
+      if (trasladoByRoute.estado !== "Pendiente") {
+        toast.error("Solo puedes editar traslados en estado Pendiente");
         goList();
         return;
       }
 
-      toast.info("Pendiente: modal editar");
-      goList();
+      setIsEditing(true);
+      setSelectedTraslado(trasladoByRoute);
+
+      setFormBodegaOrigen(trasladoByRoute.bodegaOrigen);
+      setFormBodegaDestino(trasladoByRoute.bodegaDestino);
+      setFormObservaciones(trasladoByRoute.observaciones || "");
+      setTrasladoItems([...trasladoByRoute.items]);
+      setCurrentProducto("");
+      setCurrentLote("");
+      setCurrentCantidad("");
+
+      setShowCreateModal(true);
       return;
     }
 
-    // ✅ CANCELAR (solo si está Pendiente)
-    if (isCancelarRoute) {
+    // ✅ Anular (solo si está Pendiente)
+    if (isAnularRoute) {
       if (!trasladoByRoute) {
         toast.error("Traslado no encontrado");
         goList();
         return;
       }
 
-      // ✅ Si ya no está pendiente (por ejemplo, acabas de cancelarlo),
-      // NO muestres toast de error: solo vuelve a la lista.
       if (trasladoByRoute.estado !== "Pendiente") {
         goList();
         return;
       }
 
       setSelectedTraslado(trasladoByRoute);
-      setMotivoCancelacion("");
-      setShowCancelarModal(true);
+      setMotivoAnulacion("");
+      setShowAnularModal(true);
       return;
     }
   }, [
     isCrearRoute,
     isVerRoute,
     isEditarRoute,
-    isCancelarRoute,
+    isAnularRoute,
     trasladoByRoute,
     usuario?.rol,
     selectedBodega,
@@ -211,8 +223,11 @@ export default function Traslados({
   const goVer = (traslado: Traslado) =>
     navigate(`/app/traslados/${traslado.id}/ver`);
 
-  const goCancelar = (traslado: Traslado) =>
-    navigate(`/app/traslados/${traslado.id}/cancelar`);
+  const goEditar = (traslado: Traslado) =>
+    navigate(`/app/traslados/${traslado.id}/editar`);
+
+  const goAnular = (traslado: Traslado) =>
+    navigate(`/app/traslados/${traslado.id}/anular`);
 
   // Filtros de fecha
   const [fechaInicio, setFechaInicio] = useState("");
@@ -429,7 +444,7 @@ export default function Traslados({
         class: "bg-green-100 text-green-800 hover:bg-green-200",
         icon: CheckCircle,
       },
-      Cancelado: {
+      Anulado: {
         class: "bg-red-100 text-red-800 hover:bg-red-200",
         icon: XCircle,
       },
@@ -445,7 +460,7 @@ export default function Traslados({
       Pendiente: "Enviado",
       Enviado: "Recibido",
       Recibido: null,
-      Cancelado: null,
+      Anulado: null,
     };
     return flujo[estadoActual];
   };
@@ -456,8 +471,8 @@ export default function Traslados({
     if (!siguienteEstado) {
       if (traslado.estado === "Recibido") {
         toast.info("Este traslado ya está en estado final (Recibido)");
-      } else if (traslado.estado === "Cancelado") {
-        toast.info("Los traslados cancelados no pueden cambiar de estado");
+      } else if (traslado.estado === "Anulado") {
+        toast.info("Los traslados anulados no pueden cambiar de estado");
       }
       return;
     }
@@ -618,6 +633,24 @@ export default function Traslados({
     toast.success("Producto eliminado del traslado");
   };
 
+  const confirmEditTraslado = () => {
+    if (!selectedTraslado) return;
+    if (!validateForm()) return;
+
+    updateTraslado(selectedTraslado.id, {
+      bodegaOrigen: formBodegaOrigen,
+      bodegaDestino: formBodegaDestino,
+      items: [...trasladoItems],
+      observaciones: formObservaciones.trim() || undefined,
+    });
+
+    toast.success("Traslado actualizado exitosamente");
+    setShowCreateModal(false);
+    setIsEditing(false);
+    setSelectedTraslado(null);
+    goList();
+  };
+
   const handleConfirmEstado = () => {
     if (!selectedTraslado || !nuevoEstado) return;
 
@@ -680,28 +713,28 @@ export default function Traslados({
     setNuevoEstado(null);
   };
 
-  const handleConfirmCancelar = () => {
+  const confirmAnular = () => {
     if (!selectedTraslado) return;
 
-    if (!motivoCancelacion.trim()) {
-      toast.error("Debes indicar el motivo de la cancelación");
+    if (!motivoAnulacion.trim()) {
+      toast.error("Debes indicar el motivo de la anulación");
       return;
     }
 
-    const observacionesCancelacion = selectedTraslado.observaciones
-      ? `${selectedTraslado.observaciones}\n\n[CANCELADO] ${motivoCancelacion}`
-      : `[CANCELADO] ${motivoCancelacion}`;
+    const observacionesAnulacion = selectedTraslado.observaciones
+      ? `${selectedTraslado.observaciones}\n\n[ANULADO] ${motivoAnulacion}`
+      : `[ANULADO] ${motivoAnulacion}`;
 
     updateTraslado(selectedTraslado.id, {
-      estado: "Cancelado",
-      observaciones: observacionesCancelacion,
+      estado: "Anulado",
+      observaciones: observacionesAnulacion,
     });
 
-    toast.success("Traslado cancelado exitosamente");
+    toast.success("Traslado anulado exitosamente");
 
-    setShowCancelarModal(false);
+    setShowAnularModal(false);
     setSelectedTraslado(null);
-    setMotivoCancelacion("");
+    setMotivoAnulacion("");
     goList();
   };
 
@@ -755,6 +788,8 @@ export default function Traslados({
 
   const handleCloseCreateModal = () => {
     setShowCreateModal(false);
+    setIsEditing(false);
+    setSelectedTraslado(null);
     setTrasladoItems([]);
     setCurrentProducto("");
     setCurrentLote("");
@@ -889,15 +924,30 @@ export default function Traslados({
                             size="sm"
                             onClick={() => goVer(traslado)}
                             className="hover:bg-blue-50"
+                            title="Ver"
                           >
                             <Eye size={16} className="text-blue-600" />
                           </Button>
-                          {traslado.estado === 'Pendiente' && (
+
+                          {traslado.estado === "Pendiente" && (
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => goCancelar(traslado)}
+                              onClick={() => goEditar(traslado)}
+                              className="hover:bg-yellow-50"
+                              title="Editar"
+                            >
+                              <Edit size={16} className="text-yellow-600" />
+                            </Button>
+                          )}
+
+                          {traslado.estado === "Pendiente" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => goAnular(traslado)}
                               className="hover:bg-red-50"
+                              title="Anular"
                             >
                               <Ban size={16} className="text-red-600" />
                             </Button>
@@ -1079,12 +1129,12 @@ export default function Traslados({
         </DialogContent>
       </Dialog>
 
-      {/* Modal Crear Traslado */}
+      {/* Modal Crear / Editar Traslado */}
       <Dialog
         open={showCreateModal}
         onOpenChange={(open) => {
           if (!open) {
-            handleCloseCreateModal(); // ✅ cierra, limpia, y hace goList()
+            handleCloseCreateModal();
             return;
           }
           setShowCreateModal(true);
@@ -1097,13 +1147,24 @@ export default function Traslados({
           aria-describedby="traslado-create-description"
         >
           <DialogHeader>
-            <DialogTitle>Nuevo Traslado</DialogTitle>
+            <DialogTitle>
+              {isEditing ? "Editar Traslado" : "Nuevo Traslado"}
+            </DialogTitle>
             <DialogDescription id="traslado-create-description">
-              Completa la información para trasladar productos entre bodegas
+              {isEditing
+                ? "Modifica la información del traslado antes de enviarlo"
+                : "Completa la información para trasladar productos entre bodegas"}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-6">
+            {isEditing && selectedTraslado && (
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                Estás editando el traslado <span className="font-semibold">{selectedTraslado.codigo}</span>.
+                Solo se permite editar mientras esté en estado Pendiente.
+              </div>
+            )}
+
             {/* Bodegas */}
             {trasladoItems.length > 0 && (
               <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">
@@ -1149,7 +1210,10 @@ export default function Traslados({
                   </SelectTrigger>
                   <SelectContent>
                     {bodegasData
-                      .filter((bodega) => bodega.nombre !== formBodegaOrigen && bodega.estado)
+                      .filter(
+                        (bodega) =>
+                          bodega.nombre !== formBodegaOrigen && bodega.estado
+                      )
                       .map((bodega) => (
                         <SelectItem key={bodega.id} value={bodega.nombre}>
                           {bodega.nombre}
@@ -1165,7 +1229,9 @@ export default function Traslados({
 
             {/* Separador */}
             <div className="border-t pt-4">
-              <h3 className="font-medium text-gray-900 mb-3">Agregar Productos al Traslado</h3>
+              <h3 className="font-medium text-gray-900 mb-3">
+                Agregar Productos al Traslado
+              </h3>
 
               {/* Formulario para agregar items */}
               <div className="bg-gray-50 p-4 rounded-lg space-y-4 mb-4">
@@ -1201,7 +1267,9 @@ export default function Traslados({
                       </SelectContent>
                     </Select>
                     {errors.currentProducto && touched.currentProducto && (
-                      <p className="text-sm text-red-500 mt-1">{errors.currentProducto}</p>
+                      <p className="text-sm text-red-500 mt-1">
+                        {errors.currentProducto}
+                      </p>
                     )}
                   </div>
 
@@ -1224,7 +1292,9 @@ export default function Traslados({
                       </SelectTrigger>
                       <SelectContent>
                         {lotesDisponibles.length === 0 ? (
-                          <div className="px-2 py-2 text-sm text-gray-500">No hay lotes disponibles</div>
+                          <div className="px-2 py-2 text-sm text-gray-500">
+                            No hay lotes disponibles
+                          </div>
                         ) : (
                           lotesDisponibles.map((lote) => (
                             <SelectItem key={lote.id} value={lote.numeroLote}>
@@ -1249,13 +1319,21 @@ export default function Traslados({
                       onBlur={handleCurrentCantidadBlur}
                       placeholder="Ej: 50"
                       disabled={!currentLote}
-                      className={errors.currentCantidad && touched.currentCantidad ? "border-red-500" : ""}
+                      className={
+                        errors.currentCantidad && touched.currentCantidad
+                          ? "border-red-500"
+                          : ""
+                      }
                     />
                     {currentLote && !errors.currentCantidad && (
-                      <p className="text-xs text-gray-500 mt-1">Máx: {cantidadMaxima}</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Máx: {cantidadMaxima}
+                      </p>
                     )}
                     {errors.currentCantidad && touched.currentCantidad && (
-                      <p className="text-sm text-red-500 mt-1">{errors.currentCantidad}</p>
+                      <p className="text-sm text-red-500 mt-1">
+                        {errors.currentCantidad}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -1288,13 +1366,20 @@ export default function Traslados({
                       {trasladoItems.map((item, index) => (
                         <TableRow key={index}>
                           <TableCell>{index + 1}</TableCell>
-                          <TableCell className="font-medium">{item.productoNombre}</TableCell>
+                          <TableCell className="font-medium">
+                            {item.productoNombre}
+                          </TableCell>
                           <TableCell>
-                            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                            <Badge
+                              variant="outline"
+                              className="bg-blue-50 text-blue-700 border-blue-200"
+                            >
                               {item.loteNumero}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-right font-medium">{item.cantidad}</TableCell>
+                          <TableCell className="text-right font-medium">
+                            {item.cantidad}
+                          </TableCell>
                           <TableCell className="text-center">
                             <Button
                               variant="ghost"
@@ -1312,17 +1397,21 @@ export default function Traslados({
 
                   <div className="bg-gray-50 px-4 py-2 border-t flex justify-between items-center">
                     <span className="text-xs text-gray-600">Total de productos:</span>
-                    <span className="font-bold text-purple-600 text-sm">{trasladoItems.length}</span>
+                    <span className="font-bold text-purple-600 text-sm">
+                      {trasladoItems.length}
+                    </span>
                   </div>
                   <div className="bg-gray-50 px-4 py-2 border-t flex justify-between items-center">
                     <span className="text-xs text-gray-600">Total de unidades:</span>
-                    <span className="font-bold text-purple-600 text-sm">{calcularTotalItems(trasladoItems)}</span>
+                    <span className="font-bold text-purple-600 text-sm">
+                      {calcularTotalItems(trasladoItems)}
+                    </span>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Responsable (más pequeño) */}
+            {/* Responsable */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-2">
               <div className="flex items-center gap-2">
                 <div className="bg-blue-100 p-1.5 rounded-full">
@@ -1358,8 +1447,11 @@ export default function Traslados({
             <Button variant="outline" onClick={handleCloseCreateModal}>
               Cancelar
             </Button>
-            <Button onClick={confirmCreateTraslado} className="bg-purple-600 hover:bg-purple-700">
-              Crear Traslado
+            <Button
+              onClick={isEditing ? confirmEditTraslado : confirmCreateTraslado}
+              className="bg-purple-600 hover:bg-purple-700"
+            >
+              {isEditing ? "Guardar cambios" : "Crear Traslado"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1407,49 +1499,52 @@ export default function Traslados({
         </DialogContent>
       </Dialog>
 
-      {/* Modal Cancelar Traslado */}
+      {/* Modal Anular Traslado */}
       <Dialog
-        open={showCancelarModal}
+        open={showAnularModal}
         onOpenChange={(open) => {
           if (!open) goList();
         }}
       >
-        <DialogContent className="max-w-md" aria-describedby="cancelar-description">
+        <DialogContent className="max-w-md" aria-describedby="anular-description">
           <DialogHeader>
-            <DialogTitle>Cancelar Traslado</DialogTitle>
-            <DialogDescription id="cancelar-description">
-              Esta acción marcará el traslado como cancelado. Por favor indica el motivo.
+            <DialogTitle>Anular Traslado</DialogTitle>
+            <DialogDescription id="anular-description">
+              Esta acción marcará el traslado como anulado. Por favor indica el motivo.
             </DialogDescription>
           </DialogHeader>
+
           <div className="space-y-4 py-4">
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-start gap-2">
               <Ban className="text-yellow-600 mt-0.5" size={18} />
               <div className="text-sm text-yellow-800">
                 <p className="font-medium mb-1">Esta acción no se puede deshacer</p>
-                <p>El traslado quedará marcado como cancelado y no podrá cambiar de estado.</p>
+                <p>El traslado quedará marcado como anulado y no podrá cambiar de estado.</p>
               </div>
             </div>
+
             <div>
-              <Label htmlFor="motivo-cancelacion">Motivo de Cancelación *</Label>
+              <Label htmlFor="motivo-anulacion">Motivo de Anulación *</Label>
               <Textarea
-                id="motivo-cancelacion"
-                value={motivoCancelacion}
-                onChange={(e) => setMotivoCancelacion(e.target.value)}
-                placeholder="Describe el motivo de la cancelación..."
+                id="motivo-anulacion"
+                value={motivoAnulacion}
+                onChange={(e) => setMotivoAnulacion(e.target.value)}
+                placeholder="Describe el motivo de la anulación..."
                 rows={4}
               />
             </div>
           </div>
+
           <DialogFooter>
             <Button variant="outline" onClick={goList}>
               Volver
             </Button>
             <Button
-              onClick={handleConfirmCancelar}
+              onClick={confirmAnular}
               className="bg-red-600 hover:bg-red-700"
             >
               <Ban size={16} className="mr-2" />
-              Cancelar Traslado
+              Anular Traslado
             </Button>
           </DialogFooter>
         </DialogContent>

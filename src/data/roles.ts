@@ -1,88 +1,113 @@
 // Tipos de permisos por módulo
 export interface Permisos {
-  // Inventario
-  inventario: {
-    existencias: {
-      crear: boolean;
-    };
+  dashboard: {
+    acceder: boolean;
+  };
+
+  existencias: {
     productos: {
-      crear: boolean;
-      darDeBaja: boolean;
-    };
-    traslados: {
-      crear: boolean;
-    };
-    bodegas: {
+      ver: boolean;
       crear: boolean;
       editar: boolean;
+      cambiarEstado: boolean;
+    };
+    traslados: {
+      ver: boolean;
+      crear: boolean;
+      editar: boolean;
+      cambiarEstado: boolean;
+      anular: boolean;
+    };
+    bodegas: {
+      ver: boolean;
+      crear: boolean;
+      editar: boolean;
+      cambiarEstado: boolean;
       eliminar: boolean;
     };
   };
-  // Compras
+
   compras: {
     proveedores: {
+      ver: boolean;
       crear: boolean;
       editar: boolean;
+      cambiarEstado: boolean;
       eliminar: boolean;
     };
     ordenesCompra: {
+      ver: boolean;
       crear: boolean;
+      descargar: boolean;
       editar: boolean;
-      eliminar: boolean;
       cambiarEstado: boolean;
+      anular: boolean;
     };
     remisionesCompra: {
+      ver: boolean;
       crear: boolean;
+      descargar: boolean;
       editar: boolean;
-      eliminar: boolean;
       cambiarEstado: boolean;
+      anular: boolean;
     };
   };
-  // Ventas
+
   ventas: {
     clientes: {
+      ver: boolean;
       crear: boolean;
       editar: boolean;
+      cambiarEstado: boolean;
       eliminar: boolean;
     };
-    ordenes: {
+    cotizaciones: {
+      ver: boolean;
       crear: boolean;
+      descargar: boolean;
       editar: boolean;
-      eliminar: boolean;
       cambiarEstado: boolean;
+      anular: boolean;
+    };
+    ordenesVenta: {
+      ver: boolean;
+      crear: boolean;
+      descargar: boolean;
+      editar: boolean;
+      cambiarEstado: boolean;
+      anular: boolean;
     };
     remisionesVenta: {
+      ver: boolean;
       crear: boolean;
+      descargar: boolean;
       editar: boolean;
-      eliminar: boolean;
       cambiarEstado: boolean;
+      anular: boolean;
     };
-    pagosAbonos: {
+    pagos: {
+      ver: boolean;
       crear: boolean;
-      editar: boolean;
-      eliminar: boolean;
-      cambiarEstado: boolean;
+      agregarAbonos: boolean;
+      anular: boolean;
     };
   };
-  // Configuración
-  configuracion: {
+
+  administracion: {
     roles: {
+      ver: boolean;
       crear: boolean;
       editar: boolean;
+      cambiarEstado: boolean;
       eliminar: boolean;
-      inhabilitar: boolean;
     };
-  };
-  // Usuarios
-  usuarios: {
-    crear: boolean;
-    editar: boolean;
-    eliminar: boolean;
-    inhabilitar: boolean;
-  };
-  // Dashboard (al final)
-  dashboard: {
-    acceder: boolean;
+    usuarios: {
+      ver: boolean;
+      crear: boolean;
+      editar: boolean;
+      cambiarEstado: boolean;
+      restablecerContrasena: boolean;
+    };
   };
 }
 
@@ -96,167 +121,229 @@ export interface Rol {
   estado: boolean;
 }
 
-// Función para crear permisos vacíos (todos en false)
+// Función para crear permisos vacíos
 export const createEmptyPermisos = (): Permisos => ({
-  inventario: {
-    existencias: {
-      crear: false,
-    },
-    productos: {
-      crear: false,
-      darDeBaja: false,
-    },
-    traslados: {
-      crear: false,
-    },
-    bodegas: {
-      crear: false,
-      editar: false,
-      eliminar: false,
-    },
-  },
-  compras: {
-    proveedores: {
-      crear: false,
-      editar: false,
-      eliminar: false,
-    },
-    ordenesCompra: {
-      crear: false,
-      editar: false,
-      eliminar: false,
-      cambiarEstado: false,
-    },
-    remisionesCompra: {
-      crear: false,
-      editar: false,
-      eliminar: false,
-      cambiarEstado: false,
-    },
-  },
-  ventas: {
-    clientes: {
-      crear: false,
-      editar: false,
-      eliminar: false,
-    },
-    ordenes: {
-      crear: false,
-      editar: false,
-      eliminar: false,
-      cambiarEstado: false,
-    },
-    remisionesVenta: {
-      crear: false,
-      editar: false,
-      eliminar: false,
-      cambiarEstado: false,
-    },
-    pagosAbonos: {
-      crear: false,
-      editar: false,
-      eliminar: false,
-      cambiarEstado: false,
-    },
-  },
-  configuracion: {
-    roles: {
-      crear: false,
-      editar: false,
-      eliminar: false,
-      inhabilitar: false,
-    },
-  },
-  usuarios: {
-    crear: false,
-    editar: false,
-    eliminar: false,
-    inhabilitar: false,
-  },
   dashboard: {
     acceder: false,
   },
-});
 
-// Función para crear permisos completos (todos en true)
-export const createFullPermisos = (): Permisos => ({
-  inventario: {
-    existencias: {
-      crear: true,
-    },
+  existencias: {
     productos: {
-      crear: true,
-      darDeBaja: true,
+      ver: false,
+      crear: false,
+      editar: false,
+      cambiarEstado: false,
     },
     traslados: {
-      crear: true,
+      ver: false,
+      crear: false,
+      editar: false,
+      cambiarEstado: false,
+      anular: false,
     },
     bodegas: {
+      ver: false,
+      crear: false,
+      editar: false,
+      cambiarEstado: false,
+      eliminar: false,
+    },
+  },
+
+  compras: {
+    proveedores: {
+      ver: false,
+      crear: false,
+      editar: false,
+      cambiarEstado: false,
+      eliminar: false,
+    },
+    ordenesCompra: {
+      ver: false,
+      crear: false,
+      descargar: false,
+      editar: false,
+      cambiarEstado: false,
+      anular: false,
+    },
+    remisionesCompra: {
+      ver: false,
+      crear: false,
+      descargar: false,
+      editar: false,
+      cambiarEstado: false,
+      anular: false,
+    },
+  },
+
+  ventas: {
+    clientes: {
+      ver: false,
+      crear: false,
+      editar: false,
+      cambiarEstado: false,
+      eliminar: false,
+    },
+    cotizaciones: {
+      ver: false,
+      crear: false,
+      descargar: false,
+      editar: false,
+      cambiarEstado: false,
+      anular: false,
+    },
+    ordenesVenta: {
+      ver: false,
+      crear: false,
+      descargar: false,
+      editar: false,
+      cambiarEstado: false,
+      anular: false,
+    },
+    remisionesVenta: {
+      ver: false,
+      crear: false,
+      descargar: false,
+      editar: false,
+      cambiarEstado: false,
+      anular: false,
+    },
+    pagos: {
+      ver: false,
+      crear: false,
+      agregarAbonos: false,
+      anular: false,
+    },
+  },
+
+  administracion: {
+    roles: {
+      ver: false,
+      crear: false,
+      editar: false,
+      cambiarEstado: false,
+      eliminar: false,
+    },
+    usuarios: {
+      ver: false,
+      crear: false,
+      editar: false,
+      cambiarEstado: false,
+      restablecerContrasena: false,
+    },
+  },
+});
+
+// Función para crear permisos completos
+export const createFullPermisos = (): Permisos => ({
+  dashboard: {
+    acceder: true,
+  },
+
+  existencias: {
+    productos: {
+      ver: true,
       crear: true,
       editar: true,
+      cambiarEstado: true,
+    },
+    traslados: {
+      ver: true,
+      crear: true,
+      editar: true,
+      cambiarEstado: true,
+      anular: true,
+    },
+    bodegas: {
+      ver: true,
+      crear: true,
+      editar: true,
+      cambiarEstado: true,
       eliminar: true,
     },
   },
+
   compras: {
     proveedores: {
+      ver: true,
       crear: true,
       editar: true,
+      cambiarEstado: true,
       eliminar: true,
     },
     ordenesCompra: {
+      ver: true,
       crear: true,
+      descargar: true,
       editar: true,
-      eliminar: true,
       cambiarEstado: true,
+      anular: true,
     },
     remisionesCompra: {
+      ver: true,
       crear: true,
+      descargar: true,
       editar: true,
-      eliminar: true,
       cambiarEstado: true,
+      anular: true,
     },
   },
+
   ventas: {
     clientes: {
+      ver: true,
       crear: true,
       editar: true,
+      cambiarEstado: true,
       eliminar: true,
     },
-    ordenes: {
+    cotizaciones: {
+      ver: true,
       crear: true,
+      descargar: true,
       editar: true,
-      eliminar: true,
       cambiarEstado: true,
+      anular: true,
+    },
+    ordenesVenta: {
+      ver: true,
+      crear: true,
+      descargar: true,
+      editar: true,
+      cambiarEstado: true,
+      anular: true,
     },
     remisionesVenta: {
+      ver: true,
       crear: true,
+      descargar: true,
       editar: true,
-      eliminar: true,
       cambiarEstado: true,
+      anular: true,
     },
-    pagosAbonos: {
+    pagos: {
+      ver: true,
       crear: true,
-      editar: true,
-      eliminar: true,
-      cambiarEstado: true,
+      agregarAbonos: true,
+      anular: true,
     },
   },
-  configuracion: {
+
+  administracion: {
     roles: {
+      ver: true,
       crear: true,
       editar: true,
+      cambiarEstado: true,
       eliminar: true,
-      inhabilitar: true,
     },
-  },
-  usuarios: {
-    crear: true,
-    editar: true,
-    eliminar: true,
-    inhabilitar: true,
-  },
-  dashboard: {
-    acceder: true,
+    usuarios: {
+      ver: true,
+      crear: true,
+      editar: true,
+      cambiarEstado: true,
+      restablecerContrasena: true,
+    },
   },
 });
 
@@ -264,94 +351,66 @@ export const createFullPermisos = (): Permisos => ({
 export const rolesData: Rol[] = [
   {
     id: 1,
-    nombre: 'Administrador',
-    descripcion: 'Acceso completo a todas las funcionalidades del sistema',
+    nombre: "Administrador",
+    descripcion: "Acceso completo a todas las funcionalidades del sistema",
     permisos: createFullPermisos(),
     usuariosAsignados: 2,
     estado: true,
   },
   {
     id: 4,
-    nombre: 'Vendedor',
-    descripcion: 'Creación de órdenes de venta y gestión básica de clientes',
+    nombre: "Vendedor",
+    descripcion: "Gestión comercial de clientes, cotizaciones, órdenes, remisiones y pagos",
     permisos: {
-      inventario: {
-        existencias: {
-          crear: false,
-        },
-        productos: {
-          crear: false,
-          darDeBaja: false,
-        },
-        traslados: {
-          crear: false,
-        },
-        bodegas: {
-          crear: false,
-          editar: false,
-          eliminar: false,
-        },
-      },
-      compras: {
-        proveedores: {
-          crear: false,
-          editar: false,
-          eliminar: false,
-        },
-        ordenesCompra: {
-          crear: false,
-          editar: false,
-          eliminar: false,
-          cambiarEstado: false,
-        },
-        remisionesCompra: {
-          crear: false,
-          editar: false,
-          eliminar: false,
-          cambiarEstado: false,
-        },
-      },
+      ...createEmptyPermisos(),
+      dashboard: { acceder: true },
       ventas: {
         clientes: {
+          ver: true,
           crear: true,
-          editar: false,
+          editar: true,
+          cambiarEstado: false,
           eliminar: false,
         },
-        ordenes: {
+        cotizaciones: {
+          ver: true,
           crear: true,
-          editar: false,
-          eliminar: false,
-          cambiarEstado: false,
+          descargar: true,
+          editar: true,
+          cambiarEstado: true,
+          anular: true,
+        },
+        ordenesVenta: {
+          ver: true,
+          crear: true,
+          descargar: true,
+          editar: true,
+          cambiarEstado: true,
+          anular: true,
         },
         remisionesVenta: {
+          ver: true,
           crear: true,
-          editar: false,
-          eliminar: false,
-          cambiarEstado: false,
+          descargar: true,
+          editar: true,
+          cambiarEstado: true,
+          anular: true,
         },
-        pagosAbonos: {
+        pagos: {
+          ver: true,
           crear: true,
-          editar: false,
-          eliminar: false,
-          cambiarEstado: false,
+          agregarAbonos: true,
+          anular: false,
         },
       },
-      configuracion: {
-        roles: {
+      existencias: {
+        ...createEmptyPermisos().existencias,
+        productos: {
+          ver: true,
           crear: false,
           editar: false,
-          eliminar: false,
-          inhabilitar: false,
+          cambiarEstado: false,
         },
-      },
-      usuarios: {
-        crear: false,
-        editar: false,
-        eliminar: false,
-        inhabilitar: false,
-      },
-      dashboard: {
-        acceder: true,
       },
     },
     usuariosAsignados: 8,
@@ -359,86 +418,74 @@ export const rolesData: Rol[] = [
   },
   {
     id: 8,
-    nombre: 'Auxiliar Administrativo',
-    descripcion: 'Gestión administrativa y apoyo en compras y ventas',
+    nombre: "Auxiliar Administrativo",
+    descripcion: "Apoyo administrativo en compras, ventas y pagos",
     permisos: {
-      inventario: {
-        existencias: {
-          crear: false,
-        },
-        productos: {
-          crear: false,
-          darDeBaja: false,
-        },
-        traslados: {
-          crear: false,
-        },
-        bodegas: {
-          crear: false,
-          editar: false,
-          eliminar: false,
-        },
-      },
+      ...createEmptyPermisos(),
+      dashboard: { acceder: true },
       compras: {
         proveedores: {
+          ver: true,
           crear: true,
           editar: true,
+          cambiarEstado: true,
           eliminar: false,
         },
         ordenesCompra: {
+          ver: true,
           crear: true,
+          descargar: true,
           editar: true,
-          eliminar: false,
-          cambiarEstado: false,
+          cambiarEstado: true,
+          anular: false,
         },
         remisionesCompra: {
+          ver: true,
           crear: true,
-          editar: false,
-          eliminar: false,
-          cambiarEstado: false,
+          descargar: true,
+          editar: true,
+          cambiarEstado: true,
+          anular: false,
         },
       },
       ventas: {
         clientes: {
+          ver: true,
           crear: true,
           editar: true,
+          cambiarEstado: true,
           eliminar: false,
         },
-        ordenes: {
+        cotizaciones: {
+          ver: true,
+          crear: true,
+          descargar: true,
+          editar: true,
+          cambiarEstado: true,
+          anular: false,
+        },
+        ordenesVenta: {
+          ver: true,
           crear: false,
+          descargar: true,
           editar: false,
-          eliminar: false,
           cambiarEstado: false,
+          anular: false,
         },
         remisionesVenta: {
+          ver: true,
           crear: false,
+          descargar: true,
           editar: false,
-          eliminar: false,
           cambiarEstado: false,
+          anular: false,
         },
-        pagosAbonos: {
+        pagos: {
+          ver: true,
           crear: true,
-          editar: true,
-          eliminar: false,
-          cambiarEstado: false,
+          agregarAbonos: true,
+          anular: false,
         },
-      },
-      configuracion: {
-        roles: {
-          crear: false,
-          editar: false,
-          eliminar: false,
-          inhabilitar: false,
-        },
-      },
-      usuarios: {
-        crear: false,
-        editar: false,
-        eliminar: false,
-        inhabilitar: false,
-      },
-      dashboard: {
-        acceder: true,
       },
     },
     usuariosAsignados: 3,
@@ -446,86 +493,32 @@ export const rolesData: Rol[] = [
   },
   {
     id: 5,
-    nombre: 'Auxiliar de Bodega',
-    descripcion: 'Gestión de inventario y traslados entre bodegas',
+    nombre: "Auxiliar de Bodega",
+    descripcion: "Gestión de productos, existencias y traslados",
     permisos: {
-      inventario: {
-        existencias: {
-          crear: true,
-        },
+      ...createEmptyPermisos(),
+      dashboard: { acceder: true },
+      existencias: {
         productos: {
+          ver: true,
           crear: false,
-          darDeBaja: false,
+          editar: false,
+          cambiarEstado: false,
         },
         traslados: {
+          ver: true,
           crear: true,
+          editar: true,
+          cambiarEstado: true,
+          anular: true,
         },
         bodegas: {
+          ver: true,
           crear: false,
           editar: false,
-          eliminar: false,
-        },
-      },
-      compras: {
-        proveedores: {
-          crear: false,
-          editar: false,
-          eliminar: false,
-        },
-        ordenesCompra: {
-          crear: false,
-          editar: false,
-          eliminar: false,
           cambiarEstado: false,
-        },
-        remisionesCompra: {
-          crear: false,
-          editar: false,
-          eliminar: false,
-          cambiarEstado: false,
-        },
-      },
-      ventas: {
-        clientes: {
-          crear: false,
-          editar: false,
           eliminar: false,
         },
-        ordenes: {
-          crear: false,
-          editar: false,
-          eliminar: false,
-          cambiarEstado: false,
-        },
-        remisionesVenta: {
-          crear: false,
-          editar: false,
-          eliminar: false,
-          cambiarEstado: false,
-        },
-        pagosAbonos: {
-          crear: false,
-          editar: false,
-          eliminar: false,
-          cambiarEstado: false,
-        },
-      },
-      configuracion: {
-        roles: {
-          crear: false,
-          editar: false,
-          eliminar: false,
-          inhabilitar: false,
-        },
-      },
-      usuarios: {
-        crear: false,
-        editar: false,
-        eliminar: false,
-        inhabilitar: false,
-      },
-      dashboard: {
-        acceder: true,
       },
     },
     usuariosAsignados: 5,
@@ -533,86 +526,42 @@ export const rolesData: Rol[] = [
   },
   {
     id: 9,
-    nombre: 'Conductor',
-    descripcion: 'Gestión de entregas y traslados de mercancía',
+    nombre: "Conductor",
+    descripcion: "Consulta y apoyo en remisiones y traslados",
     permisos: {
-      inventario: {
-        existencias: {
-          crear: false,
-        },
-        productos: {
-          crear: false,
-          darDeBaja: false,
-        },
+      ...createEmptyPermisos(),
+      dashboard: { acceder: true },
+      existencias: {
+        ...createEmptyPermisos().existencias,
         traslados: {
-          crear: false,
-        },
-        bodegas: {
+          ver: true,
           crear: false,
           editar: false,
-          eliminar: false,
+          cambiarEstado: true,
+          anular: false,
         },
       },
       compras: {
-        proveedores: {
-          crear: false,
-          editar: false,
-          eliminar: false,
-        },
-        ordenesCompra: {
-          crear: false,
-          editar: false,
-          eliminar: false,
-          cambiarEstado: false,
-        },
+        ...createEmptyPermisos().compras,
         remisionesCompra: {
+          ver: true,
           crear: false,
+          descargar: true,
           editar: false,
-          eliminar: false,
           cambiarEstado: true,
+          anular: false,
         },
       },
       ventas: {
-        clientes: {
-          crear: false,
-          editar: false,
-          eliminar: false,
-        },
-        ordenes: {
-          crear: false,
-          editar: false,
-          eliminar: false,
-          cambiarEstado: false,
-        },
+        ...createEmptyPermisos().ventas,
         remisionesVenta: {
+          ver: true,
           crear: false,
+          descargar: true,
           editar: false,
-          eliminar: false,
-          cambiarEstado: false,
+          cambiarEstado: true,
+          anular: false,
         },
-        pagosAbonos: {
-          crear: false,
-          editar: false,
-          eliminar: false,
-          cambiarEstado: false,
-        },
-      },
-      configuracion: {
-        roles: {
-          crear: false,
-          editar: false,
-          eliminar: false,
-          inhabilitar: false,
-        },
-      },
-      usuarios: {
-        crear: false,
-        editar: false,
-        eliminar: false,
-        inhabilitar: false,
-      },
-      dashboard: {
-        acceder: true,
       },
     },
     usuariosAsignados: 4,
@@ -620,8 +569,8 @@ export const rolesData: Rol[] = [
   },
   {
     id: 7,
-    nombre: 'Rol de Prueba',
-    descripcion: 'Rol sin usuarios asignados para pruebas de eliminación',
+    nombre: "Rol de Prueba",
+    descripcion: "Rol sin usuarios asignados para pruebas de eliminación",
     permisos: createEmptyPermisos(),
     usuariosAsignados: 0,
     estado: false,

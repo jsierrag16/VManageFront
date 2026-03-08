@@ -2,109 +2,127 @@ import { useAuth } from "../context/AuthContext";
 
 /**
  * Hook personalizado para verificar permisos del usuario
- * Simplifica el uso de permisos en los componentes
  */
 export function usePermisos() {
   const { tienePermiso, usuario } = useAuth();
 
   return {
-    // Permisos de Roles
     roles: {
-      crear: tienePermiso("configuracion", "roles", "crear"),
-      editar: tienePermiso("configuracion", "roles", "editar"),
-      eliminar: tienePermiso("configuracion", "roles", "eliminar"),
-      inhabilitar: tienePermiso("configuracion", "roles", "inhabilitar"),
+      ver: tienePermiso("administracion", "roles", "ver"),
+      crear: tienePermiso("administracion", "roles", "crear"),
+      editar: tienePermiso("administracion", "roles", "editar"),
+      cambiarEstado: tienePermiso("administracion", "roles", "cambiarEstado"),
+      eliminar: tienePermiso("administracion", "roles", "eliminar"),
     },
-    
-    // Permisos de Usuarios
+
     usuarios: {
-      crear: tienePermiso("usuarios", undefined, "crear"),
-      editar: tienePermiso("usuarios", undefined, "editar"),
-      eliminar: tienePermiso("usuarios", undefined, "eliminar"),
-      inhabilitar: tienePermiso("usuarios", undefined, "inhabilitar"),
+      ver: tienePermiso("administracion", "usuarios", "ver"),
+      crear: tienePermiso("administracion", "usuarios", "crear"),
+      editar: tienePermiso("administracion", "usuarios", "editar"),
+      cambiarEstado: tienePermiso("administracion", "usuarios", "cambiarEstado"),
+      restablecerContrasena: tienePermiso(
+        "administracion",
+        "usuarios",
+        "restablecerContrasena"
+      ),
     },
-    
-    // Permisos de Clientes
+
     clientes: {
+      ver: tienePermiso("ventas", "clientes", "ver"),
       crear: tienePermiso("ventas", "clientes", "crear"),
       editar: tienePermiso("ventas", "clientes", "editar"),
+      cambiarEstado: tienePermiso("ventas", "clientes", "cambiarEstado"),
       eliminar: tienePermiso("ventas", "clientes", "eliminar"),
     },
-    
-    // Permisos de Proveedores
+
     proveedores: {
+      ver: tienePermiso("compras", "proveedores", "ver"),
       crear: tienePermiso("compras", "proveedores", "crear"),
       editar: tienePermiso("compras", "proveedores", "editar"),
+      cambiarEstado: tienePermiso("compras", "proveedores", "cambiarEstado"),
       eliminar: tienePermiso("compras", "proveedores", "eliminar"),
     },
-    
-    // Permisos de Bodegas
+
     bodegas: {
-      crear: tienePermiso("inventario", "bodegas", "crear"),
-      editar: tienePermiso("inventario", "bodegas", "editar"),
-      eliminar: tienePermiso("inventario", "bodegas", "eliminar"),
+      ver: tienePermiso("existencias", "bodegas", "ver"),
+      crear: tienePermiso("existencias", "bodegas", "crear"),
+      editar: tienePermiso("existencias", "bodegas", "editar"),
+      cambiarEstado: tienePermiso("existencias", "bodegas", "cambiarEstado"),
+      eliminar: tienePermiso("existencias", "bodegas", "eliminar"),
     },
-    
-    // Permisos de Existencias
-    existencias: {
-      crear: tienePermiso("inventario", "existencias", "crear"),
-    },
-    
-    // Permisos de Productos
+
     productos: {
-      crear: tienePermiso("inventario", "productos", "crear"),
-      darDeBaja: tienePermiso("inventario", "productos", "darDeBaja"),
+      ver: tienePermiso("existencias", "productos", "ver"),
+      crear: tienePermiso("existencias", "productos", "crear"),
+      editar: tienePermiso("existencias", "productos", "editar"),
+      cambiarEstado: tienePermiso("existencias", "productos", "cambiarEstado"),
     },
-    
-    // Permisos de Traslados
+
     traslados: {
-      crear: tienePermiso("inventario", "traslados", "crear"),
+      ver: tienePermiso("existencias", "traslados", "ver"),
+      crear: tienePermiso("existencias", "traslados", "crear"),
+      editar: tienePermiso("existencias", "traslados", "editar"),
+      cambiarEstado: tienePermiso("existencias", "traslados", "cambiarEstado"),
+      anular: tienePermiso("existencias", "traslados", "anular"),
     },
-    
-    // Permisos de Órdenes de Compra
+
     ordenesCompra: {
+      ver: tienePermiso("compras", "ordenesCompra", "ver"),
       crear: tienePermiso("compras", "ordenesCompra", "crear"),
+      descargar: tienePermiso("compras", "ordenesCompra", "descargar"),
       editar: tienePermiso("compras", "ordenesCompra", "editar"),
-      eliminar: tienePermiso("compras", "ordenesCompra", "eliminar"),
       cambiarEstado: tienePermiso("compras", "ordenesCompra", "cambiarEstado"),
+      anular: tienePermiso("compras", "ordenesCompra", "anular"),
     },
-    
-    // Permisos de Remisiones de Compra
+
     remisionesCompra: {
+      ver: tienePermiso("compras", "remisionesCompra", "ver"),
       crear: tienePermiso("compras", "remisionesCompra", "crear"),
+      descargar: tienePermiso("compras", "remisionesCompra", "descargar"),
       editar: tienePermiso("compras", "remisionesCompra", "editar"),
-      eliminar: tienePermiso("compras", "remisionesCompra", "eliminar"),
       cambiarEstado: tienePermiso("compras", "remisionesCompra", "cambiarEstado"),
+      anular: tienePermiso("compras", "remisionesCompra", "anular"),
     },
-    
-    // Permisos de Órdenes de Venta
+
+    cotizaciones: {
+      ver: tienePermiso("ventas", "cotizaciones", "ver"),
+      crear: tienePermiso("ventas", "cotizaciones", "crear"),
+      descargar: tienePermiso("ventas", "cotizaciones", "descargar"),
+      editar: tienePermiso("ventas", "cotizaciones", "editar"),
+      cambiarEstado: tienePermiso("ventas", "cotizaciones", "cambiarEstado"),
+      anular: tienePermiso("ventas", "cotizaciones", "anular"),
+    },
+
     ordenesVenta: {
-      crear: tienePermiso("ventas", "ordenes", "crear"),
-      editar: tienePermiso("ventas", "ordenes", "editar"),
-      eliminar: tienePermiso("ventas", "ordenes", "eliminar"),
-      cambiarEstado: tienePermiso("ventas", "ordenes", "cambiarEstado"),
+      ver: tienePermiso("ventas", "ordenesVenta", "ver"),
+      crear: tienePermiso("ventas", "ordenesVenta", "crear"),
+      descargar: tienePermiso("ventas", "ordenesVenta", "descargar"),
+      editar: tienePermiso("ventas", "ordenesVenta", "editar"),
+      cambiarEstado: tienePermiso("ventas", "ordenesVenta", "cambiarEstado"),
+      anular: tienePermiso("ventas", "ordenesVenta", "anular"),
     },
-    
-    // Permisos de Remisiones de Venta
+
     remisionesVenta: {
+      ver: tienePermiso("ventas", "remisionesVenta", "ver"),
       crear: tienePermiso("ventas", "remisionesVenta", "crear"),
+      descargar: tienePermiso("ventas", "remisionesVenta", "descargar"),
       editar: tienePermiso("ventas", "remisionesVenta", "editar"),
-      eliminar: tienePermiso("ventas", "remisionesVenta", "eliminar"),
       cambiarEstado: tienePermiso("ventas", "remisionesVenta", "cambiarEstado"),
+      anular: tienePermiso("ventas", "remisionesVenta", "anular"),
     },
-    
-    // Permisos de Pagos y Abonos
-    pagosAbonos: {
-      crear: tienePermiso("ventas", "pagosAbonos", "crear"),
-      editar: tienePermiso("ventas", "pagosAbonos", "editar"),
-      eliminar: tienePermiso("ventas", "pagosAbonos", "eliminar"),
-      cambiarEstado: tienePermiso("ventas", "pagosAbonos", "cambiarEstado"),
+
+    pagos: {
+      ver: tienePermiso("ventas", "pagos", "ver"),
+      crear: tienePermiso("ventas", "pagos", "crear"),
+      agregarAbonos: tienePermiso("ventas", "pagos", "agregarAbonos"),
+      anular: tienePermiso("ventas", "pagos", "anular"),
     },
-    
-    // Información del usuario
+
+    dashboard: {
+      acceder: tienePermiso("dashboard", undefined, "acceder"),
+    },
+
     usuario,
-    
-    // Función genérica para verificar permisos
     verificar: tienePermiso,
   };
 }
