@@ -7,10 +7,13 @@ interface ProtectedRouteProps {
 }
 
 export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
-  const { token, usuario } = useAuth();
+  const { usuario, isAuthLoading } = useAuth();
 
-  // ✅ criterio JWT: token manda
-  if (!token && !usuario) {
+  if (isAuthLoading) {
+    return null;
+  }
+
+  if (!usuario) {
     return <Navigate to="/login" replace />;
   }
 

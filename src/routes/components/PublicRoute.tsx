@@ -1,16 +1,19 @@
-import { ReactNode } from 'react';
-import { Navigate } from 'react-router-dom';
-import { useAuth } from '../../shared/context/AuthContext';
+import { ReactNode } from "react";
+import { Navigate } from "react-router-dom";
+import { useAuth } from "../../shared/context/AuthContext";
 
 interface PublicRouteProps {
   children: ReactNode;
 }
 
 export const PublicRoute = ({ children }: PublicRouteProps) => {
-  const { usuario } = useAuth();
+  const { usuario, isAuthLoading } = useAuth();
+
+  if (isAuthLoading) {
+    return null;
+  }
 
   if (usuario) {
-    // Si YA está logueado, no debe ver el login, lo mandamos a /app
     return <Navigate to="/app" replace />;
   }
 

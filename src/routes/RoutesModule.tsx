@@ -151,7 +151,7 @@ export default function RoutesModule() {
 
           <Route path="perfil" element={<Perfil />} />
 
-          <Route path="*" element={<Navigate to="/app" replace />} />
+          <Route path="*" element={<div>Ruta no encontrada dentro de /app</div>} />
         </Route>
 
         <Route

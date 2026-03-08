@@ -19,12 +19,17 @@ interface AuthContextType {
   usuario: UsuarioSistema | null;
   permisos: Permisos | null;
   token: string | null;
+  isAuthLoading: boolean;
 
   setSession: (token: string, usuario: UsuarioSistema) => void;
   setUsuario: (usuario: UsuarioSistema | null) => void;
   logout: () => void;
 
-  tienePermiso: (modulo: string, submodulo?: string, accion?: string) => boolean;
+  tienePermiso: (
+    modulo: string,
+    submodulo?: string,
+    accion?: string
+  ) => boolean;
 
   bodegasDisponibles: Bodega[];
   selectedBodegaId: BodegaId | null;
@@ -38,14 +43,18 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [usuario, setUsuarioState] = useState<UsuarioSistema | null>(null);
   const [token, setToken] = useState<string | null>(null);
-  const [selectedBodegaId, setSelectedBodegaIdState] = useState<BodegaId | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [selectedBodegaId, setSelectedBodegaIdState] =
+    useState<BodegaId | null>(null);
 
   // ✅ Cargar sesión desde storage
   useEffect(() => {
     const tokenGuardado = localStorage.getItem("token");
     const usuarioGuardado = localStorage.getItem("usuario");
 
-    if (tokenGuardado) setToken(tokenGuardado);
+    if (tokenGuardado) {
+      setToken(tokenGuardado);
+    }
 
     if (usuarioGuardado) {
       try {
@@ -55,18 +64,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem("usuario");
       }
     }
+
+    setIsAuthLoading(false);
   }, []);
 
-  // ✅ Auto-login PRO: validar token con backend
+  // ✅ Validar token con backend cuando exista
   useEffect(() => {
     if (!token) return;
 
     (async () => {
       try {
-        await getMe(); // valida token
-        // 🔥 Más adelante: aquí mismo actualizamos usuario desde backend con /auth/me completo
-      } catch (err: any) {
-        // si es 401/403, token inválido/expirado
+        await getMe();
+      } catch {
         logout();
       }
     })();
@@ -75,6 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const setUsuario = (nuevoUsuario: UsuarioSistema | null) => {
     setUsuarioState(nuevoUsuario);
+
     if (nuevoUsuario) {
       localStorage.setItem("usuario", JSON.stringify(nuevoUsuario));
     } else {
@@ -89,7 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUsuarioState(newUser);
     localStorage.setItem("usuario", JSON.stringify(newUser));
 
-    localStorage.setItem("isAuthenticated", "true"); // opcional, puedes quitarlo luego
+    localStorage.setItem("isAuthenticated", "true");
   };
 
   const logout = () => {
@@ -105,13 +115,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const puedeVerBodega = (bodegaId: BodegaId) => {
     if (!usuario) return false;
 
-    // ✅ 0 = "Todas" solo si tiene 2+ bodegas asignadas
     if (bodegaId === 0) return (usuario.bodegasIds?.length ?? 0) >= 2;
 
-    return Array.isArray(usuario.bodegasIds) && usuario.bodegasIds.includes(bodegaId);
+    return (
+      Array.isArray(usuario.bodegasIds) && usuario.bodegasIds.includes(bodegaId)
+    );
   };
 
-  // ✅ Por ahora, bodegasData es mock. Luego vendrá del backend.
   const bodegasDisponibles = useMemo(() => {
     if (!usuario) return [];
     const ids = usuario.bodegasIds ?? [];
@@ -161,7 +171,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(key, String(bodegaId));
   };
 
-  const tienePermiso = (modulo: string, submodulo?: string, accion?: string): boolean => {
+  const tienePermiso = (
+    modulo: string,
+    submodulo?: string,
+    accion?: string
+  ): boolean => {
     if (!usuario || !usuario.permisos) return false;
 
     const permisos = usuario.permisos as any;
@@ -171,6 +185,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (modulo === "dashboard") {
         return permisos.dashboard.acceder;
       }
+
       return Object.keys(permisos[modulo]).some((sub) => {
         const subPermisos = permisos[modulo][sub];
         return Object.values(subPermisos).some((valor) => valor === true);
@@ -180,7 +195,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!permisos[modulo][submodulo]) return false;
 
     if (!accion) {
-      return Object.values(permisos[modulo][submodulo]).some((valor) => valor === true);
+      return Object.values(permisos[modulo][submodulo]).some(
+        (valor) => valor === true
+      );
     }
 
     return permisos[modulo][submodulo][accion] === true;
@@ -190,6 +207,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     usuario,
     permisos: usuario?.permisos || null,
     token,
+    isAuthLoading,
 
     setSession,
     setUsuario,
@@ -208,6 +226,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) throw new Error("useAuth debe ser usado dentro de un AuthProvider");
+  if (!context) {
+    throw new Error("useAuth debe ser usado dentro de un AuthProvider");
+  }
   return context;
 }
