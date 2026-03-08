@@ -11,6 +11,7 @@ import {
   Eye,
   Edit,
   Trash2,
+  Ban,
   Plus,
   ShoppingCart,
   Package,
@@ -96,7 +97,7 @@ export default function Compras() {
   const isCrear = location.pathname.endsWith("/compras/crear");
   const isVer = location.pathname.endsWith("/ver");
   const isEditar = location.pathname.endsWith("/editar");
-  const isEliminar = location.pathname.endsWith("/eliminar");
+  const isAnular = location.pathname.endsWith("/anular");
 
   const closeToList = () => navigate("/app/compras");
 
@@ -113,8 +114,8 @@ export default function Compras() {
     navigate(`/app/compras/${c.id}/editar`);
   };
 
-  const handleDelete = (c: Compra) => {
-    navigate(`/app/compras/${c.id}/eliminar`);
+  const handleAnular = (c: Compra) => {
+    navigate(`/app/compras/${c.id}/anular`);
   };
 
   // Compra seleccionada por URL (:id)
@@ -125,14 +126,14 @@ export default function Compras() {
     return compras.find((c) => c.id === id) ?? null;
   }, [compras, params.id]);
 
-  // Si entran a /ver, /editar o /eliminar con id inválido -> volver
+  // Si entran a /ver, /editar o /anular con id inválido -> volver
   useEffect(() => {
-    if (!isVer && !isEditar && !isEliminar) return;
+    if (!isVer && !isEditar && !isAnular) return;
 
     if (!compraSeleccionada) {
       closeToList();
     }
-  }, [isVer, isEditar, isEliminar, compraSeleccionada]);
+  }, [isVer, isEditar, isAnular, compraSeleccionada]);
 
   // Formulario de orden de compra
   const [formData, setFormData] = useState({
@@ -140,7 +141,7 @@ export default function Compras() {
     proveedor: "",
     fecha: "",
     fechaEntrega: "",
-    estado: "Pendiente" as "Pendiente" | "Aprobada",
+    estado: "Pendiente" as "Pendiente" | "Aprobada" | "Anulada",
     items: 0,
     subtotal: 0,
     impuestos: 0,
@@ -222,8 +223,9 @@ export default function Compras() {
     const totalCompras = compras.length;
     const pendientes = compras.filter((c) => c.estado === "Pendiente").length;
     const aprobadas = compras.filter((c) => c.estado === "Aprobada").length;
+    const anuladas = compras.filter((c) => c.estado === "Anulada").length;
 
-    return { totalCompras, pendientes, aprobadas };
+    return { totalCompras, pendientes, aprobadas, anuladas };
   }, [compras]);
 
   // Totales dinámicos
@@ -249,6 +251,13 @@ export default function Compras() {
 
   const handleConfirmEstado = () => {
     if (!compraParaCambioEstado) return;
+
+    if (compraParaCambioEstado.estado === "Anulada") {
+      toast.error("No puedes cambiar el estado de una orden anulada");
+      setShowConfirmEstadoModal(false);
+      setCompraParaCambioEstado(null);
+      return;
+    }
 
     const nuevoEstado =
       compraParaCambioEstado.estado === "Pendiente" ? "Aprobada" : "Pendiente";
@@ -551,6 +560,11 @@ export default function Compras() {
   const confirmEdit = () => {
     if (!compraSeleccionada) return;
 
+    if (compraSeleccionada.estado === "Anulada") {
+      toast.error("No puedes editar una orden anulada");
+      return;
+    }
+
     if (!formData.proveedor.trim()) {
       toast.error("Debes seleccionar un proveedor");
       return;
@@ -602,13 +616,24 @@ export default function Compras() {
     closeToList();
   };
 
-  // Eliminar compra
-  const confirmDelete = () => {
+  // Anular compra
+  const confirmAnular = () => {
     if (!compraSeleccionada) return;
 
-    setCompras(compras.filter((c) => c.id !== compraSeleccionada.id));
+    if (compraSeleccionada.estado === "Anulada") {
+      toast.error("La orden ya está anulada");
+      return;
+    }
 
-    toast.success("Orden eliminada exitosamente");
+    setCompras(
+      compras.map((c) =>
+        c.id === compraSeleccionada.id
+          ? { ...c, estado: "Anulada" }
+          : c
+      )
+    );
+
+    toast.success("Orden anulada exitosamente");
     closeToList();
   };
 
@@ -732,9 +757,12 @@ export default function Compras() {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleToggleEstado(compra)}
+                        disabled={compra.estado === "Anulada"}
                         className={`h-7 ${compra.estado === "Aprobada"
-                          ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
-                          : "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                            ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
+                            : compra.estado === "Pendiente"
+                              ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                              : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
                           }`}
                       >
                         {compra.estado}
@@ -772,11 +800,11 @@ export default function Compras() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDelete(compra)}
+                          onClick={() => handleAnular(compra)}
                           className="hover:bg-red-50"
-                          title="Eliminar"
+                          title="Anular"
                         >
-                          <Trash2 size={16} className="text-red-600" />
+                          <Ban size={16} className="text-red-600" />
                         </Button>
                       </div>
                     </TableCell>
@@ -1557,7 +1585,7 @@ export default function Compras() {
 
       {/* Modal Eliminar */}
       <Dialog
-        open={isEliminar}
+        open={isAnular}
         onOpenChange={(open) => {
           if (!open) closeToList();
         }}
@@ -1568,9 +1596,9 @@ export default function Compras() {
           onInteractOutside={(e) => e.preventDefault()}
         >
           <DialogHeader>
-            <DialogTitle>Eliminar Orden de Compra</DialogTitle>
+            <DialogTitle>Anular Orden de Compra</DialogTitle>
             <DialogDescription id="delete-order-description">
-              ¿Estás seguro de que deseas eliminar esta orden de compra?
+              ¿Estás seguro de que deseas anular esta orden de compra?
             </DialogDescription>
           </DialogHeader>
           {compraSeleccionada && (
@@ -1578,7 +1606,7 @@ export default function Compras() {
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
                 <p className="text-sm text-yellow-800">
                   Esta acción no se puede deshacer. La orden{" "}
-                  <strong>{compraSeleccionada.numeroOrden}</strong> será eliminada
+                  <strong>{compraSeleccionada.numeroOrden}</strong> será anulada
                   permanentemente.
                 </p>
               </div>
@@ -1597,8 +1625,8 @@ export default function Compras() {
             <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
-            <Button onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">
-              Eliminar
+            <Button onClick={confirmAnular} className="bg-red-600 hover:bg-red-700">
+              Anular
             </Button>
           </DialogFooter>
         </DialogContent>

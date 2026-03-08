@@ -6,7 +6,7 @@ export interface Orden {
   cliente: string;
   fecha: string;
   fechaVencimiento: string;
-  estado: "Pendiente" | "Procesando" | "Enviada" | "Entregada" | "Cancelada";
+  estado: "Pendiente" | "Procesando" | "Enviada" | "Entregada" | "Anulada";
   items: number;
   total: number;
   observaciones: string;

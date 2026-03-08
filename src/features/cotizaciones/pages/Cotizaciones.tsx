@@ -5,7 +5,7 @@ import {
   useParams,
   useOutletContext,
 } from "react-router-dom";
-import { Search, Eye, Edit, Trash2, Plus, Package, Clock, CheckCircle2, FileText, Download, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Eye, Edit, Trash2, Plus, Package, Clock, CheckCircle2, FileText, Download, ChevronLeft, ChevronRight, Ban } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Button } from '../../../shared/components/ui/button';
@@ -48,7 +48,7 @@ export default function Cotizaciones() {
   const isCrear = location.pathname.endsWith("/crear");
   const isVer = location.pathname.endsWith("/ver");
   const isEditar = location.pathname.endsWith("/editar");
-  const isEliminar = location.pathname.endsWith("/eliminar");
+  const isAnular = location.pathname.endsWith("/anular");
 
   const closeToList = () => navigate("/app/cotizaciones");
 
@@ -71,15 +71,15 @@ export default function Cotizaciones() {
     return cotizaciones.find((c) => c.id === id) ?? null;
   }, [cotizaciones, params.id]);
 
-  // ✅ si entran a /ver, /editar o /eliminar con id inválido → volver
+  // ✅ si entran a /ver, /editar o /anular con id inválido → volver
   useEffect(() => {
-    if (!isVer && !isEditar && !isEliminar) return;
+    if (!isVer && !isEditar && !isAnular) return;
 
     if (!cotizacionSeleccionada) {
       closeToList();
       return;
     }
-  }, [isVer, isEditar, isEliminar, cotizacionSeleccionada, closeToList]);
+  }, [isVer, isEditar, isAnular, cotizacionSeleccionada, closeToList]);
 
   const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
   const [cotizacionParaCambioEstado, setCotizacionParaCambioEstado] =
@@ -91,7 +91,7 @@ export default function Cotizaciones() {
     cliente: "",
     fecha: "",
     fechaVencimiento: "",
-    estado: "Pendiente" as "Pendiente" | "Aprobada" | "Rechazada" | "Vencida",
+    estado: "Pendiente" as "Pendiente" | "Aprobada" | "Rechazada" | "Vencida" | "Anulada",
     items: 0,
     subtotal: 0,
     impuestos: 0,
@@ -180,8 +180,9 @@ export default function Cotizaciones() {
     const totalCotizaciones = cotizaciones.length;
     const pendientes = cotizaciones.filter((c) => c.estado === "Pendiente").length;
     const aprobadas = cotizaciones.filter((c) => c.estado === "Aprobada").length;
+    const anuladas = cotizaciones.filter((c) => c.estado === "Anulada").length;
 
-    return { totalCotizaciones, pendientes, aprobadas };
+    return { totalCotizaciones, pendientes, aprobadas, anuladas };
   }, [cotizaciones]);
 
 
@@ -358,8 +359,8 @@ export default function Cotizaciones() {
     navigate(`/app/cotizaciones/${cotizacion.id}/editar`);
   };
 
-  const handleDelete = (cotizacion: Cotizacion) => {
-    navigate(`/app/cotizaciones/${cotizacion.id}/eliminar`);
+  const handleAnular = (cotizacion: Cotizacion) => {
+    navigate(`/app/cotizaciones/${cotizacion.id}/anular`);
   };
 
   const getSiguienteEstado = (
@@ -373,12 +374,18 @@ export default function Cotizaciones() {
       Aprobada: null,
       Rechazada: null,
       Vencida: null,
+      Anulada: null,
     };
 
     return flujoEstados[estadoActual];
   };
 
   const handleToggleEstado = (cotizacion: Cotizacion) => {
+    if (cotizacion.estado === "Anulada") {
+      toast.info("No puedes cambiar el estado de una cotización anulada");
+      return;
+    }
+
     const siguienteEstado = getSiguienteEstado(cotizacion.estado);
 
     if (!siguienteEstado) {
@@ -398,6 +405,13 @@ export default function Cotizaciones() {
 
   const handleConfirmEstado = () => {
     if (!cotizacionParaCambioEstado) return;
+
+    if (cotizacionParaCambioEstado.estado === "Anulada") {
+      toast.error("No puedes cambiar el estado de una cotización anulada");
+      setShowConfirmEstadoModal(false);
+      setCotizacionParaCambioEstado(null);
+      return;
+    }
 
     const nuevoEstado = getSiguienteEstado(cotizacionParaCambioEstado.estado);
     if (!nuevoEstado) return;
@@ -465,6 +479,11 @@ export default function Cotizaciones() {
       return;
     }
 
+    if (cotizacionSeleccionada.estado === "Anulada") {
+      toast.error("No puedes editar una cotización anulada");
+      return;
+    }
+
     if (productosOrden.length === 0) {
       toast.error("Debes agregar al menos un producto a la cotización");
       return;
@@ -491,13 +510,23 @@ export default function Cotizaciones() {
     resetForm();
   };
 
-  const confirmDelete = () => {
+  const confirmAnular = () => {
     if (!cotizacionSeleccionada) return;
 
+    if (cotizacionSeleccionada.estado === "Anulada") {
+      toast.error("La cotización ya está anulada");
+      return;
+    }
+
     setCotizaciones(
-      cotizaciones.filter((cotizacion) => cotizacion.id !== cotizacionSeleccionada.id)
+      cotizaciones.map((cotizacion) =>
+        cotizacion.id === cotizacionSeleccionada.id
+          ? { ...cotizacion, estado: "Anulada" }
+          : cotizacion
+      )
     );
-    toast.success("Cotización eliminada exitosamente");
+
+    toast.success("Cotización anulada exitosamente");
     closeToList();
   };
 
@@ -816,13 +845,16 @@ export default function Cotizaciones() {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleToggleEstado(cotizacion)}
+                        disabled={cotizacion.estado === "Anulada"}
                         className={`h-7 ${cotizacion.estado === "Aprobada"
-                          ? "bg-green-100 text-green-800 hover:bg-green-200"
-                          : cotizacion.estado === "Pendiente"
-                            ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                            : cotizacion.estado === "Rechazada"
-                              ? "bg-red-100 text-red-800 hover:bg-red-200"
-                              : "bg-gray-100 text-gray-800 hover:bg-gray-200"
+                            ? "bg-green-100 text-green-800 hover:bg-green-200"
+                            : cotizacion.estado === "Pendiente"
+                              ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                              : cotizacion.estado === "Rechazada"
+                                ? "bg-red-100 text-red-800 hover:bg-red-200"
+                                : cotizacion.estado === "Anulada"
+                                  ? "bg-gray-100 text-gray-800 hover:bg-gray-100 opacity-60 cursor-not-allowed"
+                                  : "bg-gray-100 text-gray-800 hover:bg-gray-200"
                           }`}
                       >
                         {cotizacion.estado}
@@ -860,11 +892,11 @@ export default function Cotizaciones() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDelete(cotizacion)}
+                          onClick={() => handleAnular(cotizacion)}
                           className="hover:bg-red-50"
-                          title="Eliminar"
+                          title="Anular"
                         >
-                          <Trash2 size={16} className="text-red-600" />
+                          <Ban size={16} className="text-red-600" />
                         </Button>
                       </div>
                     </TableCell>
@@ -1745,9 +1777,9 @@ export default function Cotizaciones() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Eliminar */}
+      {/* Modal Anular */}
       <Dialog
-        open={isEliminar}
+        open={isAnular}
         onOpenChange={(open) => {
           if (!open) closeToList();
         }}
@@ -1758,15 +1790,15 @@ export default function Cotizaciones() {
           aria-describedby="delete-quote-description"
         >
           <DialogHeader>
-            <DialogTitle>Eliminar Cotización</DialogTitle>
+            <DialogTitle>Anular Cotización</DialogTitle>
             <DialogDescription id="delete-quote-description">
-              ¿Estás seguro de que deseas eliminar esta cotización?
+              ¿Estás seguro de que deseas anular esta cotización?
             </DialogDescription>
           </DialogHeader>
           {cotizacionSeleccionada && (
             <div className="py-4">
               <p className="text-sm text-gray-600">
-                Se eliminará la cotización{" "}
+                Se anulara la cotización{" "}
                 <span className="font-medium text-gray-900">
                   {cotizacionSeleccionada.numeroCotizacion}
                 </span>{" "}
@@ -1785,8 +1817,8 @@ export default function Cotizaciones() {
             <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
-            <Button variant="destructive" onClick={confirmDelete}>
-              Eliminar
+            <Button variant="destructive" onClick={confirmAnular}>
+              Anular
             </Button>
           </DialogFooter>
         </DialogContent>

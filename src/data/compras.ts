@@ -15,7 +15,7 @@ export interface Compra {
   proveedor: string;
   fecha: string;
   fechaEntrega: string;
-  estado: "Pendiente" | "Aprobada";
+  estado: "Pendiente" | "Aprobada"| "Anulada";
   items: number;
   subtotal: number;
   impuestos: number;

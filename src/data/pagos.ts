@@ -1,5 +1,5 @@
 export type MetodoPago = "Efectivo" | "Transferencia" | "Tarjeta" | "Cheque";
-export type EstadoPago = "Pagado" | "Parcial" | "Pendiente";
+export type EstadoPago = "Pagado" | "Parcial" | "Pendiente" | "Anulado";
 
 export const METODOS_PAGO: MetodoPago[] = [
   "Efectivo",
@@ -19,7 +19,7 @@ export interface Abono {
 export interface PagoAbono {
   id: number;
   numeroTransaccion: string;
-  remisionAsociada: string;
+  remisionesAsociadas: string[];
   cliente: string;
   fecha: string;
   metodoPago: MetodoPago;
@@ -35,7 +35,7 @@ export const pagosAbonosData: PagoAbono[] = [
   {
     id: 1,
     numeroTransaccion: "TRX-001",
-    remisionAsociada: "RV-001",
+    remisionesAsociadas: ["RV-001"],
     cliente: "Comercializadora El Campo",
     fecha: "2024-01-15",
     metodoPago: "Transferencia",
@@ -49,7 +49,7 @@ export const pagosAbonosData: PagoAbono[] = [
   {
     id: 2,
     numeroTransaccion: "TRX-002",
-    remisionAsociada: "RV-002",
+    remisionesAsociadas: ["RV-002"],
     cliente: "Distribuidora Las Palmas",
     fecha: "2024-01-14",
     metodoPago: "Efectivo",
@@ -71,7 +71,7 @@ export const pagosAbonosData: PagoAbono[] = [
   {
     id: 3,
     numeroTransaccion: "TRX-003",
-    remisionAsociada: "RV-003",
+    remisionesAsociadas: ["RV-003"],
     cliente: "Granja Santa Rosa",
     fecha: "2024-01-16",
     metodoPago: "Transferencia",
@@ -85,7 +85,7 @@ export const pagosAbonosData: PagoAbono[] = [
   {
     id: 4,
     numeroTransaccion: "TRX-004",
-    remisionAsociada: "RV-004",
+    remisionesAsociadas: ["RV-004"],
     cliente: "Comercializadora El Campo",
     fecha: "2024-01-13",
     metodoPago: "Efectivo",
@@ -114,7 +114,7 @@ export const pagosAbonosData: PagoAbono[] = [
   {
     id: 5,
     numeroTransaccion: "TRX-005",
-    remisionAsociada: "RV-005",
+    remisionesAsociadas: ["RV-005"],
     cliente: "Distribuidora ABC",
     fecha: "2024-01-12",
     metodoPago: "Transferencia",
@@ -125,4 +125,5 @@ export const pagosAbonosData: PagoAbono[] = [
     bodega: "Bodega Sur",
     abonos: [],
   },
+  
 ];

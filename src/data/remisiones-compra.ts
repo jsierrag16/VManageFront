@@ -14,7 +14,7 @@ export interface RemisionCompra {
   ordenCompra: string;
   proveedor: string;
   fecha: string;
-  estado: "Pendiente" | "Aprobada";
+  estado: "Pendiente" | "Aprobada" | "Anulada";
   items: ItemRemisionCompra[];
   total: number;
   observaciones: string;

@@ -10,7 +10,7 @@ import {
   Search,
   Plus,
   Edit,
-  Trash2,
+  Ban,
   Eye,
   CheckCircle,
   Clock,
@@ -76,7 +76,7 @@ export default function RemisionesCompra() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [remisionParaCambioEstado, setRemisionParaCambioEstado] =
     useState<RemisionCompra | null>(null);
-  const [nuevoEstado, setNuevoEstado] = useState<"Pendiente" | "Aprobada" | null>(null);
+  const [nuevoEstado, setNuevoEstado] = useState<"Pendiente" | "Aprobada" | "Anulada" | null>(null);
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -89,7 +89,7 @@ export default function RemisionesCompra() {
   const isCrear = location.pathname.endsWith("/remcompras/crear");
   const isVer = location.pathname.endsWith("/ver");
   const isEditar = location.pathname.endsWith("/editar");
-  const isEliminar = location.pathname.endsWith("/eliminar");
+  const isAnular = location.pathname.endsWith("/anular");
 
   const closeToList = () => navigate("/app/remcompras");
 
@@ -101,15 +101,15 @@ export default function RemisionesCompra() {
     return remisiones.find((r) => r.id === id) ?? null;
   }, [remisiones, params.id]);
 
-  // ✅ si entran a /ver, /editar o /eliminar con id inválido → volver
+  // ✅ si entran a /ver, /editar o /anular con id inválido → volver
   useEffect(() => {
-    if (!isVer && !isEditar && !isEliminar) return;
+    if (!isVer && !isEditar && !isAnular) return;
 
     if (!remisionSeleccionada) {
       closeToList();
       return;
     }
-  }, [isVer, isEditar, isEliminar, remisionSeleccionada]);
+  }, [isVer, isEditar, isAnular, remisionSeleccionada]);
 
   // ✅ navegación (modales por URL)
   const handleView = (r: RemisionCompra) => {
@@ -124,8 +124,8 @@ export default function RemisionesCompra() {
     navigate(`/app/remcompras/${r.id}/editar`);
   };
 
-  const handleDelete = (r: RemisionCompra) => {
-    navigate(`/app/remcompras/${r.id}/eliminar`);
+  const handleAnular = (r: RemisionCompra) => {
+    navigate(`/app/remcompras/${r.id}/anular`);
   };
 
   // Form data
@@ -267,8 +267,11 @@ export default function RemisionesCompra() {
     const aprobadas = filteredRemisiones.filter(
       (r) => r.estado === "Aprobada"
     ).length;
+    const anuladas = filteredRemisiones.filter(
+      (r) => r.estado === "Anulada"
+    ).length;
 
-    return { totalRemisiones, pendientes, aprobadas };
+    return { totalRemisiones, pendientes, aprobadas, anuladas };
   }, [filteredRemisiones]);
 
   const handleAddItem = () => {
@@ -359,6 +362,11 @@ export default function RemisionesCompra() {
   const confirmEdit = () => {
     if (!remisionSeleccionada) return;
 
+    if (remisionSeleccionada.estado === "Anulada") {
+      toast.error("No puedes editar una remisión anulada");
+      return;
+    }
+
     if (
       !formData.numeroRemision ||
       !formData.ordenCompra ||
@@ -394,20 +402,37 @@ export default function RemisionesCompra() {
     closeToList();
   };
 
-  // ✅ eliminar remisión
-  const confirmDelete = () => {
+  // ✅ anular remisión
+  const confirmAnular = () => {
     if (!remisionSeleccionada) return;
 
+    if (remisionSeleccionada.estado === "Anulada") {
+      toast.error("La remisión ya está anulada");
+      return;
+    }
+
     setRemisiones(
-      remisiones.filter((remision) => remision.id !== remisionSeleccionada.id)
+      remisiones.map((remision) =>
+        remision.id === remisionSeleccionada.id
+          ? { ...remision, estado: "Anulada" }
+          : remision
+      )
     );
 
-    toast.success("Remisión de compra eliminada exitosamente");
+    toast.success("Remisión de compra anulada exitosamente");
     closeToList();
   };
 
   const handleConfirmEstado = () => {
     if (!remisionParaCambioEstado || !nuevoEstado) return;
+
+    if (remisionParaCambioEstado.estado === "Anulada") {
+      toast.error("No puedes cambiar el estado de una remisión anulada");
+      setShowConfirmEstadoModal(false);
+      setRemisionParaCambioEstado(null);
+      setNuevoEstado(null);
+      return;
+    }
 
     // ✅ Si pasa a aprobada, aquí ejecutas la lógica de inventario
     if (nuevoEstado === "Aprobada") {
@@ -600,7 +625,12 @@ export default function RemisionesCompra() {
         class: "bg-blue-100 text-blue-800 border-blue-200",
         icon: CheckCircle,
       },
+      Anulada: {
+        class: "bg-red-100 text-red-800 border-red-200",
+        icon: Ban,
+      },
     };
+
     return badges[estado as keyof typeof badges] || badges.Pendiente;
   };
 
@@ -613,16 +643,22 @@ export default function RemisionesCompra() {
     > = {
       Pendiente: "Aprobada",
       Aprobada: null,
+      Anulada: null,
     };
 
     return flujoEstados[estadoActual];
   };
 
   const handleEstadoClick = (remision: RemisionCompra) => {
+    if (remision.estado === "Anulada") {
+      toast.info("No puedes cambiar el estado de una remisión anulada");
+      return;
+    }
+
     const siguienteEstado = getSiguienteEstado(remision.estado);
 
     if (!siguienteEstado) {
-      toast.info("Esta remisión ya está en estado final (Aprobada)");
+      toast.info("Esta remisión ya está en un estado final");
       return;
     }
 
@@ -736,9 +772,12 @@ export default function RemisionesCompra() {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleEstadoClick(remision)}
+                        disabled={remision.estado === "Anulada"}
                         className={`h-7 ${remision.estado === "Aprobada"
-                          ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
-                          : "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                            ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
+                            : remision.estado === "Pendiente"
+                              ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                              : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
                           }`}
                       >
                         {remision.estado}
@@ -776,11 +815,11 @@ export default function RemisionesCompra() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDelete(remision)}
+                          onClick={() => handleAnular(remision)}
                           className="hover:bg-red-50"
-                          title="Eliminar"
+                          title="Anular"
                         >
-                          <Trash2 size={16} className="text-red-600" />
+                          <Ban size={16} className="text-red-600" />
                         </Button>
                       </div>
                     </TableCell>
@@ -1450,20 +1489,20 @@ export default function RemisionesCompra() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Eliminar */}
+      {/* Modal Anular */}
       <Dialog
-        open={isEliminar}
+        open={isAnular}
         onOpenChange={(open) => {
           if (!open) closeToList();
         }}
       >
-        <DialogContent 
-        onInteractOutside={(e) => e.preventDefault()}
-        aria-describedby="delete-remision-compra-description">
+        <DialogContent
+          onInteractOutside={(e) => e.preventDefault()}
+          aria-describedby="delete-remision-compra-description">
           <DialogHeader>
-            <DialogTitle>Eliminar Remisión de Compra</DialogTitle>
+            <DialogTitle>Anular Remisión de Compra</DialogTitle>
             <DialogDescription id="delete-remision-compra-description">
-              ¿Estás seguro de que deseas eliminar esta remisión de compra? Esta acción no se puede deshacer.
+              ¿Estás seguro de que deseas anular esta remisión de compra? Esta acción no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
 
@@ -1489,10 +1528,10 @@ export default function RemisionesCompra() {
               Cancelar
             </Button>
             <Button
-              onClick={confirmDelete}
+              onClick={confirmAnular}
               className="bg-red-600 hover:bg-red-700"
             >
-              Eliminar
+              Anular
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1503,9 +1542,9 @@ export default function RemisionesCompra() {
         open={showConfirmEstadoModal}
         onOpenChange={setShowConfirmEstadoModal}
       >
-        <DialogContent 
-        onInteractOutside={(e) => e.preventDefault()}
-        aria-describedby="confirm-estado-description">
+        <DialogContent
+          onInteractOutside={(e) => e.preventDefault()}
+          aria-describedby="confirm-estado-description">
           <DialogHeader>
             <DialogTitle>Cambiar Estado de Remisión</DialogTitle>
             <DialogDescription id="confirm-estado-description">

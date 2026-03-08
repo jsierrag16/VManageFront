@@ -10,7 +10,7 @@ import {
   Search,
   Plus,
   Edit,
-  Trash2,
+  Ban,
   Eye,
   CheckCircle,
   Clock,
@@ -46,7 +46,6 @@ import type { AppOutletContext } from "../../../layouts/MainLayout";
 import { ordenesData } from "../../../data/ordenes";
 import { clientesData } from "../../../data/clientes";
 import { productosData } from "../../../data/productos";
-import { pagosAbonosData } from "../../../data/pagos";
 import {
   remisionesVentaData,
   type RemisionVenta,
@@ -60,8 +59,10 @@ export default function Remisiones() {
 
   // ✅ estados base
   const [searchTerm, setSearchTerm] = useState("");
-  const [remisiones, setRemisiones] =
-    useState<RemisionVenta[]>(remisionesVentaData);
+  const [remisiones, setRemisiones] = useState<RemisionVenta[]>(() => {
+    const saved = localStorage.getItem("vetmanage_remisiones_venta");
+    return saved ? JSON.parse(saved) : remisionesVentaData;
+  });
 
   const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -87,7 +88,7 @@ export default function Remisiones() {
   const isCrear = location.pathname.endsWith("/remisiones/crear");
   const isVer = location.pathname.endsWith("/ver");
   const isEditar = location.pathname.endsWith("/editar");
-  const isEliminar = location.pathname.endsWith("/eliminar");
+  const isAnular = location.pathname.endsWith("/anular");
 
   const closeToList = () => navigate("/app/remisiones");
 
@@ -101,13 +102,13 @@ export default function Remisiones() {
 
   // ✅ si entran a /ver, /editar o /eliminar con id inválido → volver
   useEffect(() => {
-    if (!isVer && !isEditar && !isEliminar) return;
+    if (!isVer && !isEditar && !isAnular) return;
 
     if (!remisionSeleccionada) {
       closeToList();
       return;
     }
-  }, [isVer, isEditar, isEliminar, remisionSeleccionada]);
+  }, [isVer, isEditar, isAnular, remisionSeleccionada]);
 
   // ✅ navegación (modales por URL)
   const handleView = (remision: RemisionVenta) => {
@@ -122,8 +123,8 @@ export default function Remisiones() {
     navigate(`/app/remisiones/${remision.id}/editar`);
   };
 
-  const handleDelete = (remision: RemisionVenta) => {
-    navigate(`/app/remisiones/${remision.id}/eliminar`);
+  const handleAnular = (remision: RemisionVenta) => {
+    navigate(`/app/remisiones/${remision.id}/anular`);
   };
 
   const [formData, setFormData] = useState({
@@ -211,8 +212,11 @@ export default function Remisiones() {
     const aprobadas = filteredRemisiones.filter(
       (r) => r.estado === "Aprobada"
     ).length;
+    const anuladas = filteredRemisiones.filter(
+      (r) => r.estado === "Anulada"
+    ).length;
 
-    return { totalRemisiones, pendientes, aprobadas };
+    return { totalRemisiones, pendientes, aprobadas, anuladas };
   }, [filteredRemisiones]);
 
   const handleOrdenChange = (ordenId: string) => {
@@ -337,6 +341,14 @@ export default function Remisiones() {
   };
 
   // ✅ al entrar a /crear
+
+  useEffect(() => {
+    localStorage.setItem(
+      "vetmanage_remisiones_venta",
+      JSON.stringify(remisiones)
+    );
+  }, [remisiones]);
+  
   useEffect(() => {
     if (!isCrear) return;
 
@@ -408,30 +420,6 @@ export default function Remisiones() {
           : selectedBodega,
     };
 
-    const nuevoPago = {
-      id: pagosAbonosData.length + 1,
-      numeroTransaccion: `TRX-${String(pagosAbonosData.length + 1).padStart(
-        3,
-        "0"
-      )}`,
-      remisionAsociada: numeroRemisionNuevo,
-      cliente: formData.cliente,
-      fecha: getFechaActual(),
-      metodoPago: "Efectivo" as
-        | "Efectivo"
-        | "Transferencia"
-        | "Tarjeta"
-        | "Cheque",
-      monto: totalRemision,
-      saldoPendiente: totalRemision,
-      estadoPago: "Pendiente" as "Pagado" | "Parcial" | "Pendiente",
-      observaciones: `Pago generado automáticamente para remisión ${numeroRemisionNuevo}`,
-      bodega: nuevaRemision.bodega,
-      abonos: [],
-    };
-
-    pagosAbonosData.push(nuevoPago);
-
     setRemisiones([...remisiones, nuevaRemision]);
     closeToList();
     setShowSuccessModal(true);
@@ -440,6 +428,11 @@ export default function Remisiones() {
   const confirmEdit = () => {
     if (!remisionSeleccionada || !formData.ordenVenta || !formData.cliente) {
       toast.error("Por favor completa todos los campos obligatorios");
+      return;
+    }
+
+    if (remisionSeleccionada.estado === "Anulada") {
+      toast.error("No puedes editar una remisión anulada");
       return;
     }
 
@@ -466,13 +459,23 @@ export default function Remisiones() {
     closeToList();
   };
 
-  const confirmDelete = () => {
+  const confirmAnular = () => {
     if (!remisionSeleccionada) return;
 
+    if (remisionSeleccionada.estado === "Anulada") {
+      toast.error("La remisión ya está anulada");
+      return;
+    }
+
     setRemisiones(
-      remisiones.filter((remision) => remision.id !== remisionSeleccionada.id)
+      remisiones.map((remision) =>
+        remision.id === remisionSeleccionada.id
+          ? { ...remision, estado: "Anulada" }
+          : remision
+      )
     );
-    toast.success("Remisión eliminada exitosamente");
+
+    toast.success("Remisión anulada exitosamente");
     closeToList();
   };
 
@@ -502,6 +505,14 @@ export default function Remisiones() {
 
   const handleConfirmEstado = () => {
     if (!remisionParaCambioEstado || !nuevoEstado) return;
+
+    if (remisionParaCambioEstado.estado === "Anulada") {
+      toast.error("No puedes cambiar el estado de una remisión anulada");
+      setShowConfirmEstadoModal(false);
+      setRemisionParaCambioEstado(null);
+      setNuevoEstado(null);
+      return;
+    }
 
     setRemisiones(
       remisiones.map((remision) =>
@@ -749,25 +760,24 @@ export default function Remisiones() {
                       {new Date(remision.fecha).toLocaleDateString("es-CO")}
                     </TableCell>
                     <TableCell>{remision.items}</TableCell>
-
                     <TableCell className="text-center">
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleToggleEstado(remision)}
+                        disabled={remision.estado === "Anulada"}
                         className={`h-7 ${remision.estado === "Facturada"
                           ? "bg-green-100 text-green-800 hover:bg-green-200"
                           : remision.estado === "Aprobada"
                             ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
                             : remision.estado === "Pendiente"
                               ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                              : "bg-red-100 text-red-800 hover:bg-red-200"
+                              : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
                           }`}
                       >
                         {remision.estado}
                       </Button>
                     </TableCell>
-
                     <TableCell>
                       <div className="flex items-center justify-center gap-2">
                         <Button
@@ -779,6 +789,17 @@ export default function Remisiones() {
                         >
                           <Eye size={16} className="text-blue-600" />
                         </Button>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openPdfOptionsModal(remision)}
+                          className="hover:bg-green-50"
+                          title="Descargar PDF"
+                        >
+                          <Download size={16} className="text-green-600" />
+                        </Button>
+
                         <Button
                           variant="ghost"
                           size="sm"
@@ -788,23 +809,15 @@ export default function Remisiones() {
                         >
                           <Edit size={16} className="text-yellow-600" />
                         </Button>
+
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDelete(remision)}
+                          onClick={() => handleAnular(remision)}
                           className="hover:bg-red-50"
-                          title="Eliminar"
+                          title="Anular"
                         >
-                          <Trash2 size={16} className="text-red-600" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openPdfOptionsModal(remision)}
-                          className="hover:bg-gray-50"
-                          title="Descargar PDF"
-                        >
-                          <Download size={16} className="text-gray-600" />
+                          <Ban size={16} className="text-red-600" />
                         </Button>
                       </div>
                     </TableCell>
@@ -1500,9 +1513,9 @@ export default function Remisiones() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Eliminar */}
+      {/* Modal Anular */}
       <Dialog
-        open={isEliminar}
+        open={isAnular}
         onOpenChange={(open) => {
           if (!open) closeToList();
         }}
@@ -1513,15 +1526,15 @@ export default function Remisiones() {
           aria-describedby="delete-remision-venta-description"
         >
           <DialogHeader>
-            <DialogTitle>Eliminar Remisión</DialogTitle>
+            <DialogTitle>Anular Remisión</DialogTitle>
             <DialogDescription id="delete-remision-venta-description">
-              ¿Estás seguro de que deseas eliminar esta remisión de venta?
+              ¿Estás seguro de que deseas anular esta remisión de venta?
             </DialogDescription>
           </DialogHeader>
           {remisionSeleccionada && (
             <div className="py-4">
               <p className="text-sm text-gray-600">
-                Se eliminará la remisión{" "}
+                Se anulara la remisión{" "}
                 <span className="font-medium text-gray-900">
                   {remisionSeleccionada.numeroRemision}
                 </span>
@@ -1536,8 +1549,8 @@ export default function Remisiones() {
             <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
-            <Button variant="destructive" onClick={confirmDelete}>
-              Eliminar
+            <Button variant="destructive" onClick={confirmAnular}>
+              Anular
             </Button>
           </DialogFooter>
         </DialogContent>

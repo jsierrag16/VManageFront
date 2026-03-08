@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
 import { toast } from "sonner";
 import { useAuth } from "../../../shared/context/AuthContext";
@@ -23,6 +24,8 @@ export default function Dashboard() {
     const b = bodegasData.find((x) => x.id === selectedBodegaId);
     return b?.nombre ?? "Todas las bodegas";
   }, [selectedBodegaId]);
+
+  const navigate = useNavigate();
 
   const { traslados } = useTraslados();
   const { productos } = useProductos();
@@ -157,6 +160,7 @@ export default function Dashboard() {
               color="blue"
               onClick={() => {
                 setActiveSection("ordenes");
+                navigate("/app/ordenes");
                 toast.info("Redirigiendo a Órdenes de Venta");
               }}
             />
@@ -168,18 +172,20 @@ export default function Dashboard() {
               color="green"
               onClick={() => {
                 setActiveSection("clientes");
+                navigate("/app/clientes");
                 toast.info("Redirigiendo a Clientes");
               }}
             />
             <StatsCard
-              title="Órdenes"
+              title="Órdenes Venta"
               value={dashboardStats.totalOrdenes.value}
               change={dashboardStats.totalOrdenes.change}
               isPositive={dashboardStats.totalOrdenes.isPositive}
               color="orange"
               onClick={() => {
                 setActiveSection("ordenes");
-                toast.info("Redirigiendo a Órdenes");
+                navigate("/app/ordenes");
+                toast.info("Redirigiendo a Órdenes de Venta");
               }}
             />
             <StatsCard
@@ -189,8 +195,9 @@ export default function Dashboard() {
               isPositive={dashboardStats.totalProductos.isPositive}
               color="purple"
               onClick={() => {
-                setActiveSection("existencias");
-                toast.info("Redirigiendo a Existencias");
+                setActiveSection("Productos");
+                navigate("/app/productos");
+                toast.info("Redirigiendo a Productos");
               }}
             />
           </div>

@@ -9,8 +9,10 @@ import {
   Search,
   Eye,
   Clock,
+  Ban,
   CheckCircle,
   CreditCard,
+  Plus,
   TrendingUp,
   DollarSign,
   ChevronLeft,
@@ -43,6 +45,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../../shared/components/ui/select";
+import { remisionesVentaData, type RemisionVenta } from "../../../data/remisiones-venta";
+import { clientesData, type Cliente } from "../../../data/clientes";
 
 import type { AppOutletContext } from "../../../layouts/MainLayout";
 import {
@@ -64,7 +68,9 @@ export default function PagosAbonos() {
   const params = useParams<{ id: string }>();
 
   const isVer = location.pathname.endsWith("/ver");
+  const isCrear = location.pathname.endsWith("/crear");
   const isAbonar = location.pathname.endsWith("/abonar");
+  const isAnular = location.pathname.endsWith("/anular");
 
   const closeToList = () => navigate("/app/pagos");
 
@@ -73,6 +79,7 @@ export default function PagosAbonos() {
   const itemsPerPage = 10;
 
   const [pagosAbonos, setPagosAbonos] = useState<PagoAbono[]>(pagosAbonosData);
+  const [clientes] = useState<Cliente[]>(clientesData);
 
   const [abonoData, setAbonoData] = useState<{
     monto: number;
@@ -84,6 +91,43 @@ export default function PagosAbonos() {
     observaciones: "",
   });
 
+  const [remisionesVenta, setRemisionesVenta] = useState<RemisionVenta[]>(() => {
+    const saved = localStorage.getItem("vetmanage_remisiones_venta");
+    return saved ? (JSON.parse(saved) as RemisionVenta[]) : remisionesVentaData;
+  });
+
+  const [pagoData, setPagoData] = useState<{
+    cliente: string;
+    remisionesAsociadas: string[];
+    metodoPago: MetodoPago;
+    monto: number;
+    observaciones: string;
+  }>({
+    cliente: "",
+    remisionesAsociadas: [],
+    metodoPago: "Efectivo",
+    monto: 0,
+    observaciones: "",
+  });
+
+  const remisionesDisponiblesParaPago = useMemo(() => {
+    if (!pagoData.cliente) return [];
+
+    return remisionesVenta.filter((remision) => {
+      const esDelCliente = remision.cliente === pagoData.cliente;
+      const noFacturada =
+        remision.estado !== "Facturada" && remision.estado !== "Anulada";
+
+      const yaTienePago = pagosAbonos.some(
+        (pago) =>
+          pago.remisionesAsociadas.includes(remision.numeroRemision) &&
+          pago.estadoPago !== "Anulado"
+      );
+
+      return esDelCliente && noFacturada && !yaTienePago;
+    });
+  }, [pagoData.cliente, pagosAbonos, remisionesVenta]);
+
   const pagoSeleccionado = useMemo(() => {
     if (!params.id) return null;
     const id = Number(params.id);
@@ -92,12 +136,20 @@ export default function PagosAbonos() {
   }, [pagosAbonos, params.id]);
 
   useEffect(() => {
-    if (!isVer && !isAbonar) return;
+    const saved = localStorage.getItem("vetmanage_remisiones_venta");
+    if (saved) {
+      setRemisionesVenta(JSON.parse(saved));
+    } else {
+      setRemisionesVenta(remisionesVentaData);
+    }
+  }, [location.pathname]);
+  useEffect(() => {
+    if (!isVer && !isAbonar && !isAnular) return;
 
     if (!pagoSeleccionado) {
       closeToList();
     }
-  }, [isVer, isAbonar, pagoSeleccionado]);
+  }, [isVer, isAbonar, isAnular, pagoSeleccionado]);
 
   const getFechaActual = () => new Date().toISOString().split("T")[0];
 
@@ -113,7 +165,9 @@ export default function PagosAbonos() {
       filtered = filtered.filter(
         (pago) =>
           pago.numeroTransaccion.toLowerCase().includes(q) ||
-          pago.remisionAsociada.toLowerCase().includes(q) ||
+          pago.remisionesAsociadas.some((remision) =>
+            remision.toLowerCase().includes(q)
+          ) ||
           pago.cliente.toLowerCase().includes(q) ||
           pago.estadoPago.toLowerCase().includes(q)
       );
@@ -159,6 +213,10 @@ export default function PagosAbonos() {
     };
   }, [pagosAbonos, selectedBodega]);
 
+  const handleCreate = () => {
+    navigate("/app/pagos/crear");
+  };
+
   const handleView = (pago: PagoAbono) => {
     navigate(`/app/pagos/${pago.id}/ver`);
   };
@@ -172,8 +230,111 @@ export default function PagosAbonos() {
     navigate(`/app/pagos/${pago.id}/abonar`);
   };
 
+  const handleAnular = (pago: PagoAbono) => {
+    navigate(`/app/pagos/${pago.id}/anular`);
+  };
+
+  const confirmCreate = () => {
+    if (!pagoData.cliente || pagoData.remisionesAsociadas.length === 0) {
+      toast.error("Debes seleccionar un cliente y al menos una remisión");
+      return;
+    }
+
+    if (!pagoData.monto || pagoData.monto <= 0) {
+      toast.error("El monto total debe ser válido");
+      return;
+    }
+
+    const remisionesSeleccionadas = remisionesDisponiblesParaPago.filter((r) =>
+      pagoData.remisionesAsociadas.includes(r.numeroRemision)
+    );
+
+    if (remisionesSeleccionadas.length === 0) {
+      toast.error("Debes seleccionar al menos una remisión válida");
+      return;
+    }
+
+    const bodegaPago =
+      remisionesSeleccionadas.length === 1
+        ? remisionesSeleccionadas[0].bodega
+        : "Múltiples bodegas";
+
+    const nuevoPago: PagoAbono = {
+      id: pagosAbonos.length > 0 ? Math.max(...pagosAbonos.map((p) => p.id)) + 1 : 1,
+      numeroTransaccion: `TRX-${String(pagosAbonos.length + 1).padStart(3, "0")}`,
+      remisionesAsociadas: remisionesSeleccionadas.map((r) => r.numeroRemision),
+      cliente: pagoData.cliente,
+      fecha: getFechaActual(),
+      metodoPago: pagoData.metodoPago,
+      monto: pagoData.monto,
+      saldoPendiente: pagoData.monto,
+      estadoPago: "Pendiente",
+      observaciones: pagoData.observaciones,
+      bodega: bodegaPago,
+      abonos: [],
+    };
+
+    setPagosAbonos((prev) => [...prev, nuevoPago]);
+
+    toast.success("Pago creado exitosamente");
+    closeToList();
+
+    setPagoData({
+      cliente: "",
+      remisionesAsociadas: [],
+      metodoPago: "Efectivo",
+      monto: 0,
+      observaciones: "",
+    });
+  };
+
+  const confirmAnular = () => {
+    if (!pagoSeleccionado) return;
+
+    if (pagoSeleccionado.estadoPago === "Anulado") {
+      toast.error("El pago ya está anulado");
+      return;
+    }
+
+    setPagosAbonos((prev) =>
+      prev.map((pago) =>
+        pago.id === pagoSeleccionado.id
+          ? { ...pago, estadoPago: "Anulado" }
+          : pago
+      )
+    );
+
+    toast.success("Pago anulado exitosamente");
+    closeToList();
+  };
+
+  const handleToggleRemision = (numeroRemision: string) => {
+    setPagoData((prev) => {
+      const yaExiste = prev.remisionesAsociadas.includes(numeroRemision);
+
+      const nuevasRemisiones = yaExiste
+        ? prev.remisionesAsociadas.filter((r) => r !== numeroRemision)
+        : [...prev.remisionesAsociadas, numeroRemision];
+
+      const totalSeleccionado = remisionesDisponiblesParaPago
+        .filter((r) => nuevasRemisiones.includes(r.numeroRemision))
+        .reduce((sum, r) => sum + r.total, 0);
+
+      return {
+        ...prev,
+        remisionesAsociadas: nuevasRemisiones,
+        monto: totalSeleccionado,
+      };
+    });
+  };
+
   const handleAgregarAbono = () => {
     if (!pagoSeleccionado) return;
+
+    if (pagoSeleccionado.estadoPago === "Anulado") {
+      toast.error("No puedes agregar abonos a un pago anulado");
+      return;
+    }
 
     if (!abonoData.monto || abonoData.monto <= 0) {
       toast.error("Por favor ingresa un monto válido");
@@ -235,7 +396,12 @@ export default function PagosAbonos() {
         class: "bg-orange-100 text-orange-800 border-orange-200",
         icon: TrendingUp,
       },
+      Anulado: {
+        class: "bg-red-100 text-red-800 border-red-200",
+        icon: Ban,
+      },
     };
+
     return badges[estado];
   };
 
@@ -310,6 +476,13 @@ export default function PagosAbonos() {
               className="pl-10 w-full"
             />
           </div>
+          <Button
+            onClick={handleCreate}
+            className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto"
+          >
+            <Plus size={20} className="mr-2" />
+            Nuevo Pago
+          </Button>
         </div>
       </div>
 
@@ -326,7 +499,7 @@ export default function PagosAbonos() {
                 <TableHead>Método</TableHead>
                 <TableHead>Monto Total</TableHead>
                 <TableHead>Saldo Pendiente</TableHead>
-                <TableHead>Estado</TableHead>
+                <TableHead className="text-center">Estado</TableHead>
                 <TableHead className="text-center">Acciones</TableHead>
               </TableRow>
             </TableHeader>
@@ -356,7 +529,7 @@ export default function PagosAbonos() {
                         {startIndex + index + 1}
                       </TableCell>
                       <TableCell className="font-medium">
-                        {pago.remisionAsociada}
+                        {pago.remisionesAsociadas.join(", ")}
                       </TableCell>
                       <TableCell>{pago.cliente}</TableCell>
                       <TableCell>
@@ -380,7 +553,7 @@ export default function PagosAbonos() {
                           })}`
                           : "-"}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="text-center">
                         <div
                           className={`inline-flex items-center rounded-md px-3 h-7 text-sm ${estadoBadge.class}`}
                         >
@@ -413,7 +586,18 @@ export default function PagosAbonos() {
                                 className="text-green-600"
                               />
                             </Button>
+
                           )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleAnular(pago)}
+                            className="hover:bg-red-50"
+                            title="Anular"
+                            disabled={pago.estadoPago === "Anulado"}
+                          >
+                            <Ban size={16} className="text-red-600" />
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -505,7 +689,7 @@ export default function PagosAbonos() {
                 <div>
                   <p className="text-sm text-gray-600">Remisión Asociada</p>
                   <p className="font-semibold">
-                    {pagoSeleccionado.remisionAsociada}
+                    {pagoSeleccionado.remisionesAsociadas.join(", ")}
                   </p>
                 </div>
                 <div>
@@ -640,6 +824,231 @@ export default function PagosAbonos() {
         </DialogContent>
       </Dialog>
 
+      {/* Modal Crear Pago */}
+
+      <Dialog
+        open={isCrear}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPagoData({
+              cliente: "",
+              remisionesAsociadas: [],
+              metodoPago: "Efectivo",
+              monto: 0,
+              observaciones: "",
+            });
+            closeToList();
+          }
+        }}
+      >
+        <DialogContent
+          onInteractOutside={(e) => e.preventDefault()}
+          className="max-w-3xl"
+          aria-describedby="crear-pago-description"
+        >
+          <DialogHeader>
+            <DialogTitle>Crear pago</DialogTitle>
+            <DialogDescription id="crear-pago-description">
+              Selecciona un cliente y una o varias remisiones pendientes para generar la cuenta por cobrar.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="cliente-pago">Cliente *</Label>
+              <Select
+                value={pagoData.cliente}
+                onValueChange={(value: string) =>
+                  setPagoData({
+                    ...pagoData,
+                    cliente: value,
+                    remisionesAsociadas: [],
+                    monto: 0,
+                  })
+                }
+              >
+                <SelectTrigger id="cliente-pago">
+                  <SelectValue placeholder="Selecciona un cliente" />
+                </SelectTrigger>
+                <SelectContent>
+                  {clientes.map((cliente) => (
+                    <SelectItem key={cliente.id} value={cliente.nombre}>
+                      {cliente.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Remisiones pendientes *</Label>
+
+              <div className="rounded-lg border max-h-64 overflow-y-auto">
+                {!pagoData.cliente ? (
+                  <div className="p-4 text-sm text-gray-500">
+                    Selecciona primero un cliente.
+                  </div>
+                ) : remisionesDisponiblesParaPago.length === 0 ? (
+                  <div className="p-4 text-sm text-gray-500">
+                    No hay remisiones pendientes disponibles para este cliente.
+                  </div>
+                ) : (
+                  <div className="divide-y">
+                    {remisionesDisponiblesParaPago.map((remision) => {
+                      const checked = pagoData.remisionesAsociadas.includes(
+                        remision.numeroRemision
+                      );
+
+                      return (
+                        <label
+                          key={remision.id}
+                          className="flex items-start justify-between gap-4 p-4 cursor-pointer hover:bg-gray-50"
+                        >
+                          <div className="flex items-start gap-3">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() =>
+                                handleToggleRemision(remision.numeroRemision)
+                              }
+                              className="mt-1 h-4 w-4 rounded border-gray-300"
+                            />
+
+                            <div className="space-y-1">
+                              <p className="font-medium text-sm">
+                                {remision.numeroRemision}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                Fecha:{" "}
+                                {new Date(remision.fecha).toLocaleDateString("es-CO")}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                Bodega: {remision.bodega}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                Estado: {remision.estado}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="text-sm font-semibold text-green-700 whitespace-nowrap">
+                            $
+                            {remision.total.toLocaleString("es-CO", {
+                              minimumFractionDigits: 2,
+                            })}
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {pagoData.remisionesAsociadas.length > 0 && (
+              <div className="rounded-lg border bg-gray-50 p-4 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Cliente:</span>
+                  <span className="font-medium">{pagoData.cliente}</span>
+                </div>
+
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Remisiones seleccionadas:</span>
+                  <span className="font-medium">
+                    {pagoData.remisionesAsociadas.length}
+                  </span>
+                </div>
+
+                <div className="flex justify-between text-base border-t pt-2">
+                  <span className="text-gray-700 font-medium">Total a cobrar:</span>
+                  <span className="font-bold text-green-700">
+                    $
+                    {pagoData.monto.toLocaleString("es-CO", {
+                      minimumFractionDigits: 2,
+                    })}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="metodo-pago">Método de pago *</Label>
+                <Select
+                  value={pagoData.metodoPago}
+                  onValueChange={(value: string) =>
+                    setPagoData({
+                      ...pagoData,
+                      metodoPago: value as MetodoPago,
+                    })
+                  }
+                >
+                  <SelectTrigger id="metodo-pago">
+                    <SelectValue placeholder="Selecciona método" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {METODOS_PAGO.map((metodo) => (
+                      <SelectItem key={metodo} value={metodo}>
+                        {metodo}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="monto-pago">Monto total</Label>
+                <Input
+                  id="monto-pago"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={pagoData.monto || ""}
+                  readOnly
+                  className="bg-gray-50"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="observaciones-pago">Observaciones</Label>
+              <Input
+                id="observaciones-pago"
+                value={pagoData.observaciones}
+                onChange={(e) =>
+                  setPagoData({
+                    ...pagoData,
+                    observaciones: e.target.value,
+                  })
+                }
+                placeholder="Notas adicionales..."
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPagoData({
+                  cliente: "",
+                  remisionesAsociadas: [],
+                  metodoPago: "Efectivo",
+                  monto: 0,
+                  observaciones: "",
+                });
+                closeToList();
+              }}
+            >
+              Cancelar
+            </Button>
+
+            <Button onClick={confirmCreate} className="bg-blue-600 hover:bg-blue-700">
+              Crear pago
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal Agregar Abono */}
       <Dialog
@@ -653,7 +1062,7 @@ export default function PagosAbonos() {
           aria-describedby="abono-description">
           <DialogHeader>
             <DialogTitle>
-              Agregar Abono - {pagoSeleccionado?.remisionAsociada}
+              Agregar Abono - {pagoSeleccionado?.remisionesAsociadas.join(", ")}
             </DialogTitle>
             <DialogDescription id="abono-description">
               Registra un abono para el pago de {pagoSeleccionado?.cliente}
@@ -761,6 +1170,98 @@ export default function PagosAbonos() {
               className="bg-green-600 hover:bg-green-700"
             >
               Registrar Abono
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Anular Pago */}
+
+      <Dialog
+        open={isAnular}
+        onOpenChange={(open) => {
+          if (!open) closeToList();
+        }}
+      >
+        <DialogContent
+          onInteractOutside={(e) => e.preventDefault()}
+          aria-describedby="anular-pago-description"
+          className="max-w-md"
+        >
+          <DialogHeader>
+            <DialogTitle>Anular pago</DialogTitle>
+            <DialogDescription id="anular-pago-description">
+              Esta acción marcará el pago como anulado y no podrá seguir recibiendo abonos.
+            </DialogDescription>
+          </DialogHeader>
+
+          {pagoSeleccionado && (
+            <div className="space-y-4 py-4">
+              <div className="rounded-lg border bg-gray-50 p-4 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Transacción:</span>
+                  <span className="font-medium">
+                    {pagoSeleccionado.numeroTransaccion}
+                  </span>
+                </div>
+
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Cliente:</span>
+                  <span className="font-medium">{pagoSeleccionado.cliente}</span>
+                </div>
+
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Remisiones:</span>
+                  <span className="font-medium text-right">
+                    {pagoSeleccionado.remisionesAsociadas.join(", ")}
+                  </span>
+                </div>
+
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Monto:</span>
+                  <span className="font-medium">
+                    $
+                    {pagoSeleccionado.monto.toLocaleString("es-CO", {
+                      minimumFractionDigits: 2,
+                    })}
+                  </span>
+                </div>
+
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Saldo pendiente:</span>
+                  <span className="font-medium text-red-600">
+                    $
+                    {pagoSeleccionado.saldoPendiente.toLocaleString("es-CO", {
+                      minimumFractionDigits: 2,
+                    })}
+                  </span>
+                </div>
+
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Estado actual:</span>
+                  <span className="font-medium">{pagoSeleccionado.estadoPago}</span>
+                </div>
+              </div>
+
+              {pagoSeleccionado.estadoPago === "Anulado" && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  Este pago ya se encuentra anulado.
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeToList}>
+              Cancelar
+            </Button>
+
+            <Button
+              onClick={confirmAnular}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={pagoSeleccionado?.estadoPago === "Anulado"}
+            >
+              Anular pago
             </Button>
           </DialogFooter>
         </DialogContent>

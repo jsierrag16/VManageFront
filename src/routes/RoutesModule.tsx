@@ -99,13 +99,13 @@ export default function RoutesModule() {
           <Route path="compras/crear" element={<Compras />} />
           <Route path="compras/:id/ver" element={<Compras />} />
           <Route path="compras/:id/editar" element={<Compras />} />
-          <Route path="compras/:id/eliminar" element={<Compras />} />
+          <Route path="compras/:id/anular" element={<Compras />} />
 
           <Route path="remcompras" element={<RemisionesCompra />} />
           <Route path="remcompras/crear" element={<RemisionesCompra />} />
           <Route path="remcompras/:id/ver" element={<RemisionesCompra />} />
           <Route path="remcompras/:id/editar" element={<RemisionesCompra />} />
-          <Route path="remcompras/:id/eliminar" element={<RemisionesCompra />} />
+          <Route path="remcompras/:id/anular" element={<RemisionesCompra />} />
 
           <Route path="clientes" element={<Clientes />} />
           <Route path="clientes/crear" element={<Clientes />} />
@@ -117,25 +117,25 @@ export default function RoutesModule() {
           <Route path="cotizaciones/crear" element={<Cotizaciones />} />
           <Route path="cotizaciones/:id/ver" element={<Cotizaciones />} />
           <Route path="cotizaciones/:id/editar" element={<Cotizaciones />} />
-          <Route path="cotizaciones/:id/eliminar" element={<Cotizaciones />} />
+          <Route path="cotizaciones/:id/anular" element={<Cotizaciones />} />
 
           <Route path="ordenes" element={<Ordenes />} />
           <Route path="ordenes/crear" element={<Ordenes />} />
           <Route path="ordenes/:id/ver" element={<Ordenes />} />
           <Route path="ordenes/:id/editar" element={<Ordenes />} />
-          <Route path="ordenes/:id/eliminar" element={<Ordenes />} />
+          <Route path="ordenes/:id/anular" element={<Ordenes />} />
 
           <Route path="remisiones" element={<Remisiones />} />
           <Route path="remisiones/crear" element={<Remisiones />} />
           <Route path="remisiones/:id/ver" element={<Remisiones />} />
           <Route path="remisiones/:id/editar" element={<Remisiones />} />
-          <Route path="remisiones/:id/eliminar" element={<Remisiones />} />
+          <Route path="remisiones/:id/anular" element={<Remisiones />} />
 
           <Route path="pagos" element={<PagosAbonos />} />
           <Route path="pagos/crear" element={<PagosAbonos />} />
           <Route path="pagos/:id/ver" element={<PagosAbonos />} />
-          <Route path="pagos/:id/editar" element={<PagosAbonos />} />
           <Route path="pagos/:id/abonar" element={<PagosAbonos />} />
+          <Route path="pagos/:id/anular" element={<PagosAbonos />} />
 
           <Route path="roles" element={<Roles />} />
           <Route path="roles/crear" element={<Roles />} />

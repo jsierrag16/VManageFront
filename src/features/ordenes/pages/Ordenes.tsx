@@ -9,6 +9,7 @@ import {
   Search,
   Eye,
   Edit,
+  Ban,
   Trash2,
   Plus,
   ShoppingCart,
@@ -85,7 +86,7 @@ export default function Ordenes() {
   const isCrear = location.pathname.endsWith("/ordenes/crear");
   const isVer = location.pathname.endsWith("/ver");
   const isEditar = location.pathname.endsWith("/editar");
-  const isEliminar = location.pathname.endsWith("/eliminar");
+  const isAnular = location.pathname.endsWith("/anular");
 
   const closeToList = useCallback(() => {
     navigate("/app/ordenes");
@@ -101,15 +102,15 @@ export default function Ordenes() {
     return ordenes.find((o) => o.id === id) ?? null;
   }, [ordenes, params.id]);
 
-  // ✅ si entran a /ver, /editar o /eliminar con id inválido → volver
+  // ✅ si entran a /ver, /editar o /Anular con id inválido → volver
   useEffect(() => {
-    if (!isVer && !isEditar && !isEliminar) return;
+    if (!isVer && !isEditar && !isAnular) return;
 
     if (!ordenSeleccionada) {
       closeToList();
       return;
     }
-  }, [isVer, isEditar, isEliminar, ordenSeleccionada, closeToList]);
+  }, [isVer, isEditar, isAnular, ordenSeleccionada, closeToList]);
 
   // ✅ navegación (modales por URL)
   const handleView = (orden: Orden) => {
@@ -124,8 +125,8 @@ export default function Ordenes() {
     navigate(`/app/ordenes/${orden.id}/editar`);
   };
 
-  const handleDelete = (orden: Orden) => {
-    navigate(`/app/ordenes/${orden.id}/eliminar`);
+  const handleAnular = (orden: Orden) => {
+    navigate(`/app/ordenes/${orden.id}/anular`);
   };
 
   // ✅ formulario principal
@@ -139,7 +140,7 @@ export default function Ordenes() {
       | "Procesando"
       | "Enviada"
       | "Entregada"
-      | "Cancelada",
+      | "Anulada",
     items: 0,
     observaciones: "",
     bodega: "",
@@ -229,8 +230,9 @@ export default function Ordenes() {
     const totalOrdenes = ordenes.length;
     const pendientes = ordenes.filter((o) => o.estado === "Pendiente").length;
     const procesando = ordenes.filter((o) => o.estado === "Procesando").length;
+    const anuladas = ordenes.filter((o) => o.estado === "Anulada").length;
 
-    return { totalOrdenes, pendientes, procesando };
+    return { totalOrdenes, pendientes, procesando, anuladas };
   }, [ordenes]);
 
   // ✅ reset formulario
@@ -434,11 +436,12 @@ export default function Ordenes() {
   const confirmEdit = () => {
     if (!ordenSeleccionada) return;
 
-    if (
-      !formData.numeroOrden ||
-      !formData.cliente ||
-      !formData.bodega
-    ) {
+    if (ordenSeleccionada.estado === "Anulada") {
+      toast.error("No puedes editar una orden anulada");
+      return;
+    }
+
+    if (!formData.numeroOrden || !formData.cliente || !formData.bodega) {
       toast.error("Por favor completa todos los campos obligatorios");
       return;
     }
@@ -467,11 +470,23 @@ export default function Ordenes() {
   };
 
   // ✅ eliminar orden
-  const confirmDelete = () => {
+  const confirmAnular = () => {
     if (!ordenSeleccionada) return;
 
-    setOrdenes(ordenes.filter((orden) => orden.id !== ordenSeleccionada.id));
-    toast.success("Orden de venta eliminada exitosamente");
+    if (ordenSeleccionada.estado === "Anulada") {
+      toast.error("La orden ya está anulada");
+      return;
+    }
+
+    setOrdenes(
+      ordenes.map((orden) =>
+        orden.id === ordenSeleccionada.id
+          ? { ...orden, estado: "Anulada" }
+          : orden
+      )
+    );
+
+    toast.success("Orden de venta anulada exitosamente");
     closeToList();
   };
 
@@ -599,6 +614,11 @@ export default function Ordenes() {
   };
 
   const handleToggleEstado = (orden: Orden) => {
+    if (orden.estado === "Anulada") {
+      toast.info("No puedes cambiar el estado de una orden anulada");
+      return;
+    }
+
     setOrdenParaCambioEstado(orden);
     setShowConfirmEstadoModal(true);
   };
@@ -623,8 +643,8 @@ export default function Ordenes() {
         setShowConfirmEstadoModal(false);
         setOrdenParaCambioEstado(null);
         return;
-      case "Cancelada":
-        toast.info("Las órdenes canceladas no pueden cambiar de estado");
+      case "Anulada":
+        toast.info("Las órdenes anuladas no pueden cambiar de estado");
         setShowConfirmEstadoModal(false);
         setOrdenParaCambioEstado(null);
         return;
@@ -734,7 +754,7 @@ export default function Ordenes() {
                 <TableHead>Fecha</TableHead>
                 <TableHead>Vencimiento</TableHead>
                 <TableHead>Items</TableHead>
-                <TableHead>Estado</TableHead>
+                <TableHead className="text-center">Estado</TableHead>
                 <TableHead className="text-center">Acciones</TableHead>
               </TableRow>
             </TableHeader>
@@ -774,15 +794,16 @@ export default function Ordenes() {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleToggleEstado(orden)}
+                        disabled={orden.estado === "Anulada"}
                         className={`h-7 ${orden.estado === "Pendiente"
-                          ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                          : orden.estado === "Procesando"
-                            ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
-                            : orden.estado === "Enviada"
-                              ? "bg-purple-100 text-purple-800 hover:bg-purple-200"
-                              : orden.estado === "Entregada"
-                                ? "bg-green-100 text-green-800 hover:bg-green-200"
-                                : "bg-red-100 text-red-800 hover:bg-red-200"
+                            ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                            : orden.estado === "Procesando"
+                              ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
+                              : orden.estado === "Enviada"
+                                ? "bg-purple-100 text-purple-800 hover:bg-purple-200"
+                                : orden.estado === "Entregada"
+                                  ? "bg-green-100 text-green-800 hover:bg-green-200"
+                                  : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
                           }`}
                       >
                         {orden.estado}
@@ -823,11 +844,11 @@ export default function Ordenes() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDelete(orden)}
+                          onClick={() => handleAnular(orden)}
                           className="hover:bg-red-50"
-                          title="Eliminar"
+                          title="Anular"
                         >
-                          <Trash2 size={16} className="text-red-600" />
+                          <Ban size={16} className="text-red-600" />
                         </Button>
                       </div>
                     </TableCell>
@@ -897,9 +918,9 @@ export default function Ordenes() {
           if (!open) closeToList();
         }}
       >
-        <DialogContent 
-        onInteractOutside={(e) => e.preventDefault()}
-        className="max-w-7xl max-h-[90vh] overflow-y-auto">
+        <DialogContent
+          onInteractOutside={(e) => e.preventDefault()}
+          className="max-w-7xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Nueva Orden de Venta</DialogTitle>
             <DialogDescription>
@@ -1204,9 +1225,9 @@ export default function Ordenes() {
           if (!open) closeToList();
         }}
       >
-        <DialogContent 
-        onInteractOutside={(e) => e.preventDefault()}
-        className="max-w-7xl max-h-[90vh] overflow-y-auto">
+        <DialogContent
+          onInteractOutside={(e) => e.preventDefault()}
+          className="max-w-7xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar Orden de Venta</DialogTitle>
             <DialogDescription>
@@ -1236,7 +1257,7 @@ export default function Ordenes() {
                       | "Procesando"
                       | "Enviada"
                       | "Entregada"
-                      | "Cancelada"
+                      | "Anulada"
                   ) => setFormData({ ...formData, estado: value })}
                 >
                   <SelectTrigger id="estadoEdit">
@@ -1247,7 +1268,7 @@ export default function Ordenes() {
                     <SelectItem value="Procesando">Procesando</SelectItem>
                     <SelectItem value="Enviada">Enviada</SelectItem>
                     <SelectItem value="Entregada">Entregada</SelectItem>
-                    <SelectItem value="Cancelada">Cancelada</SelectItem>
+                    <SelectItem value="Anulada">Anulada</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1518,9 +1539,9 @@ export default function Ordenes() {
           if (!open) closeToList();
         }}
       >
-        <DialogContent 
-        onInteractOutside={(e) => e.preventDefault()}
-        className="max-w-7xl max-h-[90vh] overflow-y-auto">
+        <DialogContent
+          onInteractOutside={(e) => e.preventDefault()}
+          className="max-w-7xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Detalles de la Orden</DialogTitle>
             <DialogDescription className="sr-only">
@@ -1546,14 +1567,14 @@ export default function Ordenes() {
                       size="sm"
                       onClick={() => handleToggleEstado(ordenSeleccionada)}
                       className={`h-7 px-3 ${ordenSeleccionada.estado === "Pendiente"
-                          ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                          : ordenSeleccionada.estado === "Procesando"
-                            ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
-                            : ordenSeleccionada.estado === "Enviada"
-                              ? "bg-purple-100 text-purple-800 hover:bg-purple-200"
-                              : ordenSeleccionada.estado === "Entregada"
-                                ? "bg-green-100 text-green-800 hover:bg-green-200"
-                                : "bg-red-100 text-red-800 hover:bg-red-200"
+                        ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                        : ordenSeleccionada.estado === "Procesando"
+                          ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
+                          : ordenSeleccionada.estado === "Enviada"
+                            ? "bg-purple-100 text-purple-800 hover:bg-purple-200"
+                            : ordenSeleccionada.estado === "Entregada"
+                              ? "bg-green-100 text-green-800 hover:bg-green-200"
+                              : "bg-red-100 text-red-800 hover:bg-red-200"
                         }`}
                     >
                       {ordenSeleccionada.estado}
@@ -1659,25 +1680,25 @@ export default function Ordenes() {
 
       {/* Modal Eliminar */}
       <Dialog
-        open={isEliminar}
+        open={isAnular}
         onOpenChange={(open) => {
           if (!open) closeToList();
         }}
       >
-        <DialogContent 
-        onInteractOutside={(e) => e.preventDefault()}
-        className="max-w-lg">
+        <DialogContent
+          onInteractOutside={(e) => e.preventDefault()}
+          className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Eliminar Orden</DialogTitle>
+            <DialogTitle>Anular Orden</DialogTitle>
             <DialogDescription>
-              ¿Estás seguro de que deseas eliminar esta orden de venta?
+              ¿Estás seguro de que deseas Anular esta orden de venta?
             </DialogDescription>
           </DialogHeader>
 
           {ordenSeleccionada && (
             <div className="py-4">
               <p className="text-sm text-gray-600">
-                Se eliminará la orden{" "}
+                Se anulara la orden{" "}
                 <span className="font-medium text-gray-900">
                   {ordenSeleccionada.numeroOrden}
                 </span>{" "}
@@ -1697,8 +1718,8 @@ export default function Ordenes() {
             <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
-            <Button variant="destructive" onClick={confirmDelete}>
-              Eliminar
+            <Button variant="destructive" onClick={confirmAnular}>
+              Anular
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1706,9 +1727,9 @@ export default function Ordenes() {
 
       {/* Modal Éxito */}
       <Dialog open={showSuccessModal} onOpenChange={handleSuccessModalClose}>
-        <DialogContent 
-        onInteractOutside={(e) => e.preventDefault()}
-        className="max-w-lg">
+        <DialogContent
+          onInteractOutside={(e) => e.preventDefault()}
+          className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-green-600">
               <CheckCircle2 size={24} />
@@ -1740,9 +1761,9 @@ export default function Ordenes() {
         open={showConfirmEstadoModal}
         onOpenChange={setShowConfirmEstadoModal}
       >
-        <DialogContent 
-        onInteractOutside={(e) => e.preventDefault()}
-        aria-describedby="confirm-estado-orden-description">
+        <DialogContent
+          onInteractOutside={(e) => e.preventDefault()}
+          aria-describedby="confirm-estado-orden-description">
           <DialogHeader>
             <DialogTitle>Cambiar Estado de la Orden</DialogTitle>
             <DialogDescription id="confirm-estado-orden-description">
@@ -1814,9 +1835,9 @@ export default function Ordenes() {
         open={isPdfOptionsModalOpen}
         onOpenChange={setIsPdfOptionsModalOpen}
       >
-        <DialogContent 
-        onInteractOutside={(e) => e.preventDefault()}
-        className="max-w-md">
+        <DialogContent
+          onInteractOutside={(e) => e.preventDefault()}
+          className="max-w-md">
           <DialogHeader>
             <DialogTitle>Descargar PDF</DialogTitle>
             <DialogDescription>

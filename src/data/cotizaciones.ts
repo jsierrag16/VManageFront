@@ -6,7 +6,7 @@ export interface Cotizacion {
   cliente: string;
   fecha: string;
   fechaVencimiento: string;
-  estado: "Pendiente" | "Aprobada" | "Rechazada" | "Vencida";
+  estado: "Pendiente" | "Aprobada" | "Rechazada" | "Vencida" | "Anulada";
   items: number;
   subtotal: number;
   impuestos: number;
