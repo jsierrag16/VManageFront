@@ -144,7 +144,7 @@ export default function Remisiones() {
   >([]);
   const [selectedProductoId, setSelectedProductoId] = useState("");
   const [cantidadProducto, setCantidadProducto] = useState(1);
-  const [precioProducto, setPrecioProducto] = useState(0);
+  const [precioProducto, setPrecioProducto] = useState<string>("");
 
   // Productos activos
   const productosActivos = useMemo(
@@ -283,7 +283,9 @@ export default function Remisiones() {
       return;
     }
 
-    if (precioProducto <= 0) {
+    const precio = parseFloat(precioProducto);
+
+    if (!precioProducto.trim() || Number.isNaN(precio) || precio <= 0) {
       toast.error("El precio debe ser mayor a 0");
       return;
     }
@@ -302,17 +304,16 @@ export default function Remisiones() {
     const nuevoProducto: ProductoRemisionVenta = {
       producto,
       cantidad: cantidadProducto,
-      precio: precioProducto,
-      subtotal: cantidadProducto * precioProducto,
+      precio,
+      subtotal: cantidadProducto * precio,
     };
 
     setProductosRemision([...productosRemision, nuevoProducto]);
     setSelectedProductoId("");
     setCantidadProducto(1);
-    setPrecioProducto(0);
+    setPrecioProducto("");
     toast.success("Producto agregado a la remisión");
   };
-
   const eliminarProducto = (productoId: string) => {
     setProductosRemision(
       productosRemision.filter((p) => p.producto.id !== productoId)
@@ -337,7 +338,7 @@ export default function Remisiones() {
     setProductosRemision([]);
     setSelectedProductoId("");
     setCantidadProducto(1);
-    setPrecioProducto(0);
+    setPrecioProducto("");
   };
 
   // ✅ al entrar a /crear
@@ -348,7 +349,7 @@ export default function Remisiones() {
       JSON.stringify(remisiones)
     );
   }, [remisiones]);
-  
+
   useEffect(() => {
     if (!isCrear) return;
 
@@ -387,6 +388,10 @@ export default function Remisiones() {
         ? remisionSeleccionada.productos.map((p) => ({ ...p }))
         : []
     );
+
+    setSelectedProductoId("");
+    setCantidadProducto(1);
+    setPrecioProducto("");
   }, [isEditar, remisionSeleccionada]);
 
   const confirmCreate = () => {
@@ -1002,11 +1007,11 @@ export default function Remisiones() {
                     id="precio"
                     type="number"
                     min="0"
-                    step="0.01"
+                    step="0"
+                    placeholder="0.00"
                     value={precioProducto}
-                    onChange={(e) =>
-                      setPrecioProducto(parseFloat(e.target.value) || 0)
-                    }
+                    onChange={(e) => setPrecioProducto(e.target.value)}
+                    className="sin-flechas"
                   />
                 </div>
 
@@ -1268,11 +1273,11 @@ export default function Remisiones() {
                     id="edit-precio"
                     type="number"
                     min="0"
-                    step="0.01"
+                    step="0"
+                    placeholder="0.00"
                     value={precioProducto}
-                    onChange={(e) =>
-                      setPrecioProducto(parseFloat(e.target.value) || 0)
-                    }
+                    onChange={(e) => setPrecioProducto(e.target.value)}
+                    className="sin-flechas"
                   />
                 </div>
 

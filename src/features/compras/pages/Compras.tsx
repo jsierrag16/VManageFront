@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import {
   useNavigate,
   useLocation,
@@ -99,7 +99,7 @@ export default function Compras() {
   const isEditar = location.pathname.endsWith("/editar");
   const isAnular = location.pathname.endsWith("/anular");
 
-  const closeToList = () => navigate("/app/compras");
+  const closeToList = useCallback(() => navigate("/app/compras"), [navigate]);
 
   // Navegación (modales por URL)
   const handleView = (c: Compra) => {
@@ -152,7 +152,7 @@ export default function Compras() {
   // Manejo de productos en la orden
   const [selectedProductoId, setSelectedProductoId] = useState("");
   const [cantidadProducto, setCantidadProducto] = useState(1);
-  const [precioProducto, setPrecioProducto] = useState(0);
+  const [precioProducto, setPrecioProducto] = useState<string>("");
   const [productosOrden, setProductosOrden] = useState<
     Array<{
       producto: Producto;
@@ -245,6 +245,16 @@ export default function Compras() {
 
   // Confirmación cambio de estado
   const handleToggleEstado = (c: Compra) => {
+    if (c.estado === "Anulada") {
+      toast.error("No puedes cambiar el estado de una orden anulada");
+      return;
+    }
+
+    if (c.estado === "Aprobada") {
+      toast.error("Una orden aprobada no puede volver a pendiente");
+      return;
+    }
+
     setCompraParaCambioEstado(c);
     setShowConfirmEstadoModal(true);
   };
@@ -252,26 +262,20 @@ export default function Compras() {
   const handleConfirmEstado = () => {
     if (!compraParaCambioEstado) return;
 
-    if (compraParaCambioEstado.estado === "Anulada") {
-      toast.error("No puedes cambiar el estado de una orden anulada");
+    if (compraParaCambioEstado.estado !== "Pendiente") {
+      toast.error("Solo las órdenes pendientes pueden aprobarse");
       setShowConfirmEstadoModal(false);
       setCompraParaCambioEstado(null);
       return;
     }
 
-    const nuevoEstado =
-      compraParaCambioEstado.estado === "Pendiente" ? "Aprobada" : "Pendiente";
-
     setCompras(
       compras.map((c) =>
-        c.id === compraParaCambioEstado.id ? { ...c, estado: nuevoEstado } : c
+        c.id === compraParaCambioEstado.id ? { ...c, estado: "Aprobada" } : c
       )
     );
 
-    toast.success(
-      `Orden ${nuevoEstado === "Aprobada" ? "aprobada" : "marcada como pendiente"} exitosamente`
-    );
-
+    toast.success("Orden aprobada exitosamente");
     setShowConfirmEstadoModal(false);
     setCompraParaCambioEstado(null);
   };
@@ -416,7 +420,7 @@ export default function Compras() {
 
     setSelectedProductoId("");
     setCantidadProducto(1);
-    setPrecioProducto(0);
+    setPrecioProducto("");
     setProductosOrden([]);
   };
 
@@ -448,7 +452,7 @@ export default function Compras() {
     setProductosOrden(compraSeleccionada.productos ?? []);
     setSelectedProductoId("");
     setCantidadProducto(1);
-    setPrecioProducto(0);
+    setPrecioProducto("");
   }, [isEditar, compraSeleccionada]);
 
   // Agregar producto a la orden
@@ -463,7 +467,9 @@ export default function Compras() {
       return;
     }
 
-    if (precioProducto <= 0) {
+    const precio = parseFloat(precioProducto) || 0;
+
+    if (!precioProducto.trim() || Number.isNaN(precio) || precio <= 0) {
       toast.error("El precio debe ser mayor a 0");
       return;
     }
@@ -489,14 +495,14 @@ export default function Compras() {
     const nuevoProducto = {
       producto: productoSeleccionado,
       cantidad: cantidadProducto,
-      precio: precioProducto,
-      subtotal: cantidadProducto * precioProducto,
+      precio,
+      subtotal: cantidadProducto * precio,
     };
 
     setProductosOrden([...productosOrden, nuevoProducto]);
     setSelectedProductoId("");
     setCantidadProducto(1);
-    setPrecioProducto(0);
+    setPrecioProducto("");
   };
 
   // Eliminar producto de la orden
@@ -759,10 +765,10 @@ export default function Compras() {
                         onClick={() => handleToggleEstado(compra)}
                         disabled={compra.estado === "Anulada"}
                         className={`h-7 ${compra.estado === "Aprobada"
-                            ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
-                            : compra.estado === "Pendiente"
-                              ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                              : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
+                          ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
+                          : compra.estado === "Pendiente"
+                            ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                            : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
                           }`}
                       >
                         {compra.estado}
@@ -1022,13 +1028,11 @@ export default function Compras() {
                     id="precio"
                     type="number"
                     value={precioProducto}
-                    onChange={(e) =>
-                      setPrecioProducto(parseFloat(e.target.value) || 0)
-                    }
+                    onChange={(e) => setPrecioProducto(e.target.value)}
                     min="0"
-                    step="0.01"
+                    step="0"
                     placeholder="0.00"
-                    className="h-12"
+                    className="h-12 sin-flechas"
                   />
                 </div>
                 <div className="col-span-3 flex items-end">
@@ -1462,13 +1466,11 @@ export default function Compras() {
                     id="edit-precio"
                     type="number"
                     value={precioProducto}
-                    onChange={(e) =>
-                      setPrecioProducto(parseFloat(e.target.value) || 0)
-                    }
+                    onChange={(e) => setPrecioProducto(e.target.value)}
                     min="0"
-                    step="0.01"
+                    step="0"
                     placeholder="0.00"
-                    className="h-12"
+                    className="h-12 sin-flechas"
                   />
                 </div>
                 <div className="col-span-3 flex items-end">

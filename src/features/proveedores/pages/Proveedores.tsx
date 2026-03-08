@@ -74,36 +74,106 @@ const PAISES = [
   "Otro",
 ] as const;
 
-// Ciudades principales de Colombia
-const CIUDADES_COLOMBIA = [
-  "Bogotá",
-  "Medellín",
-  "Cali",
-  "Barranquilla",
-  "Cartagena",
-  "Cúcuta",
-  "Bucaramanga",
-  "Pereira",
-  "Santa Marta",
-  "Ibagué",
-  "Pasto",
-  "Manizales",
-  "Neiva",
-  "Villavicencio",
-  "Armenia",
-  "Valledupar",
-  "Montería",
-  "Popayán",
-  "Sincelejo",
-  "Tunja",
-  "Otra",
-] as const;
+// Ubicaciones por país
+const UBICACIONES_POR_PAIS: Record<string, Record<string, string[]>> = {
+  Colombia: {
+    Antioquia: ["Medellín", "Envigado", "Itagüí", "Bello", "Rionegro"],
+    Cundinamarca: ["Bogotá", "Soacha", "Chía", "Zipaquirá", "Facatativá"],
+    ValleDelCauca: ["Cali", "Palmira", "Buenaventura", "Tuluá", "Jamundí"],
+    Atlántico: ["Barranquilla", "Soledad", "Malambo", "Puerto Colombia"],
+    Bolívar: ["Cartagena", "Magangué", "Turbaco", "Arjona"],
+    Santander: ["Bucaramanga", "Floridablanca", "Girón", "Piedecuesta"],
+    NorteDeSantander: ["Cúcuta", "Villa del Rosario", "Los Patios", "Ocaña"],
+    Risaralda: ["Pereira", "Dosquebradas", "Santa Rosa de Cabal"],
+    Magdalena: ["Santa Marta", "Ciénaga", "Fundación"],
+    Tolima: ["Ibagué", "Espinal", "Melgar"],
+    Nariño: ["Pasto", "Ipiales", "Tumaco"],
+    Caldas: ["Manizales", "La Dorada", "Chinchiná"],
+    Huila: ["Neiva", "Pitalito", "Garzón"],
+    Meta: ["Villavicencio", "Acacías", "Granada"],
+    Quindío: ["Armenia", "Calarcá", "La Tebaida"],
+    Cesar: ["Valledupar", "Aguachica", "Codazzi"],
+    Córdoba: ["Montería", "Lorica", "Cereté"],
+    Cauca: ["Popayán", "Santander de Quilichao", "Puerto Tejada"],
+    Sucre: ["Sincelejo", "Corozal", "Sampués"],
+    Boyacá: ["Tunja", "Duitama", "Sogamoso"],
+    Otro: ["Otra"],
+  },
+
+  Argentina: {
+    BuenosAires: ["Buenos Aires", "La Plata", "Mar del Plata", "Bahía Blanca"],
+    Córdoba: ["Córdoba", "Villa Carlos Paz", "Río Cuarto"],
+    SantaFe: ["Rosario", "Santa Fe", "Rafaela"],
+    Otro: ["Otra"],
+  },
+
+  Brasil: {
+    SaoPaulo: ["São Paulo", "Campinas", "Santos"],
+    RioDeJaneiro: ["Río de Janeiro", "Niterói", "Petrópolis"],
+    MinasGerais: ["Belo Horizonte", "Uberlândia", "Contagem"],
+    Otro: ["Otra"],
+  },
+
+  Chile: {
+    RegionMetropolitana: ["Santiago", "Puente Alto", "Maipú"],
+    Valparaiso: ["Valparaíso", "Viña del Mar", "Quilpué"],
+    Biobio: ["Concepción", "Talcahuano", "Los Ángeles"],
+    Otro: ["Otra"],
+  },
+
+  Ecuador: {
+    Pichincha: ["Quito", "Cayambe", "Rumiñahui"],
+    Guayas: ["Guayaquil", "Durán", "Samborondón"],
+    Azuay: ["Cuenca", "Gualaceo", "Paute"],
+    Otro: ["Otra"],
+  },
+
+  México: {
+    CDMX: ["Ciudad de México"],
+    Jalisco: ["Guadalajara", "Zapopan", "Tlaquepaque"],
+    NuevoLeon: ["Monterrey", "San Nicolás", "Guadalupe"],
+    Otro: ["Otra"],
+  },
+
+  Perú: {
+    Lima: ["Lima", "Miraflores", "San Isidro"],
+    Arequipa: ["Arequipa", "Camaná", "Mollendo"],
+    LaLibertad: ["Trujillo", "Chepén", "Pacasmayo"],
+    Otro: ["Otra"],
+  },
+
+  Venezuela: {
+    DistritoCapital: ["Caracas"],
+    Zulia: ["Maracaibo", "Cabimas", "Ciudad Ojeda"],
+    Carabobo: ["Valencia", "Puerto Cabello", "Naguanagua"],
+    Otro: ["Otra"],
+  },
+
+  "Estados Unidos": {
+    Florida: ["Miami", "Orlando", "Tampa"],
+    Texas: ["Houston", "Dallas", "Austin"],
+    California: ["Los Ángeles", "San Diego", "San Francisco"],
+    Otro: ["Otra"],
+  },
+
+  España: {
+    Madrid: ["Madrid", "Alcalá de Henares", "Getafe"],
+    Cataluña: ["Barcelona", "Hospitalet", "Sabadell"],
+    Valencia: ["Valencia", "Alicante", "Elche"],
+    Otro: ["Otra"],
+  },
+
+  Otro: {
+    Otro: ["Otra"],
+  },
+};
 
 export default function Proveedores() {
-  
+
   // ✅ estados base
-  
+
   const [searchTerm, setSearchTerm] = useState("");
+  const [formDepartamento, setFormDepartamento] = useState("");
   const [proveedores, setProveedores] = useState<Proveedor[]>(initialProveedoresData);
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -113,9 +183,9 @@ export default function Proveedores() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  
+
   // ✅ router + bodega + flags URL (igual que Usuarios)
-  
+
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams<{ id: string }>();
@@ -130,9 +200,9 @@ export default function Proveedores() {
 
   const closeToList = () => navigate("/app/proveedores");
 
-  
+
   // ✅ proveedor seleccionado por URL (:id)
-  
+
   const proveedorSeleccionado = useMemo(() => {
     if (!params.id) return null;
     return proveedores.find((p) => p.id === params.id) ?? null;
@@ -148,9 +218,9 @@ export default function Proveedores() {
     }
   }, [isVer, isEditar, isEliminar, proveedorSeleccionado, closeToList]);
 
-  
+
   // ✅ Form states
-  
+
   const [formTipoDoc, setFormTipoDoc] = useState("NIT");
   const [formNumeroDoc, setFormNumeroDoc] = useState("");
   const [formNombre, setFormNombre] = useState("");
@@ -170,8 +240,9 @@ export default function Proveedores() {
     email: "",
     telefono: "",
     direccion: "",
-    ciudad: "",
     pais: "",
+    departamento: "",
+    ciudad: "",
     categoria: "",
     contacto: "",
     notas: "",
@@ -184,16 +255,17 @@ export default function Proveedores() {
     email: false,
     telefono: false,
     direccion: false,
-    ciudad: false,
     pais: false,
+    departamento: false,
+    ciudad: false,
     categoria: false,
     contacto: false,
     notas: false,
   });
 
-  
+
   // ✅ Validaciones (DEBEN IR ANTES de usarse en handlers)
-  
+
   const validateTipoDoc = (value: string) => {
     if (!value) return "El tipo de documento es requerido";
     return "";
@@ -251,11 +323,7 @@ export default function Proveedores() {
   };
 
   const validatePais = (value: string) => {
-    if (!value.trim()) return "El país es requerido";
-    const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/;
-    if (!validPattern.test(value)) return "Solo se permiten letras y espacios";
-    if (value.trim().length < 3) return "Mínimo 3 caracteres";
-    if (value.trim().length > 50) return "Máximo 50 caracteres";
+    if (!value) return "El país es requerido";
     return "";
   };
 
@@ -287,9 +355,14 @@ export default function Proveedores() {
     return "";
   };
 
-  
+  const validateDepartamento = (value: string) => {
+    if (!value || value === "") return "El departamento es requerido";
+    return "";
+  };
+
+
   // ✅ Handlers con validación en tiempo real (Inputs)
-  
+
   const handleNumeroDocChange = (value: string) => {
     setFormNumeroDoc(value);
     if (touched.numeroDoc) setErrors({ ...errors, numeroDoc: validateNumeroDoc(value) });
@@ -339,8 +412,39 @@ export default function Proveedores() {
 
   const handlePaisChange = (value: string) => {
     setFormPais(value);
-    setTouched((t) => ({ ...t, pais: true }));
-    setErrors((e) => ({ ...e, pais: validatePais(value) }));
+    setFormDepartamento("");
+    setFormCiudad("");
+
+    setTouched((t) => ({
+      ...t,
+      pais: true,
+      departamento: false,
+      ciudad: false,
+    }));
+
+    setErrors((e) => ({
+      ...e,
+      pais: validatePais(value),
+      departamento: "",
+      ciudad: "",
+    }));
+  };
+
+  const handleDepartamentoChange = (value: string) => {
+    setFormDepartamento(value);
+    setFormCiudad("");
+
+    setTouched((t) => ({
+      ...t,
+      departamento: true,
+      ciudad: false,
+    }));
+
+    setErrors((e) => ({
+      ...e,
+      departamento: validateDepartamento(value),
+      ciudad: "",
+    }));
   };
 
   const handleCategoriaChange = (value: string) => {
@@ -349,9 +453,9 @@ export default function Proveedores() {
     setErrors((e) => ({ ...e, categoria: validateCategoria(value) }));
   };
 
-  
+
   // ✅ Handlers onBlur (Inputs)
-  
+
   const handleNumeroDocBlur = () => {
     setTouched({ ...touched, numeroDoc: true });
     setErrors({ ...errors, numeroDoc: validateNumeroDoc(formNumeroDoc) });
@@ -399,6 +503,7 @@ export default function Proveedores() {
     setFormTelefono(proveedorSeleccionado.telefono);
     setFormDireccion(proveedorSeleccionado.direccion);
     setFormCiudad(proveedorSeleccionado.ciudad);
+    setFormDepartamento(proveedorSeleccionado.departamento || "");
     setFormPais(proveedorSeleccionado.pais);
     setFormCategoria(proveedorSeleccionado.categoria);
     setFormContacto(proveedorSeleccionado.contacto);
@@ -413,6 +518,7 @@ export default function Proveedores() {
       direccion: "",
       ciudad: "",
       pais: "",
+      departamento: "",
       categoria: "",
       contacto: "",
       notas: "",
@@ -425,6 +531,7 @@ export default function Proveedores() {
       telefono: false,
       direccion: false,
       ciudad: false,
+      departamento: false,
       pais: false,
       categoria: false,
       contacto: false,
@@ -444,6 +551,7 @@ export default function Proveedores() {
     setFormDireccion("");
     setFormCiudad("");
     setFormPais("");
+    setFormDepartamento("");
     setFormCategoria("");
     setFormContacto("");
     setFormNotas("");
@@ -456,6 +564,7 @@ export default function Proveedores() {
       telefono: "",
       direccion: "",
       ciudad: "",
+      departamento: "",
       pais: "",
       categoria: "",
       contacto: "",
@@ -470,6 +579,7 @@ export default function Proveedores() {
       telefono: false,
       direccion: false,
       ciudad: false,
+      departamento: false,
       pais: false,
       categoria: false,
       contacto: false,
@@ -505,6 +615,16 @@ export default function Proveedores() {
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const currentProveedores = filteredProveedores.slice(startIndex, endIndex);
+
+  const departamentosDisponibles = useMemo(() => {
+    if (!formPais) return [];
+    return Object.keys(UBICACIONES_POR_PAIS[formPais] || {});
+  }, [formPais]);
+
+  const ciudadesDisponibles = useMemo(() => {
+    if (!formPais || !formDepartamento) return [];
+    return UBICACIONES_POR_PAIS[formPais]?.[formDepartamento] || [];
+  }, [formPais, formDepartamento]);
 
   // Confirmación cambio de estado
   const handleToggleEstado = (p: Proveedor) => {
@@ -560,6 +680,7 @@ export default function Proveedores() {
       telefono: true,
       direccion: true,
       ciudad: true,
+      departamento: true,
       pais: true,
       categoria: true,
       contacto: true,
@@ -573,6 +694,7 @@ export default function Proveedores() {
     const telefonoError = validateTelefono(formTelefono);
     const direccionError = validateDireccion(formDireccion);
     const ciudadError = validateCiudad(formCiudad);
+    const departamentoError = validateDepartamento(formDepartamento);
     const paisError = validatePais(formPais);
     const categoriaError = validateCategoria(formCategoria);
     const contactoError = validateContacto(formContacto);
@@ -586,6 +708,7 @@ export default function Proveedores() {
       telefono: telefonoError,
       direccion: direccionError,
       ciudad: ciudadError,
+      departamento: departamentoError,
       pais: paisError,
       categoria: categoriaError,
       contacto: contactoError,
@@ -600,6 +723,7 @@ export default function Proveedores() {
       telefonoError ||
       direccionError ||
       ciudadError ||
+      departamentoError ||
       paisError ||
       categoriaError ||
       contactoError ||
@@ -636,8 +760,8 @@ export default function Proveedores() {
       telefono: formTelefono.trim(),
       direccion: formDireccion.trim(),
       ciudad: formCiudad.trim(),
-      departamento: "",
       pais: formPais.trim(),
+      departamento: formDepartamento.trim(),
       categoria: formCategoria.trim(),
       contacto: formContacto.trim(),
       notas: formNotas.trim(),
@@ -667,6 +791,7 @@ export default function Proveedores() {
             telefono: formTelefono.trim(),
             direccion: formDireccion.trim(),
             ciudad: formCiudad.trim(),
+            departamento: formDepartamento.trim(),
             pais: formPais.trim(),
             categoria: formCategoria.trim(),
             contacto: formContacto.trim(),
@@ -1126,30 +1251,14 @@ export default function Proveedores() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="create-ciudad">Ciudad *</Label>
-                <Select value={formCiudad} onValueChange={handleCiudadChange}>
-                  <SelectTrigger id="create-ciudad">
-                    <SelectValue placeholder="Selecciona una ciudad" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CIUDADES_COLOMBIA.map((ciudad) => (
-                      <SelectItem key={ciudad} value={ciudad}>
-                        {ciudad}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.ciudad && touched.ciudad && (
-                  <p className="text-red-500 text-sm mt-1">{errors.ciudad}</p>
-                )}
-              </div>
-
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <Label htmlFor="create-pais">País *</Label>
                 <Select value={formPais} onValueChange={handlePaisChange}>
-                  <SelectTrigger id="create-pais">
+                  <SelectTrigger
+                    id="create-pais"
+                    className={errors.pais && touched.pais ? "border-red-500" : ""}
+                  >
                     <SelectValue placeholder="Selecciona un país" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1162,6 +1271,72 @@ export default function Proveedores() {
                 </Select>
                 {errors.pais && touched.pais && (
                   <p className="text-red-500 text-sm mt-1">{errors.pais}</p>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="create-departamento">Departamento *</Label>
+                <Select
+                  value={formDepartamento}
+                  onValueChange={handleDepartamentoChange}
+                  disabled={!formPais}
+                >
+                  <SelectTrigger
+                    id="create-departamento"
+                    className={errors.departamento && touched.departamento ? "border-red-500" : ""}
+                  >
+                    <SelectValue
+                      placeholder={
+                        !formPais
+                          ? "Primero selecciona un país"
+                          : "Selecciona un departamento"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {departamentosDisponibles.map((departamento) => (
+                      <SelectItem key={departamento} value={departamento}>
+                        {departamento}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.departamento && touched.departamento && (
+                  <p className="text-red-500 text-sm mt-1">{errors.departamento}</p>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="create-ciudad">Ciudad *</Label>
+                <Select
+                  value={formCiudad}
+                  onValueChange={handleCiudadChange}
+                  disabled={!formPais || !formDepartamento}
+                >
+                  <SelectTrigger
+                    id="create-ciudad"
+                    className={errors.ciudad && touched.ciudad ? "border-red-500" : ""}
+                  >
+                    <SelectValue
+                      placeholder={
+                        !formPais
+                          ? "Primero selecciona un país"
+                          : !formDepartamento
+                            ? "Primero selecciona un departamento"
+                            : "Selecciona una ciudad"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ciudadesDisponibles.map((ciudad) => (
+                      <SelectItem key={ciudad} value={ciudad}>
+                        {ciudad}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.ciudad && touched.ciudad && (
+                  <p className="text-red-500 text-sm mt-1">{errors.ciudad}</p>
                 )}
               </div>
             </div>
@@ -1269,7 +1444,10 @@ export default function Proveedores() {
               <div>
                 <Label htmlFor="edit-tipo-doc">Tipo de Documento *</Label>
                 <Select value={formTipoDoc} onValueChange={handleTipoDocChange}>
-                  <SelectTrigger id="edit-tipo-doc">
+                  <SelectTrigger
+                    id="edit-tipo-doc"
+                    className={errors.tipoDoc && touched.tipoDoc ? "border-red-500" : ""}
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1348,30 +1526,14 @@ export default function Proveedores() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="edit-ciudad">Ciudad *</Label>
-                <Select value={formCiudad} onValueChange={handleCiudadChange}>
-                  <SelectTrigger id="edit-ciudad">
-                    <SelectValue placeholder="Selecciona una ciudad" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CIUDADES_COLOMBIA.map((ciudad) => (
-                      <SelectItem key={ciudad} value={ciudad}>
-                        {ciudad}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.ciudad && touched.ciudad && (
-                  <p className="text-red-500 text-sm mt-1">{errors.ciudad}</p>
-                )}
-              </div>
-
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <Label htmlFor="edit-pais">País *</Label>
                 <Select value={formPais} onValueChange={handlePaisChange}>
-                  <SelectTrigger id="edit-pais">
+                  <SelectTrigger
+                    id="edit-pais"
+                    className={errors.pais && touched.pais ? "border-red-500" : ""}
+                  >
                     <SelectValue placeholder="Selecciona un país" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1386,13 +1548,82 @@ export default function Proveedores() {
                   <p className="text-red-500 text-sm mt-1">{errors.pais}</p>
                 )}
               </div>
+
+              <div>
+                <Label htmlFor="edit-departamento">Departamento *</Label>
+                <Select
+                  value={formDepartamento}
+                  onValueChange={handleDepartamentoChange}
+                  disabled={!formPais}
+                >
+                  <SelectTrigger
+                    id="edit-departamento"
+                    className={errors.departamento && touched.departamento ? "border-red-500" : ""}
+                  >
+                    <SelectValue
+                      placeholder={
+                        !formPais
+                          ? "Primero selecciona un país"
+                          : "Selecciona un departamento"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {departamentosDisponibles.map((departamento) => (
+                      <SelectItem key={departamento} value={departamento}>
+                        {departamento}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.departamento && touched.departamento && (
+                  <p className="text-red-500 text-sm mt-1">{errors.departamento}</p>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="edit-ciudad">Ciudad *</Label>
+                <Select
+                  value={formCiudad}
+                  onValueChange={handleCiudadChange}
+                  disabled={!formPais || !formDepartamento}
+                >
+                  <SelectTrigger
+                    id="edit-ciudad"
+                    className={errors.ciudad && touched.ciudad ? "border-red-500" : ""}
+                  >
+                    <SelectValue
+                      placeholder={
+                        !formPais
+                          ? "Primero selecciona un país"
+                          : !formDepartamento
+                            ? "Primero selecciona un departamento"
+                            : "Selecciona una ciudad"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ciudadesDisponibles.map((ciudad) => (
+                      <SelectItem key={ciudad} value={ciudad}>
+                        {ciudad}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.ciudad && touched.ciudad && (
+                  <p className="text-red-500 text-sm mt-1">{errors.ciudad}</p>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="edit-categoria">Categoría *</Label>
                 <Select value={formCategoria} onValueChange={handleCategoriaChange}>
-                  <SelectTrigger id="edit-categoria">
+                  <SelectTrigger
+                    id="edit-categoria"
+                    className={errors.categoria && touched.categoria ? "border-red-500" : ""}
+                  >
                     <SelectValue placeholder="Selecciona una categoría" />
                   </SelectTrigger>
                   <SelectContent>

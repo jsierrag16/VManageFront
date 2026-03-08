@@ -102,7 +102,7 @@ export default function Cotizaciones() {
   // Estados para manejo de productos en la cotización
   const [selectedProductoId, setSelectedProductoId] = useState("");
   const [cantidadProducto, setCantidadProducto] = useState(1);
-  const [precioProducto, setPrecioProducto] = useState(0);
+  const [precioProducto, setPrecioProducto] = useState<string>("");
   const [productosOrden, setProductosOrden] = useState<
     Array<{
       producto: Producto;
@@ -204,7 +204,7 @@ export default function Cotizaciones() {
     setProductosOrden([]);
     setSelectedProductoId("");
     setCantidadProducto(1);
-    setPrecioProducto(0);
+    setPrecioProducto("");
   };
 
   // ✅ al entrar a /crear, limpiar form
@@ -230,7 +230,7 @@ export default function Cotizaciones() {
     setProductosOrden([]);
     setSelectedProductoId("");
     setCantidadProducto(1);
-    setPrecioProducto(0);
+    setPrecioProducto("");
   }, [isCrear, selectedBodega, cotizaciones]);
 
   // ✅ al entrar a /editar, precargar form
@@ -254,7 +254,7 @@ export default function Cotizaciones() {
     setProductosOrden(cotizacionSeleccionada.productos || []);
     setSelectedProductoId("");
     setCantidadProducto(1);
-    setPrecioProducto(0);
+    setPrecioProducto("");
   }, [isEditar, cotizacionSeleccionada]);
 
   // Funciones para manejar productos en la cotización
@@ -269,8 +269,10 @@ export default function Cotizaciones() {
       return;
     }
 
-    if (precioProducto < 0) {
-      toast.error("El precio no puede ser negativo");
+    const precio = parseFloat(precioProducto);
+
+    if (!precioProducto.trim() || Number.isNaN(precio) || precio <= 0) {
+      toast.error("El precio debe ser mayor a cero");
       return;
     }
 
@@ -288,11 +290,12 @@ export default function Cotizaciones() {
       return;
     }
 
-    const subtotal = cantidadProducto * precioProducto;
+    const subtotal = cantidadProducto * precio;
+
     const nuevoProducto = {
       producto,
       cantidad: cantidadProducto,
-      precio: precioProducto,
+      precio,
       subtotal,
     };
 
@@ -300,7 +303,7 @@ export default function Cotizaciones() {
 
     setSelectedProductoId("");
     setCantidadProducto(1);
-    setPrecioProducto(0);
+    setPrecioProducto("");
 
     toast.success("Producto agregado correctamente");
   };
@@ -847,14 +850,14 @@ export default function Cotizaciones() {
                         onClick={() => handleToggleEstado(cotizacion)}
                         disabled={cotizacion.estado === "Anulada"}
                         className={`h-7 ${cotizacion.estado === "Aprobada"
-                            ? "bg-green-100 text-green-800 hover:bg-green-200"
-                            : cotizacion.estado === "Pendiente"
-                              ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                              : cotizacion.estado === "Rechazada"
-                                ? "bg-red-100 text-red-800 hover:bg-red-200"
-                                : cotizacion.estado === "Anulada"
-                                  ? "bg-gray-100 text-gray-800 hover:bg-gray-100 opacity-60 cursor-not-allowed"
-                                  : "bg-gray-100 text-gray-800 hover:bg-gray-200"
+                          ? "bg-green-100 text-green-800 hover:bg-green-200"
+                          : cotizacion.estado === "Pendiente"
+                            ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                            : cotizacion.estado === "Rechazada"
+                              ? "bg-red-100 text-red-800 hover:bg-red-200"
+                              : cotizacion.estado === "Anulada"
+                                ? "bg-gray-100 text-gray-800 hover:bg-gray-100 opacity-60 cursor-not-allowed"
+                                : "bg-gray-100 text-gray-800 hover:bg-gray-200"
                           }`}
                       >
                         {cotizacion.estado}
@@ -1116,12 +1119,11 @@ export default function Cotizaciones() {
                     id="precio"
                     type="number"
                     value={precioProducto}
-                    onChange={(e) =>
-                      setPrecioProducto(parseFloat(e.target.value) || 0)
-                    }
+                    onChange={(e) => setPrecioProducto(e.target.value)}
                     min="0"
-                    step="0.01"
+                    step="0"
                     placeholder="0.00"
+                    className="h-12 sin-flechas"
                   />
                 </div>
                 <div className="col-span-2 flex items-end">
@@ -1416,12 +1418,11 @@ export default function Cotizaciones() {
                     id="precioEdit"
                     type="number"
                     value={precioProducto}
-                    onChange={(e) =>
-                      setPrecioProducto(parseFloat(e.target.value) || 0)
-                    }
+                    onChange={(e) => setPrecioProducto(e.target.value)}
                     min="0"
-                    step="0.01"
+                    step="0"
                     placeholder="0.00"
+                    className="h-12 sin-flechas"
                   />
                 </div>
                 <div className="col-span-2 flex items-end">

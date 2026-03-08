@@ -149,7 +149,7 @@ export default function Ordenes() {
   // ✅ productos de la orden
   const [selectedProductoId, setSelectedProductoId] = useState("");
   const [cantidadProducto, setCantidadProducto] = useState(1);
-  const [precioProducto, setPrecioProducto] = useState(0);
+  const [precioProducto, setPrecioProducto] = useState<string>("");
   const [productosOrden, setProductosOrden] = useState<
     Array<{
       producto: Producto;
@@ -251,7 +251,7 @@ export default function Ordenes() {
     setProductosOrden([]);
     setSelectedProductoId("");
     setCantidadProducto(1);
-    setPrecioProducto(0);
+    setPrecioProducto("");
     setSelectedCotizacionId("");
   };
 
@@ -297,7 +297,7 @@ export default function Ordenes() {
     setProductosOrden(ordenSeleccionada.productos || []);
     setSelectedProductoId("");
     setCantidadProducto(1);
-    setPrecioProducto(0);
+    setPrecioProducto("");
     setSelectedCotizacionId("");
   }, [isEditar, ordenSeleccionada]);
 
@@ -345,7 +345,9 @@ export default function Ordenes() {
       return;
     }
 
-    if (precioProducto <= 0) {
+    const precio = parseFloat(precioProducto);
+
+    if (!precioProducto.trim() || Number.isNaN(precio) || precio <= 0) {
       toast.error("El precio debe ser mayor a cero");
       return;
     }
@@ -362,19 +364,19 @@ export default function Ordenes() {
       return;
     }
 
-    const subtotal = cantidadProducto * precioProducto;
+    const subtotal = cantidadProducto * precio;
 
     const nuevoProducto = {
       producto,
       cantidad: cantidadProducto,
-      precio: precioProducto,
+      precio,
       subtotal,
     };
 
     setProductosOrden([...productosOrden, nuevoProducto]);
     setSelectedProductoId("");
     setCantidadProducto(1);
-    setPrecioProducto(0);
+    setPrecioProducto("");
 
     toast.success("Producto agregado correctamente");
   };
@@ -796,14 +798,14 @@ export default function Ordenes() {
                         onClick={() => handleToggleEstado(orden)}
                         disabled={orden.estado === "Anulada"}
                         className={`h-7 ${orden.estado === "Pendiente"
-                            ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                            : orden.estado === "Procesando"
-                              ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
-                              : orden.estado === "Enviada"
-                                ? "bg-purple-100 text-purple-800 hover:bg-purple-200"
-                                : orden.estado === "Entregada"
-                                  ? "bg-green-100 text-green-800 hover:bg-green-200"
-                                  : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
+                          ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                          : orden.estado === "Procesando"
+                            ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
+                            : orden.estado === "Enviada"
+                              ? "bg-purple-100 text-purple-800 hover:bg-purple-200"
+                              : orden.estado === "Entregada"
+                                ? "bg-green-100 text-green-800 hover:bg-green-200"
+                                : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
                           }`}
                       >
                         {orden.estado}
@@ -1107,12 +1109,11 @@ export default function Ordenes() {
                     id="precio"
                     type="number"
                     value={precioProducto}
-                    onChange={(e) =>
-                      setPrecioProducto(parseFloat(e.target.value) || 0)
-                    }
+                    onChange={(e) => setPrecioProducto(e.target.value)}
                     min="0"
-                    step="0.01"
+                    step="0"
                     placeholder="0.00"
+                    className="h-12 sin-flechas"
                   />
                 </div>
 
@@ -1423,12 +1424,11 @@ export default function Ordenes() {
                     id="precioEdit"
                     type="number"
                     value={precioProducto}
-                    onChange={(e) =>
-                      setPrecioProducto(parseFloat(e.target.value) || 0)
-                    }
+                    onChange={(e) => setPrecioProducto(e.target.value)}
                     min="0"
-                    step="0.01"
+                    step="0"
                     placeholder="0.00"
+                    className="h-12 sin-flechas"
                   />
                 </div>
 
