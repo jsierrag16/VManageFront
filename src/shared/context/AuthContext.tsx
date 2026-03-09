@@ -68,19 +68,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!token) return;
+    if (!token || usuario) return;
 
     (async () => {
       try {
         const userBackend = await getMe();
         const userMapeado = authUserToUsuarioSistema(userBackend);
         setUsuario(userMapeado);
-      } catch {
-        logout();
+      } catch (error) {
+        console.error("getMe error:", error);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, usuario]);
 
   const setUsuario = (nuevoUsuario: UsuarioSistema | null) => {
     setUsuarioState(nuevoUsuario);

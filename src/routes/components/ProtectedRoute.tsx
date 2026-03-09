@@ -9,13 +9,16 @@ interface ProtectedRouteProps {
 export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const { usuario, isAuthLoading } = useAuth();
 
+  const token = localStorage.getItem("token");
+  const usuarioGuardado = localStorage.getItem("usuario");
+
   if (isAuthLoading) {
     return null;
   }
 
-  if (!usuario) {
+  if (!usuario && (!token || !usuarioGuardado)) {
     return <Navigate to="/login" replace />;
   }
 
-  return children;
+  return <>{children}</>;
 };
