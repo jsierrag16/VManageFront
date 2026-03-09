@@ -9,8 +9,8 @@ import {
 
 import { UsuarioSistema } from "../../data/usuarios-sistema";
 import { Permisos } from "../../data/roles";
-import { bodegasData, Bodega } from "../../data/bodegas";
-
+import { Bodega } from "../../data/bodegas";
+import { authUserToUsuarioSistema } from "../../features/auth/services/auth.mapper";
 import { getMe } from "../../features/auth/services/auth.services";
 
 type BodegaId = number;
@@ -21,7 +21,7 @@ interface AuthContextType {
   token: string | null;
   isAuthLoading: boolean;
 
-  setSession: (token: string, usuario: UsuarioSistema) => void;
+  setSession: (token: string, usuario: UsuarioSistema | any) => void;
   setUsuario: (usuario: UsuarioSistema | null) => void;
   logout: () => void;
 
@@ -47,7 +47,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [selectedBodegaId, setSelectedBodegaIdState] =
     useState<BodegaId | null>(null);
 
-  // ✅ Cargar sesión desde storage
   useEffect(() => {
     const tokenGuardado = localStorage.getItem("token");
     const usuarioGuardado = localStorage.getItem("usuario");
@@ -68,13 +67,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsAuthLoading(false);
   }, []);
 
-  // ✅ Validar token con backend cuando exista
   useEffect(() => {
     if (!token) return;
 
     (async () => {
       try {
-        await getMe();
+        const userBackend = await getMe();
+        const userMapeado = authUserToUsuarioSistema(userBackend);
+        setUsuario(userMapeado);
       } catch {
         logout();
       }
@@ -92,13 +92,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const setSession = (newToken: string, newUser: UsuarioSistema) => {
+  const setSession = (newToken: string, newUser: UsuarioSistema | any) => {
     setToken(newToken);
     localStorage.setItem("token", newToken);
 
-    setUsuarioState(newUser);
-    localStorage.setItem("usuario", JSON.stringify(newUser));
+    const usuarioNormalizado =
+      newUser?.permisos && newUser?.bodegasIds
+        ? newUser
+        : authUserToUsuarioSistema(newUser);
 
+    setUsuarioState(usuarioNormalizado);
+    localStorage.setItem("usuario", JSON.stringify(usuarioNormalizado));
     localStorage.setItem("isAuthenticated", "true");
   };
 
@@ -115,21 +119,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const puedeVerBodega = (bodegaId: BodegaId) => {
     if (!usuario) return false;
 
-    if (bodegaId === 0) return (usuario.bodegasIds?.length ?? 0) >= 2;
+    if (bodegaId === 0) return (usuario.bodegas?.length ?? 0) >= 2;
 
     return (
-      Array.isArray(usuario.bodegasIds) && usuario.bodegasIds.includes(bodegaId)
+      Array.isArray(usuario.bodegas) &&
+      usuario.bodegas.some((b) => b.id === bodegaId)
     );
   };
 
   const bodegasDisponibles = useMemo(() => {
-    if (!usuario) return [];
-    const ids = usuario.bodegasIds ?? [];
-    return bodegasData.filter((b) => ids.includes(b.id));
+    return usuario?.bodegas ?? [];
   }, [usuario]);
 
   const isBodegaFijada = useMemo(() => {
-    return !!usuario && (usuario.bodegasIds?.length ?? 0) === 1;
+    return !!usuario && (usuario.bodegas?.length ?? 0) === 1;
   }, [usuario]);
 
   useEffect(() => {
@@ -149,8 +152,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    if ((usuario.bodegasIds?.length ?? 0) === 1) {
-      const id = usuario.bodegasIds[0];
+    if ((usuario.bodegas?.length ?? 0) === 1) {
+      const id = usuario.bodegas[0].id;
       setSelectedBodegaIdState(id);
       localStorage.setItem(key, String(id));
       return;

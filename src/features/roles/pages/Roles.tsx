@@ -33,12 +33,18 @@ import { Label } from "../../../shared/components/ui/label";
 import { Badge } from "../../../shared/components/ui/badge";
 import { Textarea } from "../../../shared/components/ui/textarea";
 import { toast } from "sonner";
+import { Rol, Permisos, createEmptyPermisos } from "../../../data/roles";
 import {
-  rolesData as initialRolesData,
-  Rol,
-  Permisos,
-  createEmptyPermisos,
-} from "../../../data/roles";
+  getRoles,
+  createRol,
+  updateRol,
+  deleteRol,
+} from "../services/roles.services";
+import { getPermisos, PermisoBackend } from "../services/permisos.service";
+import {
+  rolBackendToUI,
+  permisosFrontendToIds,
+} from "../services/roles.mapper";
 import { PermisosForm } from "../components/PermisosForm";
 import { useAuth } from "../../../shared/context/AuthContext";
 
@@ -58,14 +64,15 @@ const getRolColor = (nombre: string) => {
 export default function Roles() {
   const { tienePermiso } = useAuth();
 
-
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams<{ id: string }>();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [estadoFilter, setEstadoFilter] = useState<string>("todos");
-  const [roles, setRoles] = useState<Rol[]>(initialRolesData);
+  const [roles, setRoles] = useState<Rol[]>([]);
+  const [catalogoPermisos, setCatalogoPermisos] = useState<PermisoBackend[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
   const [rolParaCambioEstado, setRolParaCambioEstado] = useState<Rol | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -98,6 +105,7 @@ export default function Roles() {
 
   useEffect(() => {
     if (!isEditar) return;
+    if (loading) return;
 
     if (!rolSeleccionado) {
       closeToList();
@@ -109,7 +117,7 @@ export default function Roles() {
     setFormPermisos(rolSeleccionado.permisos);
     setErrors({ nombre: "", descripcion: "" });
     setTouched({ nombre: false, descripcion: false });
-  }, [isEditar, rolSeleccionado]);
+  }, [isEditar, rolSeleccionado, loading]);
 
   useEffect(() => {
     if (!isCrear) return;
@@ -184,19 +192,45 @@ export default function Roles() {
     setErrors({ ...errors, descripcion: validateDescripcion(formDescripcion) });
   };
 
+
+
   // Verificar permisos del usuario
   const puedeCrear = tienePermiso("administracion", "roles", "crear");
   const puedeEditar = tienePermiso("administracion", "roles", "editar");
   const puedeEliminar = tienePermiso("administracion", "roles", "eliminar");
   const puedeCambiarEstado = tienePermiso("administracion", "roles", "cambiarEstado");
 
+  const cargarDatos = async () => {
+    try {
+      setLoading(true);
+
+      const [rolesResp, permisosResp] = await Promise.all([
+        getRoles(true),
+        getPermisos(),
+      ]);
+
+      setRoles(rolesResp.map(rolBackendToUI));
+      setCatalogoPermisos(permisosResp);
+    } catch (error) {
+      console.error(error);
+      toast.error("No se pudieron cargar los roles y permisos");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    cargarDatos();
+  }, []);
+
   useEffect(() => {
     if (!isVer && !isEliminar) return;
+    if (loading) return;
 
     if (!rolSeleccionado) {
       closeToList();
     }
-  }, [isVer, isEliminar, rolSeleccionado]);
+  }, [isVer, isEliminar, rolSeleccionado, loading]);
 
   // Filtrar roles
   const filteredRoles = useMemo(() => {
@@ -262,92 +296,131 @@ export default function Roles() {
     navigate(`/app/roles/${rol.id}/eliminar`);
   };
 
-  const confirmCreate = () => {
-    setTouched({ nombre: true, descripcion: true });
-
-    const nombreError = validateNombre(formNombre);
-    const descripcionError = validateDescripcion(formDescripcion);
-
-    setErrors({ nombre: nombreError, descripcion: descripcionError });
-
-    if (nombreError || descripcionError) {
-      toast.error("Por favor corrige los errores en el formulario");
-      return;
-    }
-
-    const newRol: Rol = {
-      id: Math.max(...roles.map((r) => r.id), 0) + 1,
-      nombre: formNombre,
-      descripcion: formDescripcion,
-      permisos: formPermisos,
-      usuariosAsignados: 0,
-      estado: true,
-    };
-
-    setRoles([...roles, newRol]);
-    toast.success("Rol creado exitosamente");
-    closeToList();
-  };
-
-  const confirmEdit = () => {
-    if (!rolSeleccionado) return;
-
-    setTouched({ nombre: true, descripcion: true });
-
-    const nombreError = validateNombre(formNombre);
-    const descripcionError = validateDescripcion(formDescripcion);
-
-    setErrors({ nombre: nombreError, descripcion: descripcionError });
-
-    if (nombreError || descripcionError) {
-      toast.error("Por favor corrige los errores en el formulario");
-      return;
-    }
-
-    setRoles(
-      roles.map((rol) =>
-        rol.id === rolSeleccionado.id
-          ? { ...rol, nombre: formNombre, descripcion: formDescripcion, permisos: formPermisos }
-          : rol
-      )
-    );
-
-    toast.success("Rol actualizado exitosamente");
-    closeToList();
-  };
-
-  const confirmDelete = () => {
-    if (!rolSeleccionado) return;
-
-    if (rolSeleccionado.usuariosAsignados > 0) {
-      toast.error("No se puede eliminar un rol que tiene usuarios asignados");
-      return;
-    }
-
-    setRoles(roles.filter((rol) => rol.id !== rolSeleccionado.id));
-    toast.success("Rol eliminado exitosamente");
-    closeToList();
-  };
-
-  // Función para cambiar el estado del rol
   const handleToggleEstado = (rol: Rol) => {
     setRolParaCambioEstado(rol);
     setShowConfirmEstadoModal(true);
   };
 
-  const confirmToggleEstado = () => {
+  const confirmCreate = async () => {
+    setTouched({ nombre: true, descripcion: true });
+
+    const nombreError = validateNombre(formNombre);
+    const descripcionError = validateDescripcion(formDescripcion);
+
+    setErrors({ nombre: nombreError, descripcion: descripcionError });
+
+    if (nombreError || descripcionError) {
+      toast.error("Por favor corrige los errores en el formulario");
+      return;
+    }
+
+    try {
+      const ids_permisos = permisosFrontendToIds(formPermisos, catalogoPermisos);
+
+      await createRol({
+        nombre_rol: formNombre.trim(),
+        descripcion: formDescripcion.trim(),
+        estado: true,
+        ids_permisos,
+      });
+
+      await cargarDatos();
+      toast.success("Rol creado exitosamente");
+      closeToList();
+    } catch (error: any) {
+      console.error(error);
+
+      const message =
+        error?.response?.data?.message || "No se pudo crear el rol";
+
+      toast.error(Array.isArray(message) ? message.join(", ") : message);
+    }
+  };
+
+  const confirmEdit = async () => {
+    if (!rolSeleccionado) return;
+
+    setTouched({ nombre: true, descripcion: true });
+
+    const nombreError = validateNombre(formNombre);
+    const descripcionError = validateDescripcion(formDescripcion);
+
+    setErrors({ nombre: nombreError, descripcion: descripcionError });
+
+    if (nombreError || descripcionError) {
+      toast.error("Por favor corrige los errores en el formulario");
+      return;
+    }
+
+    try {
+      const ids_permisos = permisosFrontendToIds(formPermisos, catalogoPermisos);
+
+      await updateRol(rolSeleccionado.id, {
+        nombre_rol: formNombre.trim(),
+        descripcion: formDescripcion.trim(),
+        estado: rolSeleccionado.estado,
+        ids_permisos,
+      });
+
+      await cargarDatos();
+      toast.success("Rol actualizado exitosamente");
+      closeToList();
+    } catch (error: any) {
+      console.error(error);
+
+      const message =
+        error?.response?.data?.message || "No se pudo actualizar el rol";
+
+      toast.error(Array.isArray(message) ? message.join(", ") : message);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!rolSeleccionado) return;
+
+    try {
+      await deleteRol(rolSeleccionado.id);
+      await cargarDatos();
+
+      toast.success("Rol eliminado exitosamente");
+      closeToList();
+    } catch (error: any) {
+      console.error(error);
+
+      const message =
+        error?.response?.data?.message || "No se pudo eliminar el rol";
+
+      toast.error(Array.isArray(message) ? message.join(", ") : message);
+    }
+  };
+
+  // Función para cambiar el estado del rol
+  const confirmToggleEstado = async () => {
     if (!rolParaCambioEstado) return;
 
     const nuevoEstado = !rolParaCambioEstado.estado;
-    setRoles(
-      roles.map((r) =>
-        r.id === rolParaCambioEstado.id ? { ...r, estado: nuevoEstado } : r
-      )
-    );
-    setShowConfirmEstadoModal(false);
-    toast.success(
-      `Rol ${nuevoEstado ? "activado" : "desactivado"} exitosamente`
-    );
+
+    try {
+      await updateRol(rolParaCambioEstado.id, {
+        estado: nuevoEstado,
+      });
+
+      await cargarDatos();
+      setShowConfirmEstadoModal(false);
+      setRolParaCambioEstado(null);
+
+      toast.success(
+        `Rol ${nuevoEstado ? "activado" : "desactivado"} exitosamente`
+      );
+    } catch (error: any) {
+      console.error(error);
+
+      const message =
+        error?.response?.data?.message ||
+        `No se pudo ${nuevoEstado ? "activar" : "desactivar"} el rol`;
+
+      toast.error(Array.isArray(message) ? message.join(", ") : message);
+    }
   };
 
   // Función para actualizar permisos individuales
@@ -689,7 +762,7 @@ export default function Roles() {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleToggleEstado(rol)}
-                        disabled={!puedeCambiarEstado}
+                        disabled={rol.usuariosAsignados > 0 || !puedeCambiarEstado}
                         className={`h-7 ${rol.estado
                           ? "bg-green-100 text-green-800 hover:bg-green-200"
                           : "bg-red-100 text-red-800 hover:bg-red-200"
@@ -709,6 +782,7 @@ export default function Roles() {
                         >
                           <Eye size={16} />
                         </Button>
+
                         <Button
                           variant="ghost"
                           size="icon"
@@ -719,6 +793,7 @@ export default function Roles() {
                         >
                           <Edit size={16} />
                         </Button>
+
                         <Button
                           variant="ghost"
                           size="icon"
@@ -1205,13 +1280,11 @@ export default function Roles() {
               Esta acción no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
-          {rolParaCambioEstado && (
-            <div className="py-4">
-              <p className="text-gray-700">
-                Rol:{" "}
-                <span className="font-semibold">
-                  {rolParaCambioEstado.nombre}
-                </span>
+          {rolParaCambioEstado && rolParaCambioEstado.estado && rolParaCambioEstado.usuariosAsignados > 0 && (
+            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded">
+              <p className="text-sm text-red-800">
+                <strong>⚠️ No se puede desactivar:</strong> Este rol tiene{" "}
+                {rolParaCambioEstado.usuariosAsignados} usuario(s) asignado(s).
               </p>
             </div>
           )}
@@ -1224,11 +1297,15 @@ export default function Roles() {
             </Button>
             <Button
               onClick={confirmToggleEstado}
-              disabled={!rolParaCambioEstado || !puedeCambiarEstado}
+              disabled={
+                !rolParaCambioEstado ||
+                !puedeCambiarEstado ||
+                (rolParaCambioEstado.estado && rolParaCambioEstado.usuariosAsignados > 0)
+              }
               className={
                 rolParaCambioEstado && rolParaCambioEstado.estado
-                  ? "bg-red-600 hover:bg-red-700"     // si está activo, vas a DESACTIVAR
-                  : "bg-green-600 hover:bg-green-700" // si está inactivo, vas a ACTIVAR
+                  ? "bg-red-600 hover:bg-red-700"
+                  : "bg-green-600 hover:bg-green-700"
               }
             >
               {rolParaCambioEstado && rolParaCambioEstado.estado ? "Desactivar" : "Activar"}

@@ -16,7 +16,7 @@ import vManageLogo from '../../../assets/images/VManageLogo.png';
 import gvmLogo from '../../../assets/images/GVMLogo.png';
 
 // Data y Contexto
-import { usuariosSistema } from '../../../data/usuarios-sistema';
+import { login } from "../services/auth.services";
 import { useAuth } from '../../../shared/context/AuthContext';
 
 export default function Login() {
@@ -87,7 +87,7 @@ export default function Login() {
     toast.success('Se ha enviado un link de recuperación a tu correo');
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Marcar todos como tocados para mostrar errores si los hay
@@ -99,42 +99,45 @@ export default function Login() {
     setErrors({ username: usernameError, password: passwordError });
 
     if (usernameError || passwordError) {
-      toast.error('Por favor corrige los errores');
+      toast.error("Por favor corrige los errores");
       return;
     }
 
     setIsLoading(true);
 
-    setTimeout(() => {
-      const usuario = usuariosSistema.find(
-        u => u.email.toLowerCase() === username.toLowerCase()
-      );
+    try {
+      // username en tu UI realmente es el email
+      const res = await login({
+        email: username.trim(),
+        contrasena: password,
+      });
 
-      // Verificaciones
-      if (!usuario) {
-        setIsLoading(false);
-        toast.error('Usuario no existente');
-        return;
+      // ✅ Guardar sesión (token + user)
+      // Si ya agregaste setSession al AuthContext:
+      if ("setSession" in auth && typeof (auth as any).setSession === "function") {
+        (auth as any).setSession(res.access_token, res.user);
+      } else {
+        // fallback si aún no actualizas AuthContext
+        localStorage.setItem("token", res.access_token);
+        localStorage.setItem("usuario", JSON.stringify(res.user));
+        localStorage.setItem("isAuthenticated", "true");
+        auth.setUsuario(res.user as any);
       }
 
-      if (usuario.password !== password) {
-        setIsLoading(false);
-        toast.error('Contraseña incorrecta');
-        return;
-      }
+      toast.success(`¡Bienvenido ${res.user.nombre}!`);
+      navigate("/app");
+    } catch (err: any) {
+      // Manejo de error típico axios
+      const status = err?.response?.status;
 
-      // Éxito
-      localStorage.setItem('usuario', JSON.stringify(usuario));
-      localStorage.setItem('isAuthenticated', 'true');
+      if (status === 401) toast.error("Credenciales inválidas");
+      else if (status === 400) toast.error("Datos inválidos (revisa email o contraseña)");
+      else toast.error("Error al iniciar sesión");
 
-      auth.setUsuario(usuario);
-      toast.success(`¡Bienvenido ${usuario.nombre}!`);
+      console.error("Login error:", err);
+    } finally {
       setIsLoading(false);
-
-      // Navegación
-      navigate('/app');
-
-    }, 1500);
+    }
   };
 
   return (

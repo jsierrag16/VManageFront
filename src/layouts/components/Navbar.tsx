@@ -47,6 +47,7 @@ export function Navbar({
   productos,
   onNavigateToTraslados,
   onNavigateToExistencias,
+
 }: NavbarProps) {
   const {
     bodegasDisponibles,
@@ -65,8 +66,8 @@ export function Navbar({
     selectedBodegaId === 0 && tieneVariasBodegas
       ? "Todas las bodegas"
       : opciones.find((b) => b.id === selectedBodegaId)?.nombre ||
-        bodegasDisponibles[0]?.nombre ||
-        "Sin bodega";
+      bodegasDisponibles[0]?.nombre ||
+      "Sin bodega";
 
   return (
     <header className="sticky top-0 z-20 bg-blue-600 border-b border-blue-700 shadow-md">
@@ -100,11 +101,10 @@ export function Navbar({
               >
                 <button
                   type="button"
-                  className={`flex items-center gap-2 p-2 px-3 rounded-lg transition-colors text-white ${
-                    isBodegaFijada || !tieneVariasBodegas
+                  className={`flex items-center gap-2 p-2 px-3 rounded-lg transition-colors text-white ${isBodegaFijada || !tieneVariasBodegas
                       ? "opacity-80 cursor-not-allowed"
                       : "hover:bg-blue-700"
-                  }`}
+                    }`}
                   title={
                     isBodegaFijada || !tieneVariasBodegas
                       ? "No puedes cambiar de bodega"
