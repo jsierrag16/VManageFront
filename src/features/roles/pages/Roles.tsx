@@ -48,8 +48,6 @@ import {
 import { PermisosForm } from "../components/PermisosForm";
 import { useAuth } from "../../../shared/context/AuthContext";
 
-
-// Función para obtener el color del rol
 const getRolColor = (nombre: string) => {
   const colors: Record<string, string> = {
     Administrador: "bg-purple-100 text-purple-800",
@@ -82,13 +80,11 @@ export default function Roles() {
   const [formDescripcion, setFormDescripcion] = useState("");
   const [formPermisos, setFormPermisos] = useState<Permisos>(createEmptyPermisos());
 
-  const [errors, setErrors] = useState({ nombre: '', descripcion: '' });
+  const [errors, setErrors] = useState({ nombre: "", descripcion: "" });
   const [touched, setTouched] = useState({ nombre: false, descripcion: false });
 
-  // ✅ ID desde la URL
   const id = params.id;
 
-  // ✅ flags por URL (igual que Productos/Usuarios)
   const isCrear = location.pathname.endsWith("/roles/crear");
   const isVer = location.pathname.endsWith("/ver");
   const isEditar = location.pathname.endsWith("/editar");
@@ -100,7 +96,7 @@ export default function Roles() {
     if (!Number.isFinite(numericId)) return null;
     return roles.find((r) => r.id === numericId) ?? null;
   }, [roles, id]);
-  // ✅ volver al listado
+
   const closeToList = () => navigate("/app/roles");
 
   useEffect(() => {
@@ -129,43 +125,41 @@ export default function Roles() {
     setTouched({ nombre: false, descripcion: false });
   }, [isCrear]);
 
-  // Función para validar caracteres inapropiados
   const hasInvalidCharacters = (value: string) => {
-    // Permitir solo letras, números, espacios y algunos caracteres especiales básicos
     const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s.,;:()\-_]*$/;
     return !validPattern.test(value);
   };
 
   const validateNombre = (value: string) => {
     if (!value.trim()) {
-      return 'El nombre del rol es requerido';
+      return "El nombre del rol es requerido";
     }
     if (value.trim().length < 3) {
-      return 'Mínimo 3 caracteres';
+      return "Mínimo 3 caracteres";
     }
     if (value.trim().length > 50) {
-      return 'Máximo 50 caracteres';
+      return "Máximo 50 caracteres";
     }
     if (hasInvalidCharacters(value)) {
-      return 'Caracteres no permitidos detectados';
+      return "Caracteres no permitidos detectados";
     }
-    return '';
+    return "";
   };
 
   const validateDescripcion = (value: string) => {
     if (!value.trim()) {
-      return 'La descripción es requerida';
+      return "La descripción es requerida";
     }
     if (value.trim().length < 10) {
-      return 'Mínimo 10 caracteres';
+      return "Mínimo 10 caracteres";
     }
     if (value.trim().length > 200) {
-      return 'Máximo 200 caracteres';
+      return "Máximo 200 caracteres";
     }
     if (hasInvalidCharacters(value)) {
-      return 'Caracteres no permitidos detectados';
+      return "Caracteres no permitidos detectados";
     }
-    return '';
+    return "";
   };
 
   const handleNombreChange = (value: string) => {
@@ -192,13 +186,12 @@ export default function Roles() {
     setErrors({ ...errors, descripcion: validateDescripcion(formDescripcion) });
   };
 
-
-
-  // Verificar permisos del usuario
-  const puedeCrear = tienePermiso("administracion", "roles", "crear");
-  const puedeEditar = tienePermiso("administracion", "roles", "editar");
-  const puedeEliminar = tienePermiso("administracion", "roles", "eliminar");
-  const puedeCambiarEstado = tienePermiso("administracion", "roles", "cambiarEstado");
+// En esta vista no bloqueamos acciones por permisos del front.
+// El control real queda en el backend.
+  const puedeCrear = true;
+  const puedeEditar = true;
+  const puedeEliminar = true;
+  const puedeCambiarEstado = true;
 
   const cargarDatos = async () => {
     try {
@@ -232,39 +225,29 @@ export default function Roles() {
     }
   }, [isVer, isEliminar, rolSeleccionado, loading]);
 
-  // Filtrar roles
   const filteredRoles = useMemo(() => {
     return roles.filter((rol) => {
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch =
         rol.nombre.toLowerCase().includes(searchLower) ||
-        rol.descripcion.toLowerCase().includes(searchLower);
+        (rol.descripcion ?? "").toLowerCase().includes(searchLower);
 
-      // Filtrar por estado
       let matchesEstado = true;
       if (estadoFilter === "activo") {
         matchesEstado = rol.estado === true;
       } else if (estadoFilter === "inactivo") {
         matchesEstado = rol.estado === false;
       }
-      // Si es "todos", no filtramos por estado
 
       return matchesSearch && matchesEstado;
     });
   }, [roles, searchTerm, estadoFilter]);
 
-  // Paginación
-  const totalPages = Math.ceil(
-    filteredRoles.length / itemsPerPage,
-  );
+  const totalPages = Math.ceil(filteredRoles.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const currentRoles = filteredRoles.slice(
-    startIndex,
-    endIndex,
-  );
+  const currentRoles = filteredRoles.slice(startIndex, endIndex);
 
-  // Resetear a página 1 cuando cambia el filtro
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, estadoFilter]);
@@ -278,7 +261,6 @@ export default function Roles() {
   };
 
   const handleCreate = () => {
-    // limpiar form (igual que antes)
     setFormNombre("");
     setFormDescripcion("");
     setFormPermisos(createEmptyPermisos());
@@ -382,19 +364,18 @@ export default function Roles() {
       await deleteRol(rolSeleccionado.id);
       await cargarDatos();
 
-      toast.success("Rol eliminado exitosamente");
+      toast.success("Rol desactivado exitosamente");
       closeToList();
     } catch (error: any) {
       console.error(error);
 
       const message =
-        error?.response?.data?.message || "No se pudo eliminar el rol";
+        error?.response?.data?.message || "No se pudo desactivar el rol";
 
       toast.error(Array.isArray(message) ? message.join(", ") : message);
     }
   };
 
-  // Función para cambiar el estado del rol
   const confirmToggleEstado = async () => {
     if (!rolParaCambioEstado) return;
 
@@ -423,11 +404,8 @@ export default function Roles() {
     }
   };
 
-  // Función para actualizar permisos individuales
   const updatePermiso = (path: string[], value: boolean) => {
-    const newPermisos = JSON.parse(
-      JSON.stringify(formPermisos),
-    );
+    const newPermisos = JSON.parse(JSON.stringify(formPermisos));
     let current: any = newPermisos;
     for (let i = 0; i < path.length - 1; i++) {
       current = current[path[i]];
@@ -634,7 +612,6 @@ export default function Roles() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h2 className="text-gray-900">Gestión de Roles</h2>
         <p className="text-gray-600 mt-1">
@@ -642,7 +619,6 @@ export default function Roles() {
         </p>
       </div>
 
-      {/* Search Bar and Action Buttons */}
       <div className="flex items-center gap-4">
         <div className="relative flex-1">
           <Search
@@ -657,17 +633,17 @@ export default function Roles() {
           />
         </div>
 
-        {/* Filtro de Estado */}
         <div className="flex items-center gap-2 border border-gray-300 rounded-lg p-1 bg-gray-50">
           <Filter size={16} className="text-gray-500 ml-2" />
           <Button
             size="sm"
             variant={estadoFilter === "todos" ? "default" : "ghost"}
             onClick={() => setEstadoFilter("todos")}
-            className={`h-8 ${estadoFilter === "todos"
-              ? "bg-blue-600 text-white hover:bg-blue-700"
-              : "hover:bg-gray-200"
-              }`}
+            className={`h-8 ${
+              estadoFilter === "todos"
+                ? "bg-blue-600 text-white hover:bg-blue-700"
+                : "hover:bg-gray-200"
+            }`}
           >
             Todos
           </Button>
@@ -675,10 +651,11 @@ export default function Roles() {
             size="sm"
             variant={estadoFilter === "activo" ? "default" : "ghost"}
             onClick={() => setEstadoFilter("activo")}
-            className={`h-8 ${estadoFilter === "activo"
-              ? "bg-green-600 text-white hover:bg-green-700"
-              : "hover:bg-gray-200"
-              }`}
+            className={`h-8 ${
+              estadoFilter === "activo"
+                ? "bg-green-600 text-white hover:bg-green-700"
+                : "hover:bg-gray-200"
+            }`}
           >
             Activos
           </Button>
@@ -686,10 +663,11 @@ export default function Roles() {
             size="sm"
             variant={estadoFilter === "inactivo" ? "default" : "ghost"}
             onClick={() => setEstadoFilter("inactivo")}
-            className={`h-8 ${estadoFilter === "inactivo"
-              ? "bg-red-600 text-white hover:bg-red-700"
-              : "hover:bg-gray-200"
-              }`}
+            className={`h-8 ${
+              estadoFilter === "inactivo"
+                ? "bg-red-600 text-white hover:bg-red-700"
+                : "hover:bg-gray-200"
+            }`}
           >
             Inactivos
           </Button>
@@ -705,7 +683,6 @@ export default function Roles() {
         </Button>
       </div>
 
-      {/* Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <Table>
@@ -714,12 +691,8 @@ export default function Roles() {
                 <TableHead className="w-16">#</TableHead>
                 <TableHead>Nombre del Rol</TableHead>
                 <TableHead>Descripción</TableHead>
-                <TableHead className="text-center">
-                  Estado
-                </TableHead>
-                <TableHead className="text-right w-40">
-                  Acciones
-                </TableHead>
+                <TableHead className="text-center">Estado</TableHead>
+                <TableHead className="text-right w-40">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -734,22 +707,12 @@ export default function Roles() {
                 </TableRow>
               ) : (
                 currentRoles.map((rol, index) => (
-                  <TableRow
-                    key={rol.id}
-                    className="hover:bg-gray-50"
-                  >
-                    <TableCell>
-                      {startIndex + index + 1}
-                    </TableCell>
+                  <TableRow key={rol.id} className="hover:bg-gray-50">
+                    <TableCell>{startIndex + index + 1}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Shield
-                          size={18}
-                          className="text-gray-500"
-                        />
-                        <Badge
-                          className={getRolColor(rol.nombre)}
-                        >
+                        <Shield size={18} className="text-gray-500" />
+                        <Badge className={getRolColor(rol.nombre)}>
                           {rol.nombre}
                         </Badge>
                       </div>
@@ -763,10 +726,11 @@ export default function Roles() {
                         size="sm"
                         onClick={() => handleToggleEstado(rol)}
                         disabled={rol.usuariosAsignados > 0 || !puedeCambiarEstado}
-                        className={`h-7 ${rol.estado
-                          ? "bg-green-100 text-green-800 hover:bg-green-200"
-                          : "bg-red-100 text-red-800 hover:bg-red-200"
-                          }`}
+                        className={`h-7 ${
+                          rol.estado
+                            ? "bg-green-100 text-green-800 hover:bg-green-200"
+                            : "bg-red-100 text-red-800 hover:bg-red-200"
+                        }`}
                       >
                         {rol.estado ? "Activo" : "Inactivo"}
                       </Button>
@@ -813,21 +777,17 @@ export default function Roles() {
           </Table>
         </div>
 
-        {/* Paginación */}
         {filteredRoles.length > 0 && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
             <div className="text-sm text-gray-600">
-              Mostrando {startIndex + 1} -{" "}
-              {Math.min(endIndex, filteredRoles.length)} de{" "}
+              Mostrando {startIndex + 1} - {Math.min(endIndex, filteredRoles.length)} de{" "}
               {filteredRoles.length} roles
             </div>
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() =>
-                  handlePageChange(currentPage - 1)
-                }
+                onClick={() => handlePageChange(currentPage - 1)}
                 disabled={currentPage === 1}
                 className="h-8"
               >
@@ -835,17 +795,10 @@ export default function Roles() {
                 Anterior
               </Button>
               <div className="flex items-center gap-1">
-                {Array.from(
-                  { length: totalPages },
-                  (_, i) => i + 1,
-                ).map((page) => (
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                   <Button
                     key={page}
-                    variant={
-                      currentPage === page
-                        ? "default"
-                        : "outline"
-                    }
+                    variant={currentPage === page ? "default" : "outline"}
                     size="sm"
                     onClick={() => handlePageChange(page)}
                     className="h-8 w-8 p-0"
@@ -857,9 +810,7 @@ export default function Roles() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() =>
-                  handlePageChange(currentPage + 1)
-                }
+                onClick={() => handlePageChange(currentPage + 1)}
                 disabled={currentPage === totalPages}
                 className="h-8"
               >
@@ -870,8 +821,6 @@ export default function Roles() {
           </div>
         )}
       </div>
-
-      {/* Modal Ver Detalles */}
       <Dialog
         open={isVer}
         onOpenChange={(open) => {
@@ -934,7 +883,6 @@ export default function Roles() {
                 </Label>
 
                 <div className="grid grid-cols-2 gap-4">
-                  {/* Dashboard */}
                   <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
                     <h5 className="font-semibold text-sm mb-2">Dashboard</h5>
                     <div className="text-sm text-gray-700 space-y-1">
@@ -942,7 +890,6 @@ export default function Roles() {
                     </div>
                   </div>
 
-                  {/* Existencias */}
                   <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
                     <h5 className="font-semibold text-sm mb-2">Existencias</h5>
                     <div className="text-sm text-gray-700 space-y-1">
@@ -968,7 +915,6 @@ export default function Roles() {
                     </div>
                   </div>
 
-                  {/* Compras */}
                   <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
                     <h5 className="font-semibold text-sm mb-2">Compras</h5>
                     <div className="text-sm text-gray-700 space-y-1">
@@ -997,7 +943,6 @@ export default function Roles() {
                     </div>
                   </div>
 
-                  {/* Ventas */}
                   <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
                     <h5 className="font-semibold text-sm mb-2">Ventas</h5>
                     <div className="text-sm text-gray-700 space-y-1">
@@ -1040,7 +985,6 @@ export default function Roles() {
                     </div>
                   </div>
 
-                  {/* Administración */}
                   <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
                     <h5 className="font-semibold text-sm mb-2">Administración</h5>
                     <div className="text-sm text-gray-700 space-y-1">
@@ -1072,7 +1016,6 @@ export default function Roles() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Crear Rol */}
       <Dialog
         open={isCrear}
         onOpenChange={(open) => {
@@ -1082,7 +1025,7 @@ export default function Roles() {
         <DialogContent
           className="max-w-6xl max-h-[90vh] overflow-y-auto"
           aria-describedby="rol-create-description"
-          onInteractOutside={(e) => e.preventDefault()} // ✅ no cerrar por fuera
+          onInteractOutside={(e) => e.preventDefault()}
         >
           <DialogHeader>
             <DialogTitle>Crear Nuevo Rol</DialogTitle>
@@ -1143,8 +1086,6 @@ export default function Roles() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Modal Editar Rol */}
       <Dialog
         open={isEditar}
         onOpenChange={(open) => {
@@ -1154,7 +1095,7 @@ export default function Roles() {
         <DialogContent
           className="max-w-6xl max-h-[90vh] overflow-y-auto"
           aria-describedby="rol-edit-description"
-          onInteractOutside={(e) => e.preventDefault()} // ✅ no cerrar por fuera
+          onInteractOutside={(e) => e.preventDefault()}
         >
           <DialogHeader>
             <DialogTitle>Editar Rol</DialogTitle>
@@ -1216,7 +1157,6 @@ export default function Roles() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Eliminar Rol */}
       <Dialog
         open={isEliminar}
         onOpenChange={(open) => {
@@ -1225,12 +1165,12 @@ export default function Roles() {
       >
         <DialogContent
           aria-describedby="delete-rol-description"
-          onInteractOutside={(e) => e.preventDefault()} // ✅ no cerrar por fuera
+          onInteractOutside={(e) => e.preventDefault()}
         >
           <DialogHeader>
-            <DialogTitle>Eliminar Rol</DialogTitle>
+            <DialogTitle>Desactivar Rol</DialogTitle>
             <DialogDescription id="delete-rol-description">
-              ¿Estás seguro de que deseas eliminar este rol? Esta acción no se puede deshacer.
+              ¿Estás seguro de que deseas desactivar este rol? Esta acción cambiará su estado a inactivo.
             </DialogDescription>
           </DialogHeader>
 
@@ -1243,9 +1183,9 @@ export default function Roles() {
               {rolSeleccionado.usuariosAsignados > 0 && (
                 <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded">
                   <p className="text-sm text-red-800">
-                    <strong>⚠️ No se puede eliminar:</strong> Este rol tiene{" "}
+                    <strong>⚠️ No se puede desactivar:</strong> Este rol tiene{" "}
                     {rolSeleccionado.usuariosAsignados} usuario(s) asignado(s). Debes reasignar los
-                    usuarios antes de eliminar el rol.
+                    usuarios antes de desactivar el rol.
                   </p>
                 </div>
               )}
@@ -1267,7 +1207,6 @@ export default function Roles() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Confirmar Cambio de Estado */}
       <Dialog
         open={showConfirmEstadoModal}
         onOpenChange={setShowConfirmEstadoModal}
