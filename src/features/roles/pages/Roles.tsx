@@ -812,7 +812,7 @@ export default function Roles() {
             </TableBody>
           </Table>
         </div>
-
+      </div>
         {/* Paginación */}
         {filteredRoles.length > 0 && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
@@ -869,7 +869,6 @@ export default function Roles() {
             </div>
           </div>
         )}
-      </div>
 
       {/* Modal Ver Detalles */}
       <Dialog

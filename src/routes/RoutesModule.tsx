@@ -7,19 +7,12 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { PublicRoute } from "./components/PublicRoute";
 
 // Páginas
-import Login from "@/features/auth/pages/login";
+import Login from "@/features/auth/pages/Login";
+import RestablecerContrasena from "@/features/auth/pages/RestablecerContrasena";
 import Dashboard from "@/features/dashboard/pages/Dashboard";
 import Bodegas from "@/features/bodegas/pages/Bodegas";
 import Productos from "@/features/productos/pages/Productos";
 import Traslados from "@/features/traslados/pages/Traslados";
-
-// Layout
-import MainLayout from "@/layouts/MainLayout";
-
-// Assets
-import vManageLogo from "@/assets/images/VManageLogo.png";
-import vManageLogoSmall from "@/assets/images/VLogo.png";
-import gvmLogo from "@/assets/images/GVMLogo.png";
 import Perfil from "@/features/perfil/pages/Perfil";
 import Usuarios from "@/features/usuarios/pages/Usuarios";
 import Roles from "@/features/roles/pages/Roles";
@@ -31,6 +24,14 @@ import Cotizaciones from "@/features/cotizaciones/pages/Cotizaciones";
 import Ordenes from "@/features/ordenes/pages/Ordenes";
 import Remisiones from "@/features/remisiones/pages/Remisiones";
 import PagosAbonos from "@/features/pagosAbonos/pages/PagosAbonos";
+
+// Layout
+import MainLayout from "@/layouts/MainLayout";
+
+// Assets
+import vManageLogo from "@/assets/images/VManageLogo.png";
+import vManageLogoSmall from "@/assets/images/VLogo.png";
+import gvmLogo from "@/assets/images/GVMLogo.png";
 
 // ✅ data mock
 import { productosData } from "@/data/productos";
@@ -48,9 +49,14 @@ export default function RoutesModule() {
           path="/login"
           element={
             <PublicRoute>
-              <Login />
+              < Login/>
             </PublicRoute>
           }
+        />
+
+        <Route
+          path="/restablecer-contrasena"
+          element={<RestablecerContrasena />}
         />
 
         <Route

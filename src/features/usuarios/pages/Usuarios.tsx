@@ -1,12 +1,32 @@
 import { useAuth } from "@/shared/context/AuthContext";
+import { solicitarRestablecimientoContrasena } from "@/features/auth/services/auth.services";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useOutletContext } from "react-router-dom";
 import type { AppOutletContext } from "@/layouts/MainLayout";
-import { useEffect, useMemo, useState } from "react";
-import { toast } from 'sonner';
-import { Search, Plus, Eye, Edit, Trash2, ChevronLeft, ChevronRight, User as UserIcon, Mail, Building2, CheckCircle, Filter } from 'lucide-react';
-import { Button } from '../../../shared/components/ui/button';
-import { Input } from '../../../shared/components/ui/input';
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { toast } from "sonner";
+import {
+  Search,
+  Plus,
+  Eye,
+  Edit,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  User as UserIcon,
+  Mail,
+  Building2,
+  CheckCircle,
+  Filter,
+} from "lucide-react";
+import { Button } from "../../../shared/components/ui/button";
+import { Input } from "../../../shared/components/ui/input";
+import {
+  getTiposDocumentoCatalogo,
+  getRolesCatalogo,
+  getBodegasCatalogo,
+  getGenerosCatalogo,
+} from "@/features/usuarios/services/usuarios-catalogos.service";
 import {
   Table,
   TableBody,
@@ -14,7 +34,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '../../../shared/components/ui/table';
+} from "../../../shared/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -22,99 +42,39 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from '../../../shared/components/ui/dialog';
-import { Label } from '../../../shared/components/ui/label';
-import { Badge } from '../../../shared/components/ui/badge';
+} from "../../../shared/components/ui/dialog";
+import { Label } from "../../../shared/components/ui/label";
+import { Badge } from "../../../shared/components/ui/badge";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../../../shared/components/ui/select';
-import { Checkbox } from '../../../shared/components/ui/checkbox';
+} from "../../../shared/components/ui/select";
+import { Checkbox } from "../../../shared/components/ui/checkbox";
+import {
+  getUsuarios,
+  createUsuario,
+  updateUsuario,
+  deleteUsuario,
+  cambiarEstadoUsuario,
+  asignarBodegaAUsuario,
+  quitarBodegaAUsuario,
+  type Usuario,
+} from "@/features/usuarios/services/usuarios.services";
 
-// Datos de usuarios - ESTOS SON LOS USUARIOS REALES DEL SISTEMA
-export const usuariosDataInitial = [
-  {
-    id: 1,
-    tipoDocumento: "CC",
-    numeroDocumento: "1234567890",
-    nombre: "Juan",
-    apellido: "Pérez",
-    email: "administrador@gmail.com",
-    telefono: "3001234567",
-    bodegas: ["Bodega Principal", "Bodega Secundaria"],
-    rol: "Administrador",
-    estado: true,
-  },
-  {
-    id: 2,
-    tipoDocumento: "CC",
-    numeroDocumento: "9876543210",
-    nombre: "María",
-    apellido: "González",
-    email: "vendedor@gmail.com",
-    telefono: "3109876543",
-    bodegas: ["Bodega Secundaria"],
-    rol: "Vendedor",
-    estado: true,
-  },
-  {
-    id: 3,
-    tipoDocumento: "CC",
-    numeroDocumento: "1122334455",
-    nombre: "Carlos",
-    apellido: "Rodríguez",
-    email: "auxadministrativo@gmail.com",
-    telefono: "3201122334",
-    bodegas: ["Bodega Principal"],
-    rol: "Auxiliar Administrativo",
-    estado: true,
-  },
-  {
-    id: 4,
-    tipoDocumento: "CC",
-    numeroDocumento: "5566778899",
-    nombre: "Pedro",
-    apellido: "Martínez",
-    email: "auxlogistico@gmail.com",
-    telefono: "3155667788",
-    bodegas: ["Bodega Medellín"],
-    rol: "Auxiliar de Bodega",
-    estado: true,
-  },
-  {
-    id: 5,
-    tipoDocumento: "CC",
-    numeroDocumento: "6677889900",
-    nombre: "Luis",
-    apellido: "Fernández",
-    email: "conductor@gmail.com",
-    telefono: "3186677889",
-    bodegas: ["Bodega Principal"],
-    rol: "Conductor",
-    estado: true,
-  },
-];
-
-interface Usuario {
+type OpcionCatalogo = {
   id: number;
-  tipoDocumento: string;
-  numeroDocumento: string;
   nombre: string;
-  apellido: string;
-  email: string;
-  telefono: string;
-  bodegas: string[];
-  rol: string;
-  estado: boolean;
-}
+};
 
 export default function Usuarios() {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [estadoFilter, setEstadoFilter] = useState<string>('todos');
-  const [usuarios, setUsuarios] = useState<Usuario[]>(usuariosDataInitial);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [estadoFilter, setEstadoFilter] = useState<string>("todos");
+  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [generosCatalogo, setGenerosCatalogo] = useState<OpcionCatalogo[]>([]);
+  const [isLoadingUsuarios, setIsLoadingUsuarios] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
   const [usuarioParaCambioEstado, setUsuarioParaCambioEstado] = useState<Usuario | null>(null);
@@ -123,36 +83,42 @@ export default function Usuarios() {
   const [isConfirmReset, setIsConfirmReset] = useState(false);
   const [sendingReset, setSendingReset] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
+  const [formGeneroId, setFormGeneroId] = useState<number | "">("");
 
+  const [formTipoDocId, setFormTipoDocId] = useState<number | "">("");
+  const [formNumeroDoc, setFormNumeroDoc] = useState("");
+  const [formNombre, setFormNombre] = useState("");
+  const [formApellido, setFormApellido] = useState("");
+  const [formEmail, setFormEmail] = useState("");
+  const [formTelefono, setFormTelefono] = useState("");
+  const [formBodegasIds, setFormBodegasIds] = useState<number[]>([]);
+  const [formRolId, setFormRolId] = useState<number | "">("");
 
-  // Form states
-  const [formTipoDoc, setFormTipoDoc] = useState('CC');
-  const [formNumeroDoc, setFormNumeroDoc] = useState('');
-  const [formNombre, setFormNombre] = useState('');
-  const [formApellido, setFormApellido] = useState('');
-  const [formEmail, setFormEmail] = useState('');
-  const [formTelefono, setFormTelefono] = useState('');
-  const [formBodegas, setFormBodegas] = useState<string[]>([]);
-  const [formRol, setFormRol] = useState('');
+  const [tiposDocumento, setTiposDocumento] = useState<OpcionCatalogo[]>([]);
+  const [rolesCatalogo, setRolesCatalogo] = useState<OpcionCatalogo[]>([]);
+  const [bodegasCatalogo, setBodegasCatalogo] = useState<OpcionCatalogo[]>([]);
+  const [isLoadingCatalogos, setIsLoadingCatalogos] = useState(false);
 
-  // Estados para validaciones en tiempo real
   const [errors, setErrors] = useState({
-    numeroDoc: '',
-    nombre: '',
-    apellido: '',
-    email: '',
-    telefono: '',
-    bodegas: '',
-    rol: ''
+    tipoDoc: "",
+    numeroDoc: "",
+    nombre: "",
+    apellido: "",
+    email: "",
+    telefono: "",
+    bodegas: "",
+    rol: "",
   });
+
   const [touched, setTouched] = useState({
+    tipoDoc: false,
     numeroDoc: false,
     nombre: false,
     apellido: false,
     email: false,
     telefono: false,
     bodegas: false,
-    rol: false
+    rol: false,
   });
 
   const { usuario } = useAuth();
@@ -162,11 +128,9 @@ export default function Usuarios() {
   const location = useLocation();
   const params = useParams<{ id: string }>();
 
-  // ✅ Bodega desde MainLayout (igual que Productos)
   const { selectedBodegaNombre } = useOutletContext<AppOutletContext>();
   const selectedBodega = selectedBodegaNombre;
 
-  // ✅ flags por URL (igual que Productos)
   const isCrear = location.pathname.endsWith("/usuarios/crear");
   const isVer = location.pathname.endsWith("/ver");
   const isEditar = location.pathname.endsWith("/editar");
@@ -181,10 +145,50 @@ export default function Usuarios() {
 
   const isSelfEdit = !!loggedUserId && usuarioSeleccionado?.id === loggedUserId;
 
-  // ✅ volver al listado (igual que Productos)
+  const loadUsuarios = useCallback(async () => {
+    try {
+      setIsLoadingUsuarios(true);
+      const response = await getUsuarios();
+      setUsuarios(response.data);
+    } catch (error) {
+      console.error("Error cargando usuarios:", error);
+      toast.error("No se pudieron cargar los usuarios");
+    } finally {
+      setIsLoadingUsuarios(false);
+    }
+  }, []);
+
+  const loadCatalogos = useCallback(async () => {
+    try {
+      setIsLoadingCatalogos(true);
+
+      const [tipos, roles, bodegas, generos] = await Promise.all([
+        getTiposDocumentoCatalogo(),
+        getRolesCatalogo(),
+        getBodegasCatalogo(),
+        getGenerosCatalogo(),
+      ]);
+
+      setTiposDocumento(tipos);
+      setRolesCatalogo(roles);
+      setBodegasCatalogo(bodegas);
+      setGenerosCatalogo(generos);
+
+    } catch (error) {
+      console.error("Error cargando catálogos:", error);
+      toast.error("No se pudieron cargar los catálogos");
+    } finally {
+      setIsLoadingCatalogos(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCatalogos();
+    loadUsuarios();
+  }, [loadCatalogos, loadUsuarios]);
+
   const closeToList = () => navigate("/app/usuarios");
 
-  // ✅ Si entran a /ver, /editar o /eliminar con un id inválido, volvemos al listado
   useEffect(() => {
     if (!isVer && !isEditar && !isEliminar) return;
 
@@ -194,22 +198,22 @@ export default function Usuarios() {
     }
   }, [isVer, isEditar, isEliminar, usuarioSeleccionado, closeToList]);
 
-  // ✅ Cuando estoy en /editar, precargar el formulario con el usuario seleccionado
   useEffect(() => {
     if (!isEditar) return;
     if (!usuarioSeleccionado) return;
 
-    setFormTipoDoc(usuarioSeleccionado.tipoDocumento);
+    setFormTipoDocId(usuarioSeleccionado.idTipoDocumento);
     setFormNumeroDoc(usuarioSeleccionado.numeroDocumento);
     setFormNombre(usuarioSeleccionado.nombre);
     setFormApellido(usuarioSeleccionado.apellido);
     setFormEmail(usuarioSeleccionado.email);
+    setFormGeneroId(usuarioSeleccionado.idGenero ?? "");
     setFormTelefono(usuarioSeleccionado.telefono);
-    setFormBodegas(usuarioSeleccionado.bodegas);
-    setFormRol(usuarioSeleccionado.rol);
+    setFormBodegasIds(usuarioSeleccionado.bodegasIds);
+    setFormRolId(usuarioSeleccionado.idRol);
 
-    // (opcional pero recomendado) limpiar validaciones al abrir editar
     setErrors({
+      tipoDoc: "",
       numeroDoc: "",
       nombre: "",
       apellido: "",
@@ -218,7 +222,9 @@ export default function Usuarios() {
       bodegas: "",
       rol: "",
     });
+
     setTouched({
+      tipoDoc: false,
       numeroDoc: false,
       nombre: false,
       apellido: false,
@@ -229,20 +235,21 @@ export default function Usuarios() {
     });
   }, [isEditar, usuarioSeleccionado]);
 
-  // ✅ Al entrar a /crear, dejar el form limpio
   useEffect(() => {
     if (!isCrear) return;
 
-    setFormTipoDoc("CC");
+    setFormTipoDocId("");
     setFormNumeroDoc("");
     setFormNombre("");
     setFormApellido("");
     setFormEmail("");
+    setFormGeneroId("");
     setFormTelefono("");
-    setFormBodegas([]);
-    setFormRol("");
+    setFormBodegasIds([]);
+    setFormRolId("");
 
     setErrors({
+      tipoDoc: "",
       numeroDoc: "",
       nombre: "",
       apellido: "",
@@ -251,7 +258,9 @@ export default function Usuarios() {
       bodegas: "",
       rol: "",
     });
+
     setTouched({
+      tipoDoc: false,
       numeroDoc: false,
       nombre: false,
       apellido: false,
@@ -263,100 +272,101 @@ export default function Usuarios() {
   }, [isCrear]);
 
   // Funciones de validación individuales
+  const validateTipoDocField = (value: number | "") => {
+    if (!value) {
+      return "El tipo de documento es requerido";
+    }
+    return "";
+  };
+
   const validateNumeroDocumento = (value: string) => {
     if (!value.trim()) {
-      return 'El número de documento es requerido';
+      return "El número de documento es requerido";
     }
-    // Solo números, sin guiones ni otros caracteres
     const soloNumeros = /^[0-9]+$/;
     if (!soloNumeros.test(value)) {
-      return 'Solo se permiten números';
+      return "Solo se permiten números";
     }
     if (value.length < 6) {
-      return 'Mínimo 6 dígitos';
+      return "Mínimo 6 dígitos";
     }
     if (value.length > 15) {
-      return 'Máximo 15 dígitos';
+      return "Máximo 15 dígitos";
     }
-    return '';
+    return "";
   };
 
   const validateNombre = (value: string) => {
     if (!value.trim()) {
-      return 'El nombre es requerido';
+      return "El nombre es requerido";
     }
-    // Solo letras y espacios (permite acentos y ñ)
     const soloLetras = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/;
     if (!soloLetras.test(value)) {
-      return 'Solo se permiten letras';
+      return "Solo se permiten letras";
     }
     if (value.trim().length < 2) {
-      return 'Mínimo 2 caracteres';
+      return "Mínimo 2 caracteres";
     }
     if (value.trim().length > 50) {
-      return 'Máximo 50 caracteres';
+      return "Máximo 50 caracteres";
     }
-    return '';
+    return "";
   };
 
   const validateApellido = (value: string) => {
     if (!value.trim()) {
-      return 'El apellido es requerido';
+      return "El apellido es requerido";
     }
-    // Solo letras y espacios (permite acentos y ñ)
     const soloLetras = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/;
     if (!soloLetras.test(value)) {
-      return 'Solo se permiten letras';
+      return "Solo se permiten letras";
     }
     if (value.trim().length < 2) {
-      return 'Mínimo 2 caracteres';
+      return "Mínimo 2 caracteres";
     }
     if (value.trim().length > 50) {
-      return 'Máximo 50 caracteres';
+      return "Máximo 50 caracteres";
     }
-    return '';
+    return "";
   };
 
   const validateEmailField = (value: string) => {
     if (!value.trim()) {
-      return 'El email es requerido';
+      return "El email es requerido";
     }
-    // Debe contener un @
-    if (!value.includes('@')) {
-      return 'El email debe contener un @';
+    if (!value.includes("@")) {
+      return "El email debe contener un @";
     }
-    // Validación básica de email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(value)) {
-      return 'Formato de email inválido';
+      return "Formato de email inválido";
     }
-    return '';
+    return "";
   };
 
   const validateTelefonoField = (value: string) => {
     if (!value.trim()) {
-      return 'El teléfono es requerido';
+      return "El teléfono es requerido";
     }
-    // Exactamente 10 números seguidos
     const diezNumeros = /^[0-9]{10}$/;
     if (!diezNumeros.test(value)) {
-      return 'Debe tener exactamente 10 números';
+      return "Debe tener exactamente 10 números";
     }
-    return '';
+    return "";
   };
 
-  const validateBodegasField = (value: string[]) => {
+  const validateBodegasField = (value: number[]) => {
     if (value.length === 0) {
-      return 'Debes seleccionar al menos una bodega';
+      return "Debes seleccionar al menos una bodega";
     }
-    return '';
+    return "";
   };
 
-  const validateRolField = (value: string) => {
+  const validateRolField = (value: number | "") => {
     if (!value) {
-      return 'El rol es requerido';
+      return "El rol es requerido";
     }
-    return '';
+    return "";
   };
 
   // Handlers con validación en tiempo real
@@ -381,19 +391,20 @@ export default function Usuarios() {
     try {
       setSendingReset(true);
 
-      // ✅ Aquí conectas tu backend:
-      // await authService.sendPasswordReset({ email: resetEmail });
+      await solicitarRestablecimientoContrasena(resetEmail);
 
-      await new Promise((r) => setTimeout(r, 700));
-
-      toast.success(`Se envió el correo de cambio de contraseña a ${resetEmail}`);
+      toast.success(
+        `Si el correo existe, se generó el enlace de restablecimiento para ${resetEmail}`
+      );
       setIsConfirmReset(false);
-    } catch {
-      toast.error("No se pudo enviar el correo. Intenta de nuevo.");
+    } catch (error) {
+      console.error("Error enviando restablecimiento:", error);
+      toast.error("No se pudo generar el enlace. Intenta de nuevo.");
     } finally {
       setSendingReset(false);
     }
   };
+
   const handleNumeroDocChange = (value: string) => {
     setFormNumeroDoc(value);
     if (touched.numeroDoc) {
@@ -429,10 +440,17 @@ export default function Usuarios() {
     }
   };
 
-  const handleRolChange = (value: string) => {
-    setFormRol(value);
+  const handleRolChange = (value: number | "") => {
+    setFormRolId(value);
     if (touched.rol) {
       setErrors({ ...errors, rol: validateRolField(value) });
+    }
+  };
+
+  const handleTipoDocChange = (value: number | "") => {
+    setFormTipoDocId(value);
+    if (touched.tipoDoc) {
+      setErrors({ ...errors, tipoDoc: validateTipoDocField(value) });
     }
   };
 
@@ -461,23 +479,6 @@ export default function Usuarios() {
     setTouched({ ...touched, telefono: true });
     setErrors({ ...errors, telefono: validateTelefonoField(formTelefono) });
   };
-
-  const handleRolBlur = () => {
-    setTouched({ ...touched, rol: true });
-    setErrors({ ...errors, rol: validateRolField(formRol) });
-  };
-
-  // Lista de bodegas disponibles
-  const bodegasDisponibles = ['Bodega Principal', 'Bodega Secundaria', 'Bodega Medellín', 'Bodega Cali'];
-
-  // Lista de roles disponibles (congruente con módulo de Roles)
-  const rolesDisponibles = [
-    'Administrador',
-    'Vendedor',
-    'Auxiliar Administrativo',
-    'Auxiliar de Bodega',
-    'Conductor',
-  ];
 
   const filteredUsuarios = useMemo(() => {
     return usuarios
@@ -525,15 +526,17 @@ export default function Usuarios() {
   };
 
   const handleCreate = () => {
-    setFormTipoDoc("CC");
+    setFormTipoDocId("");
     setFormNumeroDoc("");
     setFormNombre("");
     setFormApellido("");
     setFormEmail("");
     setFormTelefono("");
-    setFormBodegas([]);
-    setFormRol("");
+    setFormBodegasIds([]);
+    setFormRolId("");
+
     setErrors({
+      tipoDoc: "",
       numeroDoc: "",
       nombre: "",
       apellido: "",
@@ -542,7 +545,9 @@ export default function Usuarios() {
       bodegas: "",
       rol: "",
     });
+
     setTouched({
+      tipoDoc: false,
       numeroDoc: false,
       nombre: false,
       apellido: false,
@@ -567,102 +572,175 @@ export default function Usuarios() {
 
     navigate(`/app/usuarios/${u.id}/eliminar`);
   };
+
   const validateForm = () => {
-    // Marcar todos los campos como tocados
     setTouched({
+      tipoDoc: true,
       numeroDoc: true,
       nombre: true,
       apellido: true,
       email: true,
       telefono: true,
       bodegas: true,
-      rol: true
+      rol: true,
     });
 
-    // Validar con las funciones individuales
+    const tipoDocError = validateTipoDocField(formTipoDocId);
     const numeroDocError = validateNumeroDocumento(formNumeroDoc);
     const nombreError = validateNombre(formNombre);
     const apellidoError = validateApellido(formApellido);
     const emailError = validateEmailField(formEmail);
     const telefonoError = validateTelefonoField(formTelefono);
-    const bodegasError = validateBodegasField(formBodegas);
-    const rolError = validateRolField(formRol);
+    const bodegasError = validateBodegasField(formBodegasIds);
+    const rolError = validateRolField(formRolId);
 
     setErrors({
+      tipoDoc: tipoDocError,
       numeroDoc: numeroDocError,
       nombre: nombreError,
       apellido: apellidoError,
       email: emailError,
       telefono: telefonoError,
       bodegas: bodegasError,
-      rol: rolError
+      rol: rolError,
     });
 
-    // Si hay algún error, no permitir continuar
-    if (numeroDocError || nombreError || apellidoError || emailError || telefonoError || bodegasError || rolError) {
-      toast.error('Por favor corrige los errores en el formulario');
+    if (
+      tipoDocError ||
+      numeroDocError ||
+      nombreError ||
+      apellidoError ||
+      emailError ||
+      telefonoError ||
+      bodegasError ||
+      rolError
+    ) {
+      toast.error("Por favor corrige los errores en el formulario");
       return false;
     }
 
     return true;
   };
 
-  const confirmCreate = () => {
+  const confirmCreate = async () => {
     if (!validateForm()) return;
 
-    const newUsuario: Usuario = {
-      id: Math.max(...usuarios.map((u) => u.id), 0) + 1,
-      tipoDocumento: formTipoDoc,
-      numeroDocumento: formNumeroDoc.trim(),
-      nombre: formNombre.trim(),
-      apellido: formApellido.trim(),
-      email: formEmail.trim(),
-      telefono: formTelefono.trim(),
-      bodegas: formBodegas,
-      rol: formRol,
-      estado: true,
-    };
+    try {
+      if (!formTipoDocId) {
+        toast.error("Debes seleccionar tipo de documento");
+        return;
+      }
 
-    setUsuarios([...usuarios, newUsuario]);
+      if (!formRolId) {
+        toast.error("Debes seleccionar rol");
+        return;
+      }
 
-    closeToList();
-    setShowSuccessModal(true);
+      const response = await createUsuario({
+        nombre: formNombre.trim(),
+        apellido: formApellido.trim(),
+        id_tipo_doc: formTipoDocId,
+        num_documento: formNumeroDoc.trim(),
+        email: formEmail.trim(),
+        id_rol: formRolId,
+        id_genero: formGeneroId === "" ? undefined : Number(formGeneroId),
+        estado: true,
+        telefono: formTelefono.trim() || undefined,
+      });
+
+      const idUsuarioCreado = response.usuario.id_usuario;
+
+      await Promise.all(
+        formBodegasIds.map((idBodega) =>
+          asignarBodegaAUsuario({
+            id_usuario: idUsuarioCreado,
+            id_bodega: idBodega,
+          })
+        )
+      );
+
+      await loadUsuarios();
+
+      closeToList();
+      setShowSuccessModal(true);
+      toast.success(
+        "Usuario creado correctamente. Se envió el enlace para definir la contraseña."
+      );
+    } catch (error: any) {
+      console.error("Error creando usuario:", error);
+      toast.error(
+        error?.response?.data?.error?.message ||
+        error?.response?.data?.message ||
+        "No se pudo crear el usuario"
+      );
+    }
   };
 
-  const confirmEdit = () => {
+  const confirmEdit = async () => {
     if (!usuarioSeleccionado || !validateForm()) return;
 
-    const isSelf = !!loggedUserId && usuarioSeleccionado.id === loggedUserId;
+    try {
+      if (!formTipoDocId) {
+        toast.error("Debes seleccionar tipo de documento");
+        return;
+      }
 
-    setUsuarios(
-      usuarios.map((u) =>
-        u.id === usuarioSeleccionado.id
-          ? {
-            ...u,
-            tipoDocumento: formTipoDoc,
-            numeroDocumento: formNumeroDoc.trim(),
-            nombre: formNombre.trim(),
-            apellido: formApellido.trim(),
-            email: formEmail.trim(),
-            telefono: formTelefono.trim(),
-            bodegas: formBodegas,
-            // ✅ si es tu propio usuario, NO permitimos cambiar rol
-            rol: isSelf ? u.rol : formRol,
-          }
-          : u
-      )
-    );
+      if (!formRolId) {
+        toast.error("Debes seleccionar rol");
+        return;
+      }
 
-    if (isSelf && formRol !== usuarioSeleccionado.rol) {
-      toast.warning("No puedes cambiar tu propio rol mientras estás logueado");
-    } else {
-      toast.success("Usuario actualizado exitosamente");
+      const isSelf = !!loggedUserId && usuarioSeleccionado.id === loggedUserId;
+
+      await updateUsuario(usuarioSeleccionado.id, {
+        nombre: formNombre.trim(),
+        apellido: formApellido.trim(),
+        id_tipo_doc: formTipoDocId,
+        num_documento: formNumeroDoc.trim(),
+        id_genero: formGeneroId === "" ? undefined : Number(formGeneroId),
+        email: formEmail.trim(),
+        telefono: formTelefono.trim() || undefined,
+        ...(isSelf ? {} : { id_rol: formRolId }),
+      });
+
+      const actuales = usuarioSeleccionado.bodegasIds;
+      const nuevas = formBodegasIds;
+
+      const bodegasPorAgregar = nuevas.filter((id) => !actuales.includes(id));
+      const bodegasPorQuitar = actuales.filter((id) => !nuevas.includes(id));
+
+      await Promise.all([
+        ...bodegasPorAgregar.map((idBodega) =>
+          asignarBodegaAUsuario({
+            id_usuario: usuarioSeleccionado.id,
+            id_bodega: idBodega,
+          })
+        ),
+        ...bodegasPorQuitar.map((idBodega) =>
+          quitarBodegaAUsuario(usuarioSeleccionado.id, idBodega)
+        ),
+      ]);
+
+      await loadUsuarios();
+
+      if (isSelf && formRolId !== usuarioSeleccionado.idRol) {
+        toast.warning("No puedes cambiar tu propio rol mientras estás logueado");
+      } else {
+        toast.success("Usuario actualizado exitosamente");
+      }
+
+      closeToList();
+    } catch (error: any) {
+      console.error("Error actualizando usuario:", error);
+      toast.error(
+        error?.response?.data?.error?.message ||
+        error?.response?.data?.message ||
+        "No se pudo actualizar el usuario"
+      );
     }
-
-    closeToList();
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!usuarioSeleccionado) return;
 
     if (loggedUserId && usuarioSeleccionado.id === loggedUserId) {
@@ -671,12 +749,20 @@ export default function Usuarios() {
       return;
     }
 
-    setUsuarios(usuarios.filter((u) => u.id !== usuarioSeleccionado.id));
-
-    toast.success("Usuario eliminado exitosamente");
-    closeToList();
+    try {
+      await deleteUsuario(usuarioSeleccionado.id);
+      await loadUsuarios();
+      toast.success("Usuario eliminado exitosamente");
+      closeToList();
+    } catch (error: any) {
+      console.error("Error eliminando usuario:", error);
+      toast.error(
+        error?.response?.data?.error?.message ||
+        error?.response?.data?.message ||
+        "No se pudo eliminar el usuario"
+      );
+    }
   };
-
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
   };
@@ -694,7 +780,7 @@ export default function Usuarios() {
     setShowConfirmEstadoModal(true);
   };
 
-  const handleConfirmEstado = () => {
+  const handleConfirmEstado = async () => {
     if (!usuarioParaCambioEstado) return;
 
     if (loggedUserId && usuarioParaCambioEstado.id === loggedUserId) {
@@ -704,28 +790,37 @@ export default function Usuarios() {
       return;
     }
 
-    setUsuarios(
-      usuarios.map((u) =>
-        u.id === usuarioParaCambioEstado.id ? { ...u, estado: !u.estado } : u
-      )
-    );
+    try {
+      await cambiarEstadoUsuario(
+        usuarioParaCambioEstado.id,
+        !usuarioParaCambioEstado.estado
+      );
 
-    toast.success(
-      `Usuario ${!usuarioParaCambioEstado.estado ? "activado" : "desactivado"} exitosamente`
-    );
+      await loadUsuarios();
 
-    setShowConfirmEstadoModal(false);
-    setUsuarioParaCambioEstado(null);
+      toast.success(
+        `Usuario ${usuarioParaCambioEstado.estado ? "desactivado" : "activado"} exitosamente`
+      );
+    } catch (error: any) {
+      console.error("Error cambiando estado:", error);
+      toast.error(
+        error?.response?.data?.error?.message ||
+        error?.response?.data?.message ||
+        "No se pudo cambiar el estado del usuario"
+      );
+    } finally {
+      setShowConfirmEstadoModal(false);
+      setUsuarioParaCambioEstado(null);
+    }
   };
 
-  const toggleBodega = (bodega: string) => {
-    const newBodegas = formBodegas.includes(bodega)
-      ? formBodegas.filter((b) => b !== bodega)
-      : [...formBodegas, bodega];
+  const toggleBodega = (idBodega: number) => {
+    const newBodegas = formBodegasIds.includes(idBodega)
+      ? formBodegasIds.filter((id) => id !== idBodega)
+      : [...formBodegasIds, idBodega];
 
-    setFormBodegas(newBodegas);
+    setFormBodegasIds(newBodegas);
 
-    // Validar en tiempo real si ya se tocó el campo
     if (touched.bodegas) {
       setErrors({ ...errors, bodegas: validateBodegasField(newBodegas) });
     }
@@ -815,6 +910,9 @@ export default function Usuarios() {
       </div>
 
       {/* Table */}
+      {isLoadingUsuarios && (
+        <div className="mb-3 text-sm text-gray-500">Cargando usuarios...</div>
+      )}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <Table>
@@ -1009,7 +1107,8 @@ export default function Usuarios() {
         </div>
       )}
 
-      {/* Modal Ver Detalles */}
+      {/* Modal Ver Usuarios */}
+
       <Dialog
         open={isVer}
         onOpenChange={(open) => {
@@ -1017,96 +1116,159 @@ export default function Usuarios() {
         }}
       >
         <DialogContent
-          className="max-w-6xl"
+          className="max-w-3xl"
           aria-describedby="view-usuario-description"
-          onInteractOutside={(e) => e.preventDefault()} // ✅ NO cerrar al click por fuera
+          onInteractOutside={(e) => e.preventDefault()}
         >
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 text-xl font-semibold leading-tight">
               <UserIcon className="h-5 w-5 text-blue-600" />
               Detalles del Usuario
             </DialogTitle>
-            <DialogDescription id="view-usuario-description">
+            <DialogDescription
+              id="view-usuario-description"
+              className="text-sm text-gray-500"
+            >
               Información completa del usuario
             </DialogDescription>
           </DialogHeader>
 
           {usuarioSeleccionado && (
-            <div className="space-y-6">
-              {/* Información Principal */}
-              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-6 border border-blue-100">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-2">
-                    <h3 className="text-2xl font-semibold text-gray-900">
-                      {usuarioSeleccionado.nombre} {usuarioSeleccionado.apellido}
-                    </h3>
+            <div className="space-y-5">
+              {/* Cabecera */}
+              <div className="rounded-xl border border-gray-200 bg-gradient-to-r from-blue-50 to-white p-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="flex items-center gap-4 min-w-0">
+                    <div className="h-16 w-16 shrink-0 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-sm">
+                      <span className="text-xl font-semibold">
+                        {usuarioSeleccionado.nombre?.charAt(0)}
+                        {usuarioSeleccionado.apellido?.charAt(0)}
+                      </span>
+                    </div>
 
-                    <div className="flex items-center gap-4">
-                      <Badge variant="outline" className="bg-white">
-                        {usuarioSeleccionado.tipoDocumento}:{" "}
+                    <div className="min-w-0">
+                      <div className="text-2xl font-semibold text-gray-900 leading-tight truncate">
+                        {usuarioSeleccionado.nombre} {usuarioSeleccionado.apellido}
+                      </div>
+                      <div className="text-sm text-gray-500 mt-1">
+                        {usuarioSeleccionado.tipoDocumento}: {usuarioSeleccionado.numeroDocumento}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Badge
+                      variant="outline"
+                      className={`h-8 px-3 text-sm ${getRolBadgeColor(usuarioSeleccionado.rol)}`}
+                    >
+                      {usuarioSeleccionado.rol}
+                    </Badge>
+
+                    <Badge
+                      className={`h-8 px-3 text-sm ${usuarioSeleccionado.estado
+                          ? "bg-green-100 text-green-800 hover:bg-green-100"
+                          : "bg-red-100 text-red-800 hover:bg-red-100"
+                        }`}
+                    >
+                      {usuarioSeleccionado.estado ? "Activo" : "Inactivo"}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              {/* Información */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                {/* Contacto */}
+                <div className="rounded-xl border border-gray-200 bg-white p-4">
+                  <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-gray-700">
+                    <Mail className="h-4 w-4 text-blue-600" />
+                    Información de Contacto
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="rounded-lg bg-gray-50 px-4 py-3">
+                      <div className="text-xs text-gray-500">Email</div>
+                      <div className="mt-1 text-base font-medium text-gray-900 break-all">
+                        {usuarioSeleccionado.email}
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg bg-gray-50 px-4 py-3">
+                      <div className="text-xs text-gray-500">Teléfono</div>
+                      <div className="mt-1 text-base font-medium text-gray-900">
+                        {usuarioSeleccionado.telefono || "No registrado"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Datos personales */}
+                <div className="rounded-xl border border-gray-200 bg-white p-4">
+                  <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-gray-700">
+                    <UserIcon className="h-4 w-4 text-blue-600" />
+                    Datos Personales
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="rounded-lg bg-gray-50 px-4 py-3">
+                      <div className="text-xs text-gray-500">Nombre</div>
+                      <div className="mt-1 text-base font-medium text-gray-900">
+                        {usuarioSeleccionado.nombre}
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg bg-gray-50 px-4 py-3">
+                      <div className="text-xs text-gray-500">Apellido</div>
+                      <div className="mt-1 text-base font-medium text-gray-900">
+                        {usuarioSeleccionado.apellido}
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg bg-gray-50 px-4 py-3">
+                      <div className="text-xs text-gray-500">Tipo de documento</div>
+                      <div className="mt-1 text-base font-medium text-gray-900">
+                        {usuarioSeleccionado.tipoDocumento}
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg bg-gray-50 px-4 py-3">
+                      <div className="text-xs text-gray-500">Documento</div>
+                      <div className="mt-1 text-base font-medium text-gray-900">
                         {usuarioSeleccionado.numeroDocumento}
-                      </Badge>
+                      </div>
+                    </div>
 
-                      <Badge
-                        variant="outline"
-                        className={getRolBadgeColor(usuarioSeleccionado.rol)}
-                      >
-                        {usuarioSeleccionado.rol}
-                      </Badge>
-
-                      <Badge
-                        className={
-                          usuarioSeleccionado.estado
-                            ? "bg-green-100 text-green-800 hover:bg-green-100"
-                            : "bg-red-100 text-red-800 hover:bg-red-100"
-                        }
-                      >
-                        {usuarioSeleccionado.estado ? "Activo" : "Inactivo"}
-                      </Badge>
+                    <div className="rounded-lg bg-gray-50 px-4 py-3 sm:col-span-2">
+                      <div className="text-xs text-gray-500">Género</div>
+                      <div className="mt-1 text-base font-medium text-gray-900">
+                        {usuarioSeleccionado.genero || "No definido"}
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Información de Contacto */}
-              <div>
-                <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-blue-600" />
-                  Información de Contacto
-                </h4>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                    <Label className="text-xs text-gray-500 mb-1">Email</Label>
-                    <p className="font-medium text-gray-900">
-                      {usuarioSeleccionado.email}
-                    </p>
-                  </div>
-
-                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                    <Label className="text-xs text-gray-500 mb-1">Teléfono</Label>
-                    <p className="font-medium text-gray-900">
-                      {usuarioSeleccionado.telefono}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Información de Asignación */}
-              <div>
-                <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+              {/* Bodegas */}
+              <div className="rounded-xl border border-gray-200 bg-white p-4">
+                <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-gray-700">
                   <Building2 className="h-4 w-4 text-blue-600" />
-                  Asignación de Bodega
-                </h4>
-
-                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                  <Label className="text-xs text-gray-500 mb-1">
-                    Bodegas Asignadas
-                  </Label>
-                  <p className="font-medium text-gray-900">
-                    {usuarioSeleccionado.bodegas.join(", ")}
-                  </p>
+                  Bodegas Asignadas
                 </div>
+
+                {usuarioSeleccionado.bodegas.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {usuarioSeleccionado.bodegas.map((bodega) => (
+                      <span
+                        key={bodega}
+                        className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700"
+                      >
+                        {bodega}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-500">No tiene bodegas asignadas.</div>
+                )}
               </div>
             </div>
           )}
@@ -1138,20 +1300,39 @@ export default function Usuarios() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className={`space-y-4 ${isLoadingCatalogos ? "opacity-60 pointer-events-none" : ""}`}>
+            {isLoadingCatalogos && (
+              <div className="text-sm text-gray-500">Cargando opciones...</div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="create-tipo-doc">Tipo de Documento *</Label>
-                <Select value={formTipoDoc} onValueChange={setFormTipoDoc}>
-                  <SelectTrigger id="create-tipo-doc">
-                    <SelectValue />
+                <Select
+                  value={formTipoDocId === "" ? "" : String(formTipoDocId)}
+                  onValueChange={(value) => {
+                    const parsed = value ? Number(value) : "";
+                    handleTipoDocChange(parsed);
+                    setTouched((prev) => ({ ...prev, tipoDoc: true }));
+                  }}
+                >
+                  <SelectTrigger
+                    id="create-tipo-doc"
+                    className={errors.tipoDoc && touched.tipoDoc ? "border-red-500" : ""}
+                  >
+                    <SelectValue placeholder="Selecciona un tipo de documento" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="CC">Cédula de Ciudadanía</SelectItem>
-                    <SelectItem value="CE">Cédula de Extranjería</SelectItem>
-                    <SelectItem value="Pasaporte">Pasaporte</SelectItem>
+                    {tiposDocumento.map((item) => (
+                      <SelectItem key={item.id} value={String(item.id)}>
+                        {item.nombre}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+
+                {errors.tipoDoc && touched.tipoDoc && (
+                  <p className="text-red-500 text-sm mt-1">{errors.tipoDoc}</p>
+                )}
               </div>
 
               <div>
@@ -1202,6 +1383,27 @@ export default function Usuarios() {
               </div>
             </div>
 
+            <div>
+              <Label htmlFor="create-genero">Género</Label>
+              <Select
+                value={formGeneroId === "" ? "" : String(formGeneroId)}
+                onValueChange={(value) =>
+                  setFormGeneroId(value ? Number(value) : "")
+                }
+              >
+                <SelectTrigger id="create-genero">
+                  <SelectValue placeholder="Selecciona un género" />
+                </SelectTrigger>
+                <SelectContent>
+                  {generosCatalogo.map((item) => (
+                    <SelectItem key={item.id} value={String(item.id)}>
+                      {item.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="create-email">Email *</Label>
@@ -1222,8 +1424,8 @@ export default function Usuarios() {
               <div>
                 <Label htmlFor="create-telefono">Teléfono *</Label>
                 <Input
-                  maxLength={10}
                   id="create-telefono"
+                  maxLength={10}
                   value={formTelefono}
                   onChange={(e) => handleTelefonoChange(e.target.value)}
                   onBlur={handleTelefonoBlur}
@@ -1240,18 +1442,18 @@ export default function Usuarios() {
               <div>
                 <Label htmlFor="create-bodega">Bodegas Asignadas *</Label>
                 <div className="space-y-2 mt-2 border border-gray-200 rounded-md p-3">
-                  {bodegasDisponibles.map((bodega) => (
-                    <div key={bodega} className="flex items-center space-x-2">
+                  {bodegasCatalogo.map((bodega) => (
+                    <div key={bodega.id} className="flex items-center space-x-2">
                       <Checkbox
-                        id={`create-bodega-${bodega}`}
-                        checked={formBodegas.includes(bodega)}
-                        onCheckedChange={() => toggleBodega(bodega)}
+                        id={`create-bodega-${bodega.id}`}
+                        checked={formBodegasIds.includes(bodega.id)}
+                        onCheckedChange={() => toggleBodega(bodega.id)}
                       />
                       <label
-                        htmlFor={`create-bodega-${bodega}`}
+                        htmlFor={`create-bodega-${bodega.id}`}
                         className="text-sm cursor-pointer"
                       >
-                        {bodega}
+                        {bodega.nombre}
                       </label>
                     </div>
                   ))}
@@ -1263,18 +1465,29 @@ export default function Usuarios() {
 
               <div>
                 <Label htmlFor="create-rol">Rol *</Label>
-                <Select value={formRol} onValueChange={handleRolChange} onBlur={handleRolBlur}>
-                  <SelectTrigger id="create-rol">
+                <Select
+                  value={formRolId === "" ? "" : String(formRolId)}
+                  onValueChange={(value) => {
+                    const parsed = value ? Number(value) : "";
+                    handleRolChange(parsed);
+                    setTouched((prev) => ({ ...prev, rol: true }));
+                  }}
+                >
+                  <SelectTrigger
+                    id="create-rol"
+                    className={errors.rol && touched.rol ? "border-red-500" : ""}
+                  >
                     <SelectValue placeholder="Selecciona un rol" />
                   </SelectTrigger>
                   <SelectContent>
-                    {rolesDisponibles.map((rol) => (
-                      <SelectItem key={rol} value={rol}>
-                        {rol}
+                    {rolesCatalogo.map((item) => (
+                      <SelectItem key={item.id} value={String(item.id)}>
+                        {item.nombre}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+
                 {errors.rol && touched.rol && (
                   <p className="text-red-500 text-sm mt-1">{errors.rol}</p>
                 )}
@@ -1314,21 +1527,37 @@ export default function Usuarios() {
 
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="edit-tipo-doc">Tipo de Documento *</Label>
-                <Select value={formTipoDoc} onValueChange={setFormTipoDoc}>
-                  <SelectTrigger id="edit-tipo-doc">
-                    <SelectValue />
+                <Select
+                  value={formTipoDocId === "" ? "" : String(formTipoDocId)}
+                  onValueChange={(value) => {
+                    const parsed = value ? Number(value) : "";
+                    handleTipoDocChange(parsed);
+                    setTouched((prev) => ({ ...prev, tipoDoc: true }));
+                  }}
+                >
+                  <SelectTrigger
+                    id="edit-tipo-doc"
+                    className={errors.tipoDoc && touched.tipoDoc ? "border-red-500" : ""}
+                  >
+                    <SelectValue placeholder="Selecciona un tipo de documento" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="CC">Cédula de Ciudadanía</SelectItem>
-                    <SelectItem value="CE">Cédula de Extranjería</SelectItem>
-                    <SelectItem value="Pasaporte">Pasaporte</SelectItem>
+                    {tiposDocumento.map((item) => (
+                      <SelectItem key={item.id} value={String(item.id)}>
+                        {item.nombre}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+
+                {errors.tipoDoc && touched.tipoDoc && (
+                  <p className="text-red-500 text-sm mt-1">{errors.tipoDoc}</p>
+                )}
               </div>
 
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="edit-numero-doc">N° de Documento *</Label>
                 <Input
                   id="edit-numero-doc"
@@ -1376,6 +1605,27 @@ export default function Usuarios() {
               </div>
             </div>
 
+            <div>
+              <Label htmlFor="edit-genero">Género</Label>
+              <Select
+                value={formGeneroId === "" ? "" : String(formGeneroId)}
+                onValueChange={(value) =>
+                  setFormGeneroId(value ? Number(value) : "")
+                }
+              >
+                <SelectTrigger id="edit-genero">
+                  <SelectValue placeholder="Selecciona un género" />
+                </SelectTrigger>
+                <SelectContent>
+                  {generosCatalogo.map((item) => (
+                    <SelectItem key={item.id} value={String(item.id)}>
+                      {item.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="edit-email">Email *</Label>
@@ -1413,18 +1663,18 @@ export default function Usuarios() {
               <div>
                 <Label htmlFor="edit-bodega">Bodegas Asignadas *</Label>
                 <div className="space-y-2 mt-2 border border-gray-200 rounded-md p-3">
-                  {bodegasDisponibles.map((bodega) => (
-                    <div key={bodega} className="flex items-center space-x-2">
+                  {bodegasCatalogo.map((bodega) => (
+                    <div key={bodega.id} className="flex items-center space-x-2">
                       <Checkbox
-                        id={`edit-bodega-${bodega}`}
-                        checked={formBodegas.includes(bodega)}
-                        onCheckedChange={() => toggleBodega(bodega)}
+                        id={`edit-bodega-${bodega.id}`}
+                        checked={formBodegasIds.includes(bodega.id)}
+                        onCheckedChange={() => toggleBodega(bodega.id)}
                       />
                       <label
-                        htmlFor={`edit-bodega-${bodega}`}
+                        htmlFor={`edit-bodega-${bodega.id}`}
                         className="text-sm cursor-pointer"
                       >
-                        {bodega}
+                        {bodega.nombre}
                       </label>
                     </div>
                   ))}
@@ -1434,38 +1684,30 @@ export default function Usuarios() {
                 )}
               </div>
 
-              <div>
-                <Label htmlFor="edit-rol">Rol *</Label>
-
-                <Select
-                  value={formRol}
-                  onValueChange={handleRolChange}
-                  onBlur={handleRolBlur}
-                  disabled={isSelfEdit}
+              <Select
+                value={formRolId === "" ? "" : String(formRolId)}
+                onValueChange={(value) => {
+                  const parsed = value ? Number(value) : "";
+                  handleRolChange(parsed);
+                  setTouched((prev) => ({ ...prev, rol: true }));
+                }}
+                disabled={isSelfEdit}
+              >
+                <SelectTrigger
+                  id="edit-rol"
+                  className={`${errors.rol && touched.rol && !isSelfEdit ? "border-red-500" : ""} ${isSelfEdit ? "opacity-60 cursor-not-allowed" : ""
+                    }`}
                 >
-                  <SelectTrigger id="edit-rol" className={isSelfEdit ? "opacity-60 cursor-not-allowed" : ""}>
-                    <SelectValue placeholder="Selecciona un rol" />
-                  </SelectTrigger>
-
-                  <SelectContent>
-                    {rolesDisponibles.map((rol) => (
-                      <SelectItem key={rol} value={rol}>
-                        {rol}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {isSelfEdit && (
-                  <p className="text-xs text-amber-700 mt-1">
-                    No puedes cambiar tu propio rol mientras estás logueado.
-                  </p>
-                )}
-
-                {errors.rol && touched.rol && !isSelfEdit && (
-                  <p className="text-red-500 text-sm mt-1">{errors.rol}</p>
-                )}
-              </div>
+                  <SelectValue placeholder="Selecciona un rol" />
+                </SelectTrigger>
+                <SelectContent>
+                  {rolesCatalogo.map((item) => (
+                    <SelectItem key={item.id} value={String(item.id)}>
+                      {item.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
