@@ -10,6 +10,7 @@ import {
   Plus,
   Eye,
   Edit,
+  Loader2,
   Trash2,
   ChevronLeft,
   ChevronRight,
@@ -75,6 +76,12 @@ export default function Usuarios() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [generosCatalogo, setGenerosCatalogo] = useState<OpcionCatalogo[]>([]);
   const [isLoadingUsuarios, setIsLoadingUsuarios] = useState(false);
+
+  const [isConfirmCreateOpen, setIsConfirmCreateOpen] = useState(false);
+  const [isConfirmEditOpen, setIsConfirmEditOpen] = useState(false);
+  const [isCreatingUsuario, setIsCreatingUsuario] = useState(false);
+  const [isUpdatingUsuario, setIsUpdatingUsuario] = useState(false);
+
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
   const [usuarioParaCambioEstado, setUsuarioParaCambioEstado] = useState<Usuario | null>(null);
@@ -405,6 +412,28 @@ export default function Usuarios() {
     }
   };
 
+  const handleOpenCreateConfirm = () => {
+    if (isCreatingUsuario) return;
+    if (!validateForm()) return;
+
+    if (!formTipoDocId) {
+      toast.error("Debes seleccionar tipo de documento");
+      return;
+    }
+
+    if (!formRolId) {
+      toast.error("Debes seleccionar rol");
+      return;
+    }
+
+    setIsConfirmCreateOpen(true);
+  };
+
+  const handleConfirmCreateModalChange = (open: boolean) => {
+    if (isCreatingUsuario) return;
+    setIsConfirmCreateOpen(open);
+  };
+
   const handleNumeroDocChange = (value: string) => {
     setFormNumeroDoc(value);
     if (touched.numeroDoc) {
@@ -623,25 +652,28 @@ export default function Usuarios() {
   };
 
   const confirmCreate = async () => {
+    if (isCreatingUsuario) return;
     if (!validateForm()) return;
 
-    try {
-      if (!formTipoDocId) {
-        toast.error("Debes seleccionar tipo de documento");
-        return;
-      }
+    if (!formTipoDocId) {
+      toast.error("Debes seleccionar tipo de documento");
+      return;
+    }
 
-      if (!formRolId) {
-        toast.error("Debes seleccionar rol");
-        return;
-      }
+    if (!formRolId) {
+      toast.error("Debes seleccionar rol");
+      return;
+    }
+
+    try {
+      setIsCreatingUsuario(true);
 
       const response = await createUsuario({
         nombre: formNombre.trim(),
         apellido: formApellido.trim(),
         id_tipo_doc: formTipoDocId,
         num_documento: formNumeroDoc.trim(),
-        email: formEmail.trim(),
+        email: formEmail.trim().toLowerCase(),
         id_rol: formRolId,
         id_genero: formGeneroId === "" ? undefined : Number(formGeneroId),
         estado: true,
@@ -650,36 +682,53 @@ export default function Usuarios() {
 
       const idUsuarioCreado = response.usuario.id_usuario;
 
-      await Promise.all(
-        formBodegasIds.map((idBodega) =>
-          asignarBodegaAUsuario({
-            id_usuario: idUsuarioCreado,
-            id_bodega: idBodega,
-          })
-        )
-      );
+      if (formBodegasIds.length > 0) {
+        await Promise.all(
+          formBodegasIds.map((idBodega) =>
+            asignarBodegaAUsuario({
+              id_usuario: idUsuarioCreado,
+              id_bodega: idBodega,
+            })
+          )
+        );
+      }
 
       await loadUsuarios();
 
+      setIsConfirmCreateOpen(false);
       closeToList();
       setShowSuccessModal(true);
+
       toast.success(
         "Usuario creado correctamente. Se envió el enlace para definir la contraseña."
       );
     } catch (error: any) {
       console.error("Error creando usuario:", error);
-      toast.error(
+
+      const status = error?.response?.status;
+      const message =
         error?.response?.data?.error?.message ||
         error?.response?.data?.message ||
-        "No se pudo crear el usuario"
-      );
+        "No se pudo crear el usuario";
+
+      if (status === 409) {
+        toast.error(message || "Ya existe un usuario con ese correo o documento");
+        return;
+      }
+
+      toast.error(message);
+    } finally {
+      setIsCreatingUsuario(false);
     }
   };
 
   const confirmEdit = async () => {
+    if (isUpdatingUsuario) return;
     if (!usuarioSeleccionado || !validateForm()) return;
 
     try {
+      setIsUpdatingUsuario(true);
+
       if (!formTipoDocId) {
         toast.error("Debes seleccionar tipo de documento");
         return;
@@ -697,9 +746,9 @@ export default function Usuarios() {
         apellido: formApellido.trim(),
         id_tipo_doc: formTipoDocId,
         num_documento: formNumeroDoc.trim(),
-        id_genero: formGeneroId === "" ? undefined : Number(formGeneroId),
         email: formEmail.trim(),
         telefono: formTelefono.trim() || undefined,
+        id_genero: formGeneroId === "" ? undefined : Number(formGeneroId),
         ...(isSelf ? {} : { id_rol: formRolId }),
       });
 
@@ -723,6 +772,8 @@ export default function Usuarios() {
 
       await loadUsuarios();
 
+      setIsConfirmEditOpen(false);
+
       if (isSelf && formRolId !== usuarioSeleccionado.idRol) {
         toast.warning("No puedes cambiar tu propio rol mientras estás logueado");
       } else {
@@ -737,7 +788,27 @@ export default function Usuarios() {
         error?.response?.data?.message ||
         "No se pudo actualizar el usuario"
       );
+    } finally {
+      setIsUpdatingUsuario(false);
     }
+  };
+
+  const handleOpenEditConfirm = () => {
+    if (isUpdatingUsuario) return;
+    if (!usuarioSeleccionado) return;
+    if (!validateForm()) return;
+
+    if (!formTipoDocId) {
+      toast.error("Debes seleccionar tipo de documento");
+      return;
+    }
+
+    if (!formRolId) {
+      toast.error("Debes seleccionar rol");
+      return;
+    }
+
+    setIsConfirmEditOpen(true);
   };
 
   const confirmDelete = async () => {
@@ -1166,8 +1237,8 @@ export default function Usuarios() {
 
                     <Badge
                       className={`h-8 px-3 text-sm ${usuarioSeleccionado.estado
-                          ? "bg-green-100 text-green-800 hover:bg-green-100"
-                          : "bg-red-100 text-red-800 hover:bg-red-100"
+                        ? "bg-green-100 text-green-800 hover:bg-green-100"
+                        : "bg-red-100 text-red-800 hover:bg-red-100"
                         }`}
                     >
                       {usuarioSeleccionado.estado ? "Activo" : "Inactivo"}
@@ -1285,13 +1356,18 @@ export default function Usuarios() {
       <Dialog
         open={isCrear}
         onOpenChange={(open) => {
+          if (isCreatingUsuario) return;
           if (!open) closeToList();
         }}
       >
         <DialogContent
-          className="max-w-6xl max-h-[90vh] overflow-y-auto"
-          aria-describedby="create-usuario-description"
-          onInteractOutside={(e) => e.preventDefault()}
+          className="max-w-4xl"
+          onInteractOutside={(e) => {
+            if (isCreatingUsuario) e.preventDefault();
+          }}
+          onEscapeKeyDown={(e) => {
+            if (isCreatingUsuario) e.preventDefault();
+          }}
         >
           <DialogHeader>
             <DialogTitle>Nuevo Usuario</DialogTitle>
@@ -1300,207 +1376,260 @@ export default function Usuarios() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className={`space-y-4 ${isLoadingCatalogos ? "opacity-60 pointer-events-none" : ""}`}>
-            {isLoadingCatalogos && (
-              <div className="text-sm text-gray-500">Cargando opciones...</div>
-            )}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="create-tipo-doc">Tipo de Documento *</Label>
-                <Select
-                  value={formTipoDocId === "" ? "" : String(formTipoDocId)}
-                  onValueChange={(value) => {
-                    const parsed = value ? Number(value) : "";
-                    handleTipoDocChange(parsed);
-                    setTouched((prev) => ({ ...prev, tipoDoc: true }));
-                  }}
-                >
-                  <SelectTrigger
-                    id="create-tipo-doc"
-                    className={errors.tipoDoc && touched.tipoDoc ? "border-red-500" : ""}
-                  >
-                    <SelectValue placeholder="Selecciona un tipo de documento" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tiposDocumento.map((item) => (
-                      <SelectItem key={item.id} value={String(item.id)}>
-                        {item.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {errors.tipoDoc && touched.tipoDoc && (
-                  <p className="text-red-500 text-sm mt-1">{errors.tipoDoc}</p>
-                )}
-              </div>
-
-              <div>
-                <Label htmlFor="create-numero-doc">N° de Documento *</Label>
-                <Input
-                  id="create-numero-doc"
-                  value={formNumeroDoc}
-                  onChange={(e) => handleNumeroDocChange(e.target.value)}
-                  onBlur={handleNumeroDocBlur}
-                  placeholder="Ej: 1234567890"
-                  className={errors.numeroDoc && touched.numeroDoc ? "border-red-500" : ""}
-                />
-                {errors.numeroDoc && touched.numeroDoc && (
-                  <p className="text-red-500 text-sm mt-1">{errors.numeroDoc}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="create-nombre">Nombre *</Label>
-                <Input
-                  id="create-nombre"
-                  value={formNombre}
-                  onChange={(e) => handleNombreChange(e.target.value)}
-                  onBlur={handleNombreBlur}
-                  placeholder="Ej: Juan"
-                  className={errors.nombre && touched.nombre ? "border-red-500" : ""}
-                />
-                {errors.nombre && touched.nombre && (
-                  <p className="text-red-500 text-sm mt-1">{errors.nombre}</p>
-                )}
-              </div>
-
-              <div>
-                <Label htmlFor="create-apellido">Apellido *</Label>
-                <Input
-                  id="create-apellido"
-                  value={formApellido}
-                  onChange={(e) => handleApellidoChange(e.target.value)}
-                  onBlur={handleApellidoBlur}
-                  placeholder="Ej: Pérez"
-                  className={errors.apellido && touched.apellido ? "border-red-500" : ""}
-                />
-                {errors.apellido && touched.apellido && (
-                  <p className="text-red-500 text-sm mt-1">{errors.apellido}</p>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="create-genero">Género</Label>
-              <Select
-                value={formGeneroId === "" ? "" : String(formGeneroId)}
-                onValueChange={(value) =>
-                  setFormGeneroId(value ? Number(value) : "")
-                }
-              >
-                <SelectTrigger id="create-genero">
-                  <SelectValue placeholder="Selecciona un género" />
-                </SelectTrigger>
-                <SelectContent>
-                  {generosCatalogo.map((item) => (
-                    <SelectItem key={item.id} value={String(item.id)}>
-                      {item.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="create-email">Email *</Label>
-                <Input
-                  id="create-email"
-                  type="email"
-                  value={formEmail}
-                  onChange={(e) => handleEmailChange(e.target.value)}
-                  onBlur={handleEmailBlur}
-                  placeholder="correo@ejemplo.com"
-                  className={errors.email && touched.email ? "border-red-500" : ""}
-                />
-                {errors.email && touched.email && (
-                  <p className="text-red-500 text-sm mt-1">{errors.email}</p>
-                )}
-              </div>
-
-              <div>
-                <Label htmlFor="create-telefono">Teléfono *</Label>
-                <Input
-                  id="create-telefono"
-                  maxLength={10}
-                  value={formTelefono}
-                  onChange={(e) => handleTelefonoChange(e.target.value)}
-                  onBlur={handleTelefonoBlur}
-                  placeholder="3001234567"
-                  className={errors.telefono && touched.telefono ? "border-red-500" : ""}
-                />
-                {errors.telefono && touched.telefono && (
-                  <p className="text-red-500 text-sm mt-1">{errors.telefono}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="create-bodega">Bodegas Asignadas *</Label>
-                <div className="space-y-2 mt-2 border border-gray-200 rounded-md p-3">
-                  {bodegasCatalogo.map((bodega) => (
-                    <div key={bodega.id} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`create-bodega-${bodega.id}`}
-                        checked={formBodegasIds.includes(bodega.id)}
-                        onCheckedChange={() => toggleBodega(bodega.id)}
-                      />
-                      <label
-                        htmlFor={`create-bodega-${bodega.id}`}
-                        className="text-sm cursor-pointer"
-                      >
-                        {bodega.nombre}
-                      </label>
-                    </div>
-                  ))}
+          <div className="relative">
+            {isCreatingUsuario && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center rounded-lg bg-white/70 backdrop-blur-[2px]">
+                <div className="flex flex-col items-center gap-3 rounded-xl border bg-white px-6 py-5 shadow-lg">
+                  <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                  <div className="text-sm font-medium text-gray-900">
+                    Creando usuario...
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    Por favor espera un momento
+                  </div>
                 </div>
-                {errors.bodegas && touched.bodegas && (
-                  <p className="text-red-500 text-sm mt-1">{errors.bodegas}</p>
-                )}
+              </div>
+            )}
+
+            <div
+              className={`space-y-4 ${isLoadingCatalogos || isCreatingUsuario
+                ? "opacity-60 pointer-events-none"
+                : ""
+                }`}
+            >
+              {isLoadingCatalogos && (
+                <div className="text-sm text-gray-500">Cargando opciones...</div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="create-tipo-doc">Tipo de Documento *</Label>
+                  <Select
+                    value={formTipoDocId === "" ? "" : String(formTipoDocId)}
+                    onValueChange={(value) => {
+                      const parsed = value ? Number(value) : "";
+                      handleTipoDocChange(parsed);
+                      setTouched((prev) => ({ ...prev, tipoDoc: true }));
+                    }}
+                    disabled={isCreatingUsuario || isLoadingCatalogos}
+                  >
+                    <SelectTrigger
+                      id="create-tipo-doc"
+                      className={errors.tipoDoc && touched.tipoDoc ? "border-red-500" : ""}
+                    >
+                      <SelectValue placeholder="Selecciona un tipo de documento" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {tiposDocumento.map((item) => (
+                        <SelectItem key={item.id} value={String(item.id)}>
+                          {item.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  {errors.tipoDoc && touched.tipoDoc && (
+                    <p className="text-red-500 text-sm mt-1">{errors.tipoDoc}</p>
+                  )}
+                </div>
+
+                <div>
+                  <Label htmlFor="create-numero-doc">N° de Documento *</Label>
+                  <Input
+                    id="create-numero-doc"
+                    value={formNumeroDoc}
+                    onChange={(e) => handleNumeroDocChange(e.target.value)}
+                    onBlur={handleNumeroDocBlur}
+                    placeholder="Ej: 1234567890"
+                    disabled={isCreatingUsuario || isLoadingCatalogos}
+                    className={errors.numeroDoc && touched.numeroDoc ? "border-red-500" : ""}
+                  />
+                  {errors.numeroDoc && touched.numeroDoc && (
+                    <p className="text-red-500 text-sm mt-1">{errors.numeroDoc}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="create-nombre">Nombre *</Label>
+                  <Input
+                    id="create-nombre"
+                    value={formNombre}
+                    onChange={(e) => handleNombreChange(e.target.value)}
+                    onBlur={handleNombreBlur}
+                    placeholder="Ej: Juan"
+                    disabled={isCreatingUsuario || isLoadingCatalogos}
+                    className={errors.nombre && touched.nombre ? "border-red-500" : ""}
+                  />
+                  {errors.nombre && touched.nombre && (
+                    <p className="text-red-500 text-sm mt-1">{errors.nombre}</p>
+                  )}
+                </div>
+
+                <div>
+                  <Label htmlFor="create-apellido">Apellido *</Label>
+                  <Input
+                    id="create-apellido"
+                    value={formApellido}
+                    onChange={(e) => handleApellidoChange(e.target.value)}
+                    onBlur={handleApellidoBlur}
+                    placeholder="Ej: Pérez"
+                    disabled={isCreatingUsuario || isLoadingCatalogos}
+                    className={errors.apellido && touched.apellido ? "border-red-500" : ""}
+                  />
+                  {errors.apellido && touched.apellido && (
+                    <p className="text-red-500 text-sm mt-1">{errors.apellido}</p>
+                  )}
+                </div>
               </div>
 
               <div>
-                <Label htmlFor="create-rol">Rol *</Label>
+                <Label htmlFor="create-genero">Género</Label>
                 <Select
-                  value={formRolId === "" ? "" : String(formRolId)}
-                  onValueChange={(value) => {
-                    const parsed = value ? Number(value) : "";
-                    handleRolChange(parsed);
-                    setTouched((prev) => ({ ...prev, rol: true }));
-                  }}
+                  value={formGeneroId === "" ? "" : String(formGeneroId)}
+                  onValueChange={(value) =>
+                    setFormGeneroId(value ? Number(value) : "")
+                  }
+                  disabled={isCreatingUsuario || isLoadingCatalogos}
                 >
-                  <SelectTrigger
-                    id="create-rol"
-                    className={errors.rol && touched.rol ? "border-red-500" : ""}
-                  >
-                    <SelectValue placeholder="Selecciona un rol" />
+                  <SelectTrigger id="create-genero">
+                    <SelectValue placeholder="Selecciona un género" />
                   </SelectTrigger>
                   <SelectContent>
-                    {rolesCatalogo.map((item) => (
+                    {generosCatalogo.map((item) => (
                       <SelectItem key={item.id} value={String(item.id)}>
                         {item.nombre}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
 
-                {errors.rol && touched.rol && (
-                  <p className="text-red-500 text-sm mt-1">{errors.rol}</p>
-                )}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="create-email">Email *</Label>
+                  <Input
+                    id="create-email"
+                    type="email"
+                    value={formEmail}
+                    onChange={(e) => handleEmailChange(e.target.value)}
+                    onBlur={handleEmailBlur}
+                    placeholder="correo@ejemplo.com"
+                    disabled={isCreatingUsuario || isLoadingCatalogos}
+                    className={errors.email && touched.email ? "border-red-500" : ""}
+                  />
+                  {errors.email && touched.email && (
+                    <p className="text-red-500 text-sm mt-1">{errors.email}</p>
+                  )}
+                </div>
+
+                <div>
+                  <Label htmlFor="create-telefono">Teléfono *</Label>
+                  <Input
+                    id="create-telefono"
+                    maxLength={10}
+                    value={formTelefono}
+                    onChange={(e) => handleTelefonoChange(e.target.value)}
+                    onBlur={handleTelefonoBlur}
+                    placeholder="3001234567"
+                    disabled={isCreatingUsuario || isLoadingCatalogos}
+                    className={errors.telefono && touched.telefono ? "border-red-500" : ""}
+                  />
+                  {errors.telefono && touched.telefono && (
+                    <p className="text-red-500 text-sm mt-1">{errors.telefono}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="create-bodega">Bodegas Asignadas *</Label>
+                  <div className="space-y-2 mt-2 border border-gray-200 rounded-md p-3">
+                    {bodegasCatalogo.map((bodega) => (
+                      <div key={bodega.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`create-bodega-${bodega.id}`}
+                          checked={formBodegasIds.includes(bodega.id)}
+                          disabled={isCreatingUsuario || isLoadingCatalogos}
+                          onCheckedChange={() => {
+                            if (isCreatingUsuario || isLoadingCatalogos) return;
+                            toggleBodega(bodega.id);
+                          }}
+                        />
+                        <label
+                          htmlFor={`create-bodega-${bodega.id}`}
+                          className={`text-sm ${isCreatingUsuario || isLoadingCatalogos
+                            ? "cursor-not-allowed opacity-70"
+                            : "cursor-pointer"
+                            }`}
+                        >
+                          {bodega.nombre}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                  {errors.bodegas && touched.bodegas && (
+                    <p className="text-red-500 text-sm mt-1">{errors.bodegas}</p>
+                  )}
+                </div>
+
+                <div>
+                  <Label htmlFor="create-rol">Rol *</Label>
+                  <Select
+                    value={formRolId === "" ? "" : String(formRolId)}
+                    onValueChange={(value) => {
+                      const parsed = value ? Number(value) : "";
+                      handleRolChange(parsed);
+                      setTouched((prev) => ({ ...prev, rol: true }));
+                    }}
+                    disabled={isCreatingUsuario || isLoadingCatalogos}
+                  >
+                    <SelectTrigger
+                      id="create-rol"
+                      className={errors.rol && touched.rol ? "border-red-500" : ""}
+                    >
+                      <SelectValue placeholder="Selecciona un rol" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {rolesCatalogo.map((item) => (
+                        <SelectItem key={item.id} value={String(item.id)}>
+                          {item.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  {errors.rol && touched.rol && (
+                    <p className="text-red-500 text-sm mt-1">{errors.rol}</p>
+                  )}
+                </div>
               </div>
             </div>
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={closeToList}>
+            <Button
+              variant="outline"
+              onClick={closeToList}
+              disabled={isCreatingUsuario}
+            >
               Cancelar
             </Button>
-            <Button onClick={confirmCreate} className="bg-blue-600 hover:bg-blue-700">
-              Crear Usuario
+
+            <Button
+              onClick={handleOpenCreateConfirm}
+              className="bg-blue-600 hover:bg-blue-700 min-w-[150px]"
+              disabled={isCreatingUsuario}
+            >
+              {isCreatingUsuario ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creando...
+                </>
+              ) : (
+                "Crear Usuario"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1715,8 +1844,12 @@ export default function Usuarios() {
             <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
-            <Button onClick={confirmEdit} className="bg-orange-600 hover:bg-orange-700">
-              Guardar Cambios
+            <Button
+              onClick={handleOpenEditConfirm}
+              className="bg-orange-600 hover:bg-orange-700"
+              disabled={isUpdatingUsuario}
+            >
+              {isUpdatingUsuario ? "Guardando..." : "Guardar Cambios"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1775,7 +1908,9 @@ export default function Usuarios() {
           if (!open) closeToList();
         }}
       >
-        <DialogContent aria-describedby="delete-usuario-description">
+        <DialogContent
+          onInteractOutside={(e) => e.preventDefault()}
+          aria-describedby="delete-usuario-description">
           <DialogHeader>
             <DialogTitle>Eliminar Usuario</DialogTitle>
             <DialogDescription id="delete-usuario-description">
@@ -1819,7 +1954,9 @@ export default function Usuarios() {
 
       {/* Modal Confirmación Cambio de Estado */}
       <Dialog open={showConfirmEstadoModal} onOpenChange={setShowConfirmEstadoModal}>
-        <DialogContent className="max-w-lg" aria-describedby="confirm-estado-description">
+        <DialogContent
+          onInteractOutside={(e) => e.preventDefault()}
+          className="max-w-lg" aria-describedby="confirm-estado-description">
           <DialogHeader>
             <DialogTitle>Confirmar Cambio de Estado</DialogTitle>
             <DialogDescription id="confirm-estado-description">
@@ -1876,6 +2013,102 @@ export default function Usuarios() {
           <DialogFooter className="flex justify-center">
             <Button onClick={handleSuccessModalClose} className="bg-green-600 hover:bg-green-700">
               Aceptar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isConfirmCreateOpen}
+        modal
+        onOpenChange={handleConfirmCreateModalChange}
+      >
+        <DialogContent
+          className="max-w-lg"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>Confirmar creación</DialogTitle>
+            <DialogDescription>
+              ¿Estás seguro de que deseas crear el usuario ingresado?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 rounded-md border border-gray-200 bg-gray-50 p-3 text-sm">
+            <p>
+              <span className="font-medium text-gray-700">Nombre:</span>{" "}
+              {formNombre} {formApellido}
+            </p>
+            <p>
+              <span className="font-medium text-gray-700">Documento:</span>{" "}
+              {formNumeroDoc}
+            </p>
+            <p>
+              <span className="font-medium text-gray-700">Correo:</span>{" "}
+              {formEmail}
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsConfirmCreateOpen(false)}
+              disabled={isCreatingUsuario}
+            >
+              Cancelar
+            </Button>
+
+            <Button
+              className="bg-blue-600 hover:bg-blue-700 min-w-[140px]"
+              onClick={confirmCreate}
+              disabled={isCreatingUsuario}
+            >
+              {isCreatingUsuario ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creando...
+                </>
+              ) : (
+                "Confirmar"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isConfirmEditOpen}
+        modal
+        onOpenChange={(open: boolean) => {
+          if (!open && !isUpdatingUsuario) setIsConfirmEditOpen(false);
+        }}
+      >
+        <DialogContent
+          className="max-w-lg"
+          onInteractOutside={(e: any) => e.preventDefault()}
+          onEscapeKeyDown={(e: any) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>Confirmar edición</DialogTitle>
+            <DialogDescription>
+              ¿Estás seguro de que deseas guardar los cambios del usuario?
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsConfirmEditOpen(false)}
+              disabled={isUpdatingUsuario}
+            >
+              Cancelar
+            </Button>
+            <Button
+              className="bg-orange-600 hover:bg-orange-700"
+              onClick={confirmEdit}
+              disabled={isUpdatingUsuario}
+            >
+              {isUpdatingUsuario ? "Guardando..." : "Confirmar"}
             </Button>
           </DialogFooter>
         </DialogContent>

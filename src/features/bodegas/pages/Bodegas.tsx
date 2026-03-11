@@ -35,21 +35,19 @@ import {
 import { departamentosColombia } from "../../../data/colombia";
 
 // ✅ TIPOS + SERVICES (AJUSTA ESTA RUTA A TU PROYECTO)
-import type { Bodega } from "../../../data/bodegas";
 import {
   getBodegas,
   createBodega,
   updateBodega,
   deleteBodega,
   toggleEstadoBodega,
+  type Bodega,
+  type CreateBodegaPayload,
+  type UpdateBodegaPayload,
 } from "../services/bodegas.services";
-
 interface BodegasProps {
   triggerCreate?: number;
 }
-
-type BodegaCreatePayload = Omit<Bodega, "id">;
-type BodegaUpdatePayload = Omit<Bodega, "id">;
 
 export default function Bodegas({ triggerCreate }: BodegasProps) {
   const navigate = useNavigate();
@@ -115,8 +113,8 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
     (async () => {
       try {
         setIsLoading(true);
-        const data = await getBodegas();
-        setBodegas(data);
+        const response = await getBodegas();
+        setBodegas(response.data);
       } catch {
         toast.error("No se pudieron cargar las bodegas");
       } finally {
@@ -356,15 +354,20 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
   };
 
   // Services
+  // Services
   const confirmCreate = async () => {
     if (!validateForm()) return;
 
+    if (!formMunicipioId) {
+      toast.error("Debes seleccionar un municipio válido");
+      return;
+    }
+
     try {
-      const payload: BodegaCreatePayload = {
-        nombre: formNombre.trim(),
-        departamento: formDepartamento,
-        municipio: formMunicipio,
+      const payload: CreateBodegaPayload = {
+        nombre_bodega: formNombre.trim(),
         direccion: formDireccion.trim(),
+        id_municipio: Number(formMunicipioId),
         estado: true,
       };
 
@@ -383,14 +386,19 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
       toast.error("No hay bodega seleccionada para editar");
       return;
     }
+
     if (!validateForm()) return;
 
+    if (!formMunicipioId) {
+      toast.error("Debes seleccionar un municipio válido");
+      return;
+    }
+
     try {
-      const payload: BodegaUpdatePayload = {
-        nombre: formNombre.trim(),
-        departamento: formDepartamento,
-        municipio: formMunicipio,
+      const payload: UpdateBodegaPayload = {
+        nombre_bodega: formNombre.trim(),
         direccion: formDireccion.trim(),
+        id_municipio: Number(formMunicipioId),
         estado: bodegaActual.estado,
       };
 

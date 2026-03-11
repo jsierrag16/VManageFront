@@ -1,51 +1,140 @@
-// src/services/bodegas.service.ts
+import api from "@/shared/services/api";
 
-import { Bodega, bodegasData } from "../../../data/bodegas";
+export type BodegaBackend = {
+  id_bodega: number;
+  nombre_bodega: string;
+  direccion: string;
+  id_municipio: number;
+  estado: boolean;
+  municipios?: {
+    id_municipio: number;
+    nombre_municipio: string;
+    departamentos?: {
+      id_departamento: number;
+      nombre_departamento: string;
+    } | null;
+  } | null;
+};
 
-const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
+export type Bodega = {
+  id: number;
+  nombre: string;
+  direccion: string;
+  idMunicipio: number;
+  municipio: string;
+  departamento: string;
+  estado: boolean;
+  raw: BodegaBackend;
+};
 
-/**
- * Service "mock" (temporal).
- * Cuando conectes backend, SOLO cambias este archivo por fetch/axios.
- */
+export type CreateBodegaPayload = {
+  nombre_bodega: string;
+  direccion: string;
+  id_municipio: number;
+  estado?: boolean;
+};
 
-// Simulamos una "BD" en memoria
-let bodegasDB: Bodega[] = [...bodegasData];
+export type UpdateBodegaPayload = Partial<CreateBodegaPayload>;
 
-export async function getBodegas(): Promise<Bodega[]> {
-  await delay(150);
-  return [...bodegasDB];
+type BodegasListRawResponse =
+  | BodegaBackend[]
+  | {
+      page: number;
+      limit: number;
+      total: number;
+      pages: number;
+      data: BodegaBackend[];
+    };
+
+export type BodegasListResponse = {
+  page: number;
+  limit: number;
+  total: number;
+  pages: number;
+  data: Bodega[];
+};
+
+function mapBodegaBackendToFrontend(item: BodegaBackend): Bodega {
+  return {
+    id: item.id_bodega,
+    nombre: item.nombre_bodega,
+    direccion: item.direccion,
+    idMunicipio: item.id_municipio,
+    municipio: item.municipios?.nombre_municipio ?? "",
+    departamento: item.municipios?.departamentos?.nombre_departamento ?? "",
+    estado: item.estado,
+    raw: item,
+  };
 }
 
-export async function createBodega(payload: Omit<Bodega, "id">): Promise<Bodega> {
-  await delay(150);
-  const nextId = bodegasDB.length ? Math.max(...bodegasDB.map(b => b.id)) + 1 : 1;
-  const newBodega: Bodega = { id: nextId, ...payload };
-  bodegasDB = [newBodega, ...bodegasDB];
-  return newBodega;
+function normalizeBodegasResponse(raw: BodegasListRawResponse): BodegasListResponse {
+  if (Array.isArray(raw)) {
+    const mapped = raw.map(mapBodegaBackendToFrontend);
+    return {
+      page: 1,
+      limit: mapped.length || 1,
+      total: mapped.length,
+      pages: 1,
+      data: mapped,
+    };
+  }
+
+  return {
+    page: raw.page,
+    limit: raw.limit,
+    total: raw.total,
+    pages: raw.pages,
+    data: raw.data.map(mapBodegaBackendToFrontend),
+  };
 }
 
-export async function updateBodega(id: number, payload: Omit<Bodega, "id">): Promise<Bodega> {
-  await delay(150);
-  const index = bodegasDB.findIndex(b => b.id === id);
-  if (index === -1) throw new Error("Bodega no encontrada");
+export async function getBodegas(): Promise<BodegasListResponse> {
+  const { data } = await api.get<BodegasListRawResponse>("/bodega", {
+    params: { includeMunicipio: "true" },
+  });
 
-  const updated: Bodega = { id, ...payload };
-  bodegasDB = bodegasDB.map(b => (b.id === id ? updated : b));
-  return updated;
+  return normalizeBodegasResponse(data);
 }
 
-export async function deleteBodega(id: number): Promise<void> {
-  await delay(150);
-  bodegasDB = bodegasDB.filter(b => b.id !== id);
+export async function getBodegaById(id: number): Promise<Bodega> {
+  const { data } = await api.get<BodegaBackend>(`/bodega/${id}`, {
+    params: { includeMunicipio: "true" },
+  });
+
+  return mapBodegaBackendToFrontend(data);
 }
 
-export async function toggleEstadoBodega(id: number): Promise<Bodega> {
-  await delay(150);
-  const bodega = bodegasDB.find(b => b.id === id);
-  if (!bodega) throw new Error("Bodega no encontrada");
+export async function createBodega(payload: CreateBodegaPayload): Promise<Bodega> {
+  const { data } = await api.post<BodegaBackend>("/bodega", payload);
+  return mapBodegaBackendToFrontend(data);
+}
 
-  const updated: Bodega = { ...bodega, estado: !bodega.estado };
-  bodegasDB = bodegasDB.map(b => (b.id === id ? updated : b));
-  return updated;
+export async function updateBodega(
+  id: number,
+  payload: UpdateBodegaPayload
+): Promise<Bodega> {
+  const { data } = await api.patch<BodegaBackend>(`/bodega/${id}`, payload);
+  return mapBodegaBackendToFrontend(data);
+}
+
+export async function deleteBodega(id: number): Promise<Bodega> {
+  const { data } = await api.delete<BodegaBackend>(`/bodega/${id}`);
+  return mapBodegaBackendToFrontend(data);
+}
+
+export async function disableBodega(id: number): Promise<Bodega> {
+  const { data } = await api.patch<BodegaBackend>(`/bodega/${id}/disable`);
+  return mapBodegaBackendToFrontend(data);
+}
+
+export async function enableBodega(id: number): Promise<Bodega> {
+  const { data } = await api.patch<BodegaBackend>(`/bodega/${id}/enable`);
+  return mapBodegaBackendToFrontend(data);
+}
+
+export async function toggleEstadoBodega(bodega: Bodega): Promise<Bodega> {
+  if (bodega.estado) {
+    return disableBodega(bodega.id);
+  }
+  return enableBodega(bodega.id);
 }
