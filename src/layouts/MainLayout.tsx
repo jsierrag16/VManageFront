@@ -93,7 +93,6 @@ export default function MainLayout({
         <Sidebar
           isOpen={isSidebarOpen}
           isMobileOpen={isMobileMenuOpen}
-          currentUser={currentUser}
           activeSection={activeSection}
           onNavigate={(path) => navigate(path)}
           onCloseMobile={() => setIsMobileMenuOpen(false)}

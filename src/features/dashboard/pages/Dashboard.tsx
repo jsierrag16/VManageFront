@@ -1,9 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
 import { toast } from "sonner";
 import { useAuth } from "../../../shared/context/AuthContext";
-import { bodegasData } from "../../../data/bodegas";
+import { getBodegas, type Bodega } from "../../bodegas/services/bodegas.services";
 
 // Componentes
 import { StatsCard } from "../components/StatsCard";
@@ -14,23 +14,42 @@ import { useTraslados } from "../../../shared/context/TrasladosContext";
 import { useProductos } from "../../../shared/context/ProductosContext";
 import { clientesData } from "../../../data/clientes";
 
-
 export default function Dashboard() {
   const { selectedBodegaId } = useAuth();
-
-  // ✅ Convertimos el ID global a nombre (porque tus datos filtran por nombre)
-  const selectedBodegaNombre = useMemo(() => {
-    if (selectedBodegaId === 0) return "Todas las bodegas";
-    const b = bodegasData.find((x) => x.id === selectedBodegaId);
-    return b?.nombre ?? "Todas las bodegas";
-  }, [selectedBodegaId]);
-
   const navigate = useNavigate();
 
   const { traslados } = useTraslados();
   const { productos } = useProductos();
 
   const [activeSection, setActiveSection] = useState("dashboard");
+  const [bodegas, setBodegas] = useState<Bodega[]>([]);
+  const [isLoadingBodegas, setIsLoadingBodegas] = useState(false);
+
+  useEffect(() => {
+    const loadBodegas = async () => {
+      try {
+        setIsLoadingBodegas(true);
+        const response = await getBodegas();
+        setBodegas(response.data);
+      } catch (error) {
+        console.error("Error cargando bodegas en dashboard:", error);
+        toast.error("No se pudieron cargar las bodegas");
+      } finally {
+        setIsLoadingBodegas(false);
+      }
+    };
+
+    void loadBodegas();
+  }, []);
+
+  const selectedBodegaNombre = useMemo(() => {
+    if (selectedBodegaId == null || selectedBodegaId === 0) {
+      return "Todas las bodegas";
+    }
+
+    const bodega = bodegas.find((x) => x.id === selectedBodegaId);
+    return bodega?.nombre ?? "Todas las bodegas";
+  }, [selectedBodegaId, bodegas]);
 
   const dashboardStats = useMemo(() => {
     const ordenesFiltradas =
@@ -74,10 +93,10 @@ export default function Dashboard() {
       selectedBodegaNombre === "Todas las bodegas"
         ? traslados
         : traslados.filter(
-          (t: any) =>
-            t.bodegaOrigen === selectedBodegaNombre ||
-            t.bodegaDestino === selectedBodegaNombre
-        );
+            (t: any) =>
+              t.bodegaOrigen === selectedBodegaNombre ||
+              t.bodegaDestino === selectedBodegaNombre
+          );
 
     const totalVentas = ordenesFiltradas.reduce((sum, o) => sum + o.total, 0);
     const totalClientes = clientesFiltrados.length;
@@ -147,7 +166,10 @@ export default function Dashboard() {
               Bienvenido al panel de control de VManage
             </p>
             <p className="text-xs text-gray-400 mt-1">
-              Bodega seleccionada: <span className="font-medium">{selectedBodegaNombre}</span>
+              Bodega seleccionada:{" "}
+              <span className="font-medium">
+                {isLoadingBodegas ? "Cargando..." : selectedBodegaNombre}
+              </span>
             </p>
           </div>
 

@@ -83,6 +83,7 @@ const permisoPathMap: Record<string, string[]> = {
   "administracion.usuarios.ver": ["administracion", "usuarios", "ver"],
   "administracion.usuarios.crear": ["administracion", "usuarios", "crear"],
   "administracion.usuarios.editar": ["administracion", "usuarios", "editar"],
+  "administracion.usuarios.eliminar": ["administracion", "usuarios", "eliminar"],
   "administracion.usuarios.cambiar_estado": ["administracion", "usuarios", "cambiarEstado"],
   "administracion.usuarios.restablecer_contrasena": ["administracion", "usuarios", "restablecerContrasena"],
 };

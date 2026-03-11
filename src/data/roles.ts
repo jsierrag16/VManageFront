@@ -1,4 +1,3 @@
-// Tipos de permisos por módulo
 export interface Permisos {
   dashboard: {
     acceder: boolean;
@@ -105,9 +104,11 @@ export interface Permisos {
       ver: boolean;
       crear: boolean;
       editar: boolean;
+      eliminar: boolean;
       cambiarEstado: boolean;
       restablecerContrasena: boolean;
     };
+
   };
 }
 
@@ -228,6 +229,7 @@ export const createEmptyPermisos = (): Permisos => ({
       ver: false,
       crear: false,
       editar: false,
+      eliminar: false,
       cambiarEstado: false,
       restablecerContrasena: false,
     },
@@ -341,6 +343,7 @@ export const createFullPermisos = (): Permisos => ({
       ver: true,
       crear: true,
       editar: true,
+      eliminar: true,
       cambiarEstado: true,
       restablecerContrasena: true,
     },

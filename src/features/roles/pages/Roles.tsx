@@ -351,7 +351,6 @@ export default function Roles() {
       toast.error("Por favor corrige los errores en el formulario");
       return;
     }
-
     try {
       const ids_permisos = permisosFrontendToIds(formPermisos, catalogoPermisos);
 
@@ -529,6 +528,7 @@ export default function Roles() {
       newPermisos.administracion.usuarios.ver = !allChecked;
       newPermisos.administracion.usuarios.crear = !allChecked;
       newPermisos.administracion.usuarios.editar = !allChecked;
+      newPermisos.administracion.usuarios.eliminar = !allChecked;
       newPermisos.administracion.usuarios.cambiarEstado = !allChecked;
       newPermisos.administracion.usuarios.restablecerContrasena = !allChecked;
     }
@@ -624,6 +624,7 @@ export default function Roles() {
         formPermisos.administracion.usuarios.ver &&
         formPermisos.administracion.usuarios.crear &&
         formPermisos.administracion.usuarios.editar &&
+        formPermisos.administracion.usuarios.eliminar &&
         formPermisos.administracion.usuarios.cambiarEstado &&
         formPermisos.administracion.usuarios.restablecerContrasena
       );
@@ -813,62 +814,62 @@ export default function Roles() {
           </Table>
         </div>
       </div>
-        {/* Paginación */}
-        {filteredRoles.length > 0 && (
-          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
-            <div className="text-sm text-gray-600">
-              Mostrando {startIndex + 1} -{" "}
-              {Math.min(endIndex, filteredRoles.length)} de{" "}
-              {filteredRoles.length} roles
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  handlePageChange(currentPage - 1)
-                }
-                disabled={currentPage === 1}
-                className="h-8"
-              >
-                <ChevronLeft size={16} />
-                Anterior
-              </Button>
-              <div className="flex items-center gap-1">
-                {Array.from(
-                  { length: totalPages },
-                  (_, i) => i + 1,
-                ).map((page) => (
-                  <Button
-                    key={page}
-                    variant={
-                      currentPage === page
-                        ? "default"
-                        : "outline"
-                    }
-                    size="sm"
-                    onClick={() => handlePageChange(page)}
-                    className="h-8 w-8 p-0"
-                  >
-                    {page}
-                  </Button>
-                ))}
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  handlePageChange(currentPage + 1)
-                }
-                disabled={currentPage === totalPages}
-                className="h-8"
-              >
-                Siguiente
-                <ChevronRight size={16} />
-              </Button>
-            </div>
+      {/* Paginación */}
+      {filteredRoles.length > 0 && (
+        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
+          <div className="text-sm text-gray-600">
+            Mostrando {startIndex + 1} -{" "}
+            {Math.min(endIndex, filteredRoles.length)} de{" "}
+            {filteredRoles.length} roles
           </div>
-        )}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                handlePageChange(currentPage - 1)
+              }
+              disabled={currentPage === 1}
+              className="h-8"
+            >
+              <ChevronLeft size={16} />
+              Anterior
+            </Button>
+            <div className="flex items-center gap-1">
+              {Array.from(
+                { length: totalPages },
+                (_, i) => i + 1,
+              ).map((page) => (
+                <Button
+                  key={page}
+                  variant={
+                    currentPage === page
+                      ? "default"
+                      : "outline"
+                  }
+                  size="sm"
+                  onClick={() => handlePageChange(page)}
+                  className="h-8 w-8 p-0"
+                >
+                  {page}
+                </Button>
+              ))}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                handlePageChange(currentPage + 1)
+              }
+              disabled={currentPage === totalPages}
+              className="h-8"
+            >
+              Siguiente
+              <ChevronRight size={16} />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Modal Ver Detalles */}
       <Dialog
@@ -1054,6 +1055,7 @@ export default function Roles() {
                       <p className="pl-2">• Ver: {rolSeleccionado.permisos.administracion.usuarios.ver ? "✓" : "✗"}</p>
                       <p className="pl-2">• Crear: {rolSeleccionado.permisos.administracion.usuarios.crear ? "✓" : "✗"}</p>
                       <p className="pl-2">• Editar: {rolSeleccionado.permisos.administracion.usuarios.editar ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Eliminar: {rolSeleccionado.permisos.administracion.usuarios.eliminar ? "✓" : "✗"}</p>
                       <p className="pl-2">• Cambiar Estado: {rolSeleccionado.permisos.administracion.usuarios.cambiarEstado ? "✓" : "✗"}</p>
                       <p className="pl-2">• Restablecer Contraseña: {rolSeleccionado.permisos.administracion.usuarios.restablecerContrasena ? "✓" : "✗"}</p>
                     </div>

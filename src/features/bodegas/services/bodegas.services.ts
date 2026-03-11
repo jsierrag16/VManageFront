@@ -1,5 +1,40 @@
 import api from "@/shared/services/api";
 
+export type DepartamentoBackend = {
+  id_departamento: number;
+  nombre_departamento: string;
+  id_pais: number;
+};
+
+export type MunicipioBackend = {
+  id_municipio: number;
+  nombre_municipio: string;
+  id_departamento: number;
+  departamentos?: {
+    id_departamento: number;
+    nombre_departamento: string;
+    id_pais: number;
+    paises?: {
+      id_pais: number;
+      nombre_pais: string;
+    } | null;
+  } | null;
+};
+
+export type DepartamentoOption = {
+  id: number;
+  nombre: string;
+  raw: DepartamentoBackend;
+};
+
+export type MunicipioOption = {
+  id: number;
+  nombre: string;
+  idDepartamento: number;
+  departamento: string;
+  raw: MunicipioBackend;
+};
+
 export type BodegaBackend = {
   id_bodega: number;
   nombre_bodega: string;
@@ -9,11 +44,15 @@ export type BodegaBackend = {
   municipios?: {
     id_municipio: number;
     nombre_municipio: string;
+    id_departamento: number;
     departamentos?: {
       id_departamento: number;
       nombre_departamento: string;
     } | null;
   } | null;
+  _count?: {
+    bodegas_por_usuario: number;
+  };
 };
 
 export type Bodega = {
@@ -24,6 +63,8 @@ export type Bodega = {
   municipio: string;
   departamento: string;
   estado: boolean;
+  tieneUsuariosAsignados: boolean;
+  usuariosAsignados: number;
   raw: BodegaBackend;
 };
 
@@ -39,12 +80,12 @@ export type UpdateBodegaPayload = Partial<CreateBodegaPayload>;
 type BodegasListRawResponse =
   | BodegaBackend[]
   | {
-      page: number;
-      limit: number;
-      total: number;
-      pages: number;
-      data: BodegaBackend[];
-    };
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+    data: BodegaBackend[];
+  };
 
 export type BodegasListResponse = {
   page: number;
@@ -55,6 +96,8 @@ export type BodegasListResponse = {
 };
 
 function mapBodegaBackendToFrontend(item: BodegaBackend): Bodega {
+  const usuariosAsignados = item._count?.bodegas_por_usuario ?? 0;
+
   return {
     id: item.id_bodega,
     nombre: item.nombre_bodega,
@@ -63,6 +106,8 @@ function mapBodegaBackendToFrontend(item: BodegaBackend): Bodega {
     municipio: item.municipios?.nombre_municipio ?? "",
     departamento: item.municipios?.departamentos?.nombre_departamento ?? "",
     estado: item.estado,
+    tieneUsuariosAsignados: usuariosAsignados > 0,
+    usuariosAsignados,
     raw: item,
   };
 }
@@ -85,6 +130,24 @@ function normalizeBodegasResponse(raw: BodegasListRawResponse): BodegasListRespo
     total: raw.total,
     pages: raw.pages,
     data: raw.data.map(mapBodegaBackendToFrontend),
+  };
+}
+
+function mapDepartamento(item: DepartamentoBackend): DepartamentoOption {
+  return {
+    id: item.id_departamento,
+    nombre: item.nombre_departamento,
+    raw: item,
+  };
+}
+
+function mapMunicipio(item: MunicipioBackend): MunicipioOption {
+  return {
+    id: item.id_municipio,
+    nombre: item.nombre_municipio,
+    idDepartamento: item.id_departamento,
+    departamento: item.departamentos?.nombre_departamento ?? "",
+    raw: item,
   };
 }
 
@@ -132,9 +195,30 @@ export async function enableBodega(id: number): Promise<Bodega> {
   return mapBodegaBackendToFrontend(data);
 }
 
-export async function toggleEstadoBodega(bodega: Bodega): Promise<Bodega> {
-  if (bodega.estado) {
-    return disableBodega(bodega.id);
+export async function toggleEstadoBodega(
+  id: number,
+  estadoActual: boolean
+): Promise<Bodega> {
+  if (estadoActual) {
+    return disableBodega(id);
   }
-  return enableBodega(bodega.id);
+  return enableBodega(id);
+}
+
+export async function getDepartamentos(): Promise<DepartamentoOption[]> {
+  const { data } = await api.get<DepartamentoBackend[]>("/departamentos", {
+    params: { id_pais: 1 },
+  });
+
+  return data.map(mapDepartamento);
+}
+
+export async function getMunicipios(
+  idDepartamento: number
+): Promise<MunicipioOption[]> {
+  const { data } = await api.get<MunicipioBackend[]>("/municipios", {
+    params: { id_departamento: idDepartamento },
+  });
+
+  return data.map(mapMunicipio);
 }

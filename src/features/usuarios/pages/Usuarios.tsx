@@ -96,6 +96,7 @@ export default function Usuarios() {
   const [formNumeroDoc, setFormNumeroDoc] = useState("");
   const [formNombre, setFormNombre] = useState("");
   const [formApellido, setFormApellido] = useState("");
+  const [formFechaNacimiento, setFormFechaNacimiento] = useState("");
   const [formEmail, setFormEmail] = useState("");
   const [formTelefono, setFormTelefono] = useState("");
   const [formBodegasIds, setFormBodegasIds] = useState<number[]>([]);
@@ -106,11 +107,21 @@ export default function Usuarios() {
   const [bodegasCatalogo, setBodegasCatalogo] = useState<OpcionCatalogo[]>([]);
   const [isLoadingCatalogos, setIsLoadingCatalogos] = useState(false);
 
+  const { tienePermiso } = useAuth();
+
+  const canViewUsuarios = tienePermiso("administracion", "usuarios", "ver");
+  const canCreateUsuarios = tienePermiso("administracion", "usuarios", "crear");
+  const canEditUsuarios = tienePermiso("administracion", "usuarios", "editar");
+  const canChangeEstadoUsuarios = tienePermiso("administracion", "usuarios", "cambiarEstado");
+  const canResetPasswordUsuarios = tienePermiso("administracion", "usuarios", "restablecerContrasena");
+  const canDeleteUsuarios = tienePermiso("administracion", "usuarios", "eliminar");
+
   const [errors, setErrors] = useState({
     tipoDoc: "",
     numeroDoc: "",
     nombre: "",
     apellido: "",
+    fechaNacimiento: "",
     email: "",
     telefono: "",
     bodegas: "",
@@ -121,6 +132,7 @@ export default function Usuarios() {
     tipoDoc: false,
     numeroDoc: false,
     nombre: false,
+    fechaNacimiento: false,
     apellido: false,
     email: false,
     telefono: false,
@@ -213,6 +225,7 @@ export default function Usuarios() {
     setFormNumeroDoc(usuarioSeleccionado.numeroDocumento);
     setFormNombre(usuarioSeleccionado.nombre);
     setFormApellido(usuarioSeleccionado.apellido);
+    setFormFechaNacimiento(formatDateForInput(usuarioSeleccionado.fechaNacimiento));
     setFormEmail(usuarioSeleccionado.email);
     setFormGeneroId(usuarioSeleccionado.idGenero ?? "");
     setFormTelefono(usuarioSeleccionado.telefono);
@@ -224,6 +237,7 @@ export default function Usuarios() {
       numeroDoc: "",
       nombre: "",
       apellido: "",
+      fechaNacimiento: "",
       email: "",
       telefono: "",
       bodegas: "",
@@ -235,6 +249,7 @@ export default function Usuarios() {
       numeroDoc: false,
       nombre: false,
       apellido: false,
+      fechaNacimiento: false,
       email: false,
       telefono: false,
       bodegas: false,
@@ -249,6 +264,7 @@ export default function Usuarios() {
     setFormNumeroDoc("");
     setFormNombre("");
     setFormApellido("");
+    setFormFechaNacimiento("");
     setFormEmail("");
     setFormGeneroId("");
     setFormTelefono("");
@@ -260,6 +276,7 @@ export default function Usuarios() {
       numeroDoc: "",
       nombre: "",
       apellido: "",
+      fechaNacimiento: "",
       email: "",
       telefono: "",
       bodegas: "",
@@ -271,6 +288,7 @@ export default function Usuarios() {
       numeroDoc: false,
       nombre: false,
       apellido: false,
+      fechaNacimiento: false,
       email: false,
       telefono: false,
       bodegas: false,
@@ -337,6 +355,24 @@ export default function Usuarios() {
     return "";
   };
 
+  const formatDateForInput = (value?: string | Date | null) => {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toISOString().split("T")[0];
+  };
+
+  const validateFechaNacimientoField = (value: string) => {
+    if (!value) return "";
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return "La fecha de nacimiento no es válida";
+    }
+
+    return "";
+  };
+
   const validateEmailField = (value: string) => {
     if (!value.trim()) {
       return "El email es requerido";
@@ -378,6 +414,10 @@ export default function Usuarios() {
 
   // Handlers con validación en tiempo real
   const handleOpenResetDialog = (u: Usuario) => {
+    if (!canResetPasswordUsuarios) {
+      toast.error("No tienes permiso para restablecer contraseñas");
+      return;
+    }
     const email = (u.email ?? "").trim();
 
     if (!email) {
@@ -395,6 +435,10 @@ export default function Usuarios() {
   };
 
   const handleSendPasswordReset = async () => {
+    if (!canResetPasswordUsuarios) {
+      toast.error("No tienes permiso para restablecer contraseñas");
+      return;
+    }
     try {
       setSendingReset(true);
 
@@ -499,6 +543,14 @@ export default function Usuarios() {
     setErrors({ ...errors, apellido: validateApellido(formApellido) });
   };
 
+  const handleFechaNacimientoBlur = () => {
+    setTouched({ ...touched, fechaNacimiento: true });
+    setErrors({
+      ...errors,
+      fechaNacimiento: validateFechaNacimientoField(formFechaNacimiento),
+    });
+  };
+
   const handleEmailBlur = () => {
     setTouched({ ...touched, email: true });
     setErrors({ ...errors, email: validateEmailField(formEmail) });
@@ -559,6 +611,7 @@ export default function Usuarios() {
     setFormNumeroDoc("");
     setFormNombre("");
     setFormApellido("");
+    setFormFechaNacimiento("");
     setFormEmail("");
     setFormTelefono("");
     setFormBodegasIds([]);
@@ -569,6 +622,7 @@ export default function Usuarios() {
       numeroDoc: "",
       nombre: "",
       apellido: "",
+      fechaNacimiento: "",
       email: "",
       telefono: "",
       bodegas: "",
@@ -580,6 +634,7 @@ export default function Usuarios() {
       numeroDoc: false,
       nombre: false,
       apellido: false,
+      fechaNacimiento: false,
       email: false,
       telefono: false,
       bodegas: false,
@@ -594,6 +649,10 @@ export default function Usuarios() {
   };
 
   const handleDelete = (u: Usuario) => {
+    if (!canDeleteUsuarios) {
+      toast.error("No tienes permiso para eliminar usuarios");
+      return;
+    }
     if (loggedUserId && u.id === loggedUserId) {
       toast.error("No puedes eliminar tu propio usuario");
       return;
@@ -608,6 +667,7 @@ export default function Usuarios() {
       numeroDoc: true,
       nombre: true,
       apellido: true,
+      fechaNacimiento: true,
       email: true,
       telefono: true,
       bodegas: true,
@@ -618,6 +678,7 @@ export default function Usuarios() {
     const numeroDocError = validateNumeroDocumento(formNumeroDoc);
     const nombreError = validateNombre(formNombre);
     const apellidoError = validateApellido(formApellido);
+    const fechaNacimientoError = validateFechaNacimientoField(formFechaNacimiento);
     const emailError = validateEmailField(formEmail);
     const telefonoError = validateTelefonoField(formTelefono);
     const bodegasError = validateBodegasField(formBodegasIds);
@@ -628,6 +689,7 @@ export default function Usuarios() {
       numeroDoc: numeroDocError,
       nombre: nombreError,
       apellido: apellidoError,
+      fechaNacimiento: fechaNacimientoError,
       email: emailError,
       telefono: telefonoError,
       bodegas: bodegasError,
@@ -639,6 +701,7 @@ export default function Usuarios() {
       numeroDocError ||
       nombreError ||
       apellidoError ||
+      fechaNacimientoError ||
       emailError ||
       telefonoError ||
       bodegasError ||
@@ -650,6 +713,8 @@ export default function Usuarios() {
 
     return true;
   };
+
+  const { refreshUsuario } = useAuth();
 
   const confirmCreate = async () => {
     if (isCreatingUsuario) return;
@@ -676,6 +741,7 @@ export default function Usuarios() {
         email: formEmail.trim().toLowerCase(),
         id_rol: formRolId,
         id_genero: formGeneroId === "" ? undefined : Number(formGeneroId),
+        fecha_nacimiento: formFechaNacimiento || undefined,
         estado: true,
         telefono: formTelefono.trim() || undefined,
       });
@@ -748,6 +814,7 @@ export default function Usuarios() {
         num_documento: formNumeroDoc.trim(),
         email: formEmail.trim(),
         telefono: formTelefono.trim() || undefined,
+        fecha_nacimiento: formFechaNacimiento || undefined,
         id_genero: formGeneroId === "" ? undefined : Number(formGeneroId),
         ...(isSelf ? {} : { id_rol: formRolId }),
       });
@@ -770,6 +837,9 @@ export default function Usuarios() {
         ),
       ]);
 
+      if (isSelf) {
+        await refreshUsuario();
+      }
       await loadUsuarios();
 
       setIsConfirmEditOpen(false);
@@ -812,6 +882,10 @@ export default function Usuarios() {
   };
 
   const confirmDelete = async () => {
+    if (!canDeleteUsuarios) {
+      toast.error("No tienes permiso para eliminar usuarios");
+      return;
+    }
     if (!usuarioSeleccionado) return;
 
     if (loggedUserId && usuarioSeleccionado.id === loggedUserId) {
@@ -838,11 +912,25 @@ export default function Usuarios() {
     setCurrentPage(page);
   };
 
+  const handleFechaNacimientoChange = (value: string) => {
+    setFormFechaNacimiento(value);
+    if (touched.fechaNacimiento) {
+      setErrors({
+        ...errors,
+        fechaNacimiento: validateFechaNacimientoField(value),
+      });
+    }
+  };
+
   const handleSuccessModalClose = () => {
     setShowSuccessModal(false);
   };
 
   const toggleEstado = (u: Usuario) => {
+    if (!canChangeEstadoUsuarios) {
+      toast.error("No tienes permiso para cambiar el estado de usuarios");
+      return;
+    }
     if (loggedUserId && u.id === loggedUserId) {
       toast.error("No puedes inhabilitar tu propio usuario");
       return;
@@ -852,6 +940,10 @@ export default function Usuarios() {
   };
 
   const handleConfirmEstado = async () => {
+    if (!canChangeEstadoUsuarios) {
+      toast.error("No tienes permiso para cambiar el estado de usuarios");
+      return;
+    }
     if (!usuarioParaCambioEstado) return;
 
     if (loggedUserId && usuarioParaCambioEstado.id === loggedUserId) {
@@ -914,6 +1006,21 @@ export default function Usuarios() {
     }
   };
 
+  if (!canViewUsuarios) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold text-gray-800">
+            Sin acceso al módulo
+          </h2>
+          <p className="text-gray-500 mt-2">
+            No tienes permisos para visualizar usuarios.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -974,10 +1081,12 @@ export default function Usuarios() {
           </Button>
         </div>
 
-        <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
-          <Plus size={18} className="mr-2" />
-          Nuevo Usuario
-        </Button>
+        {canCreateUsuarios && (
+          <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
+            <Plus size={18} className="mr-2" />
+            Nuevo Usuario
+          </Button>
+        )}
       </div>
 
       {/* Table */}
@@ -1055,7 +1164,7 @@ export default function Usuarios() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          disabled={isSelfRow}
+                          disabled={isSelfRow || !canChangeEstadoUsuarios}
                           onClick={() => {
                             if (isSelfRow) {
                               toast.error("No puedes inhabilitar tu propio usuario");
@@ -1075,16 +1184,17 @@ export default function Usuarios() {
 
                       <TableCell>
                         <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleOpenResetDialog(usuario)}
-                            className="h-8 w-8 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
-                            title="Enviar link de contraseña"
-                          >
-                            <Mail size={16} />
-                          </Button>
-
+                          {canResetPasswordUsuarios && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleOpenResetDialog(usuario)}
+                              className="h-8 w-8 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                              title="Enviar link de contraseña"
+                            >
+                              <Mail size={16} />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="icon"
@@ -1094,34 +1204,36 @@ export default function Usuarios() {
                           >
                             <Eye size={16} />
                           </Button>
-
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleEdit(usuario)}
-                            className="h-8 w-8 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
-                            title="Editar"
-                          >
-                            <Edit size={16} />
-                          </Button>
-
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDelete(usuario)}
-                            disabled={isSelfRow}
-                            className={`h-8 w-8 ${isSelfRow
-                              ? "opacity-40 cursor-not-allowed"
-                              : "text-red-600 hover:text-red-700 hover:bg-red-50"
-                              }`}
-                            title={
-                              isSelfRow
-                                ? "No puedes eliminar tu propio usuario"
-                                : "Eliminar"
-                            }
-                          >
-                            <Trash2 size={16} />
-                          </Button>
+                          {canEditUsuarios && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEdit(usuario)}
+                              className="h-8 w-8 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                              title="Editar"
+                            >
+                              <Edit size={16} />
+                            </Button>
+                          )}
+                          {canDeleteUsuarios && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDelete(usuario)}
+                              disabled={isSelfRow}
+                              className={`h-8 w-8 ${isSelfRow
+                                ? "opacity-40 cursor-not-allowed"
+                                : "text-red-600 hover:text-red-700 hover:bg-red-50"
+                                }`}
+                              title={
+                                isSelfRow
+                                  ? "No puedes eliminar tu propio usuario"
+                                  : "Eliminar"
+                              }
+                            >
+                              <Trash2 size={16} />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -1292,6 +1404,13 @@ export default function Usuarios() {
                       <div className="text-xs text-gray-500">Apellido</div>
                       <div className="mt-1 text-base font-medium text-gray-900">
                         {usuarioSeleccionado.apellido}
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg bg-gray-50 px-4 py-3">
+                      <div className="text-xs text-gray-500">Fecha de Nacimiento</div>
+                      <div className="mt-1 text-base font-medium text-gray-900">
+                        {usuarioSeleccionado.fechaNacimiento}
                       </div>
                     </div>
 
@@ -1484,26 +1603,37 @@ export default function Usuarios() {
                 </div>
               </div>
 
-              <div>
-                <Label htmlFor="create-genero">Género</Label>
-                <Select
-                  value={formGeneroId === "" ? "" : String(formGeneroId)}
-                  onValueChange={(value) =>
-                    setFormGeneroId(value ? Number(value) : "")
-                  }
-                  disabled={isCreatingUsuario || isLoadingCatalogos}
-                >
-                  <SelectTrigger id="create-genero">
-                    <SelectValue placeholder="Selecciona un género" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {generosCatalogo.map((item) => (
-                      <SelectItem key={item.id} value={String(item.id)}>
-                        {item.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="create-fecha-nacimiento">Fecha de Nacimiento</Label>
+                  <Input
+                    id="create-fecha-nacimiento"
+                    type="date"
+                    value={formFechaNacimiento}
+                    onChange={(e) => setFormFechaNacimiento(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="create-genero">Género</Label>
+                  <Select
+                    value={formGeneroId === "" ? "" : String(formGeneroId)}
+                    onValueChange={(value) =>
+                      setFormGeneroId(value ? Number(value) : "")
+                    }
+                  >
+                    <SelectTrigger id="create-genero">
+                      <SelectValue placeholder="Selecciona un género" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {generosCatalogo.map((item) => (
+                        <SelectItem key={item.id} value={String(item.id)}>
+                          {item.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -1734,25 +1864,38 @@ export default function Usuarios() {
               </div>
             </div>
 
-            <div>
-              <Label htmlFor="edit-genero">Género</Label>
-              <Select
-                value={formGeneroId === "" ? "" : String(formGeneroId)}
-                onValueChange={(value) =>
-                  setFormGeneroId(value ? Number(value) : "")
-                }
-              >
-                <SelectTrigger id="edit-genero">
-                  <SelectValue placeholder="Selecciona un género" />
-                </SelectTrigger>
-                <SelectContent>
-                  {generosCatalogo.map((item) => (
-                    <SelectItem key={item.id} value={String(item.id)}>
-                      {item.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-fecha-nacimiento">Fecha de Nacimiento</Label>
+                <Input
+                  id="edit-fecha-nacimiento"
+                  type="date"
+                  value={formFechaNacimiento}
+                  onChange={(e) => handleFechaNacimientoChange(e.target.value)}
+                  onBlur={handleFechaNacimientoBlur}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="edit-genero">Género</Label>
+                <Select
+                  value={formGeneroId === "" ? "" : String(formGeneroId)}
+                  onValueChange={(value) =>
+                    setFormGeneroId(value ? Number(value) : "")
+                  }
+                >
+                  <SelectTrigger id="edit-genero">
+                    <SelectValue placeholder="Selecciona un género" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {generosCatalogo.map((item) => (
+                      <SelectItem key={item.id} value={String(item.id)}>
+                        {item.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

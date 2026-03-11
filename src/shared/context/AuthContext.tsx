@@ -5,6 +5,7 @@ import {
   useEffect,
   ReactNode,
   useMemo,
+  useCallback,
 } from "react";
 
 import { UsuarioSistema } from "../../data/usuarios-sistema";
@@ -23,6 +24,7 @@ interface AuthContextType {
 
   setSession: (token: string, usuario: UsuarioSistema | any) => void;
   setUsuario: (usuario: UsuarioSistema | null) => void;
+  refreshUsuario: () => Promise<UsuarioSistema | null>;
   logout: () => void;
 
   tienePermiso: (
@@ -47,6 +49,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [selectedBodegaId, setSelectedBodegaIdState] =
     useState<BodegaId | null>(null);
 
+  const setUsuario = useCallback((nuevoUsuario: UsuarioSistema | null) => {
+    setUsuarioState(nuevoUsuario);
+
+    if (nuevoUsuario) {
+      localStorage.setItem("usuario", JSON.stringify(nuevoUsuario));
+    } else {
+      localStorage.removeItem("usuario");
+    }
+  }, []);
+
+  const logout = useCallback(() => {
+    setUsuarioState(null);
+    setToken(null);
+    setSelectedBodegaIdState(null);
+
+    localStorage.removeItem("token");
+    localStorage.removeItem("usuario");
+    localStorage.removeItem("isAuthenticated");
+  }, []);
+
+  const refreshUsuario = useCallback(async (): Promise<UsuarioSistema | null> => {
+    const tokenGuardado = localStorage.getItem("token");
+    if (!tokenGuardado) return null;
+
+    try {
+      const userBackend = await getMe();
+      const userMapeado = authUserToUsuarioSistema(userBackend);
+      setUsuario(userMapeado);
+      return userMapeado;
+    } catch (error) {
+      console.error("Error refrescando usuario:", error);
+      logout();
+      return null;
+    }
+  }, [logout, setUsuario]);
+
   useEffect(() => {
     const tokenGuardado = localStorage.getItem("token");
     const usuarioGuardado = localStorage.getItem("usuario");
@@ -69,28 +107,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!token) return;
-
-    (async () => {
-      try {
-        const userBackend = await getMe();
-        const userMapeado = authUserToUsuarioSistema(userBackend);
-        setUsuario(userMapeado);
-      } catch {
-        logout();
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
-
-  const setUsuario = (nuevoUsuario: UsuarioSistema | null) => {
-    setUsuarioState(nuevoUsuario);
-
-    if (nuevoUsuario) {
-      localStorage.setItem("usuario", JSON.stringify(nuevoUsuario));
-    } else {
-      localStorage.removeItem("usuario");
-    }
-  };
+    void refreshUsuario();
+  }, [token, refreshUsuario]);
 
   const setSession = (newToken: string, newUser: UsuarioSistema | any) => {
     setToken(newToken);
@@ -101,19 +119,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ? newUser
         : authUserToUsuarioSistema(newUser);
 
-    setUsuarioState(usuarioNormalizado);
-    localStorage.setItem("usuario", JSON.stringify(usuarioNormalizado));
+    setUsuario(usuarioNormalizado);
     localStorage.setItem("isAuthenticated", "true");
-  };
-
-  const logout = () => {
-    setUsuarioState(null);
-    setToken(null);
-    setSelectedBodegaIdState(null);
-
-    localStorage.removeItem("token");
-    localStorage.removeItem("usuario");
-    localStorage.removeItem("isAuthenticated");
   };
 
   const puedeVerBodega = (bodegaId: BodegaId) => {
@@ -214,6 +221,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setSession,
     setUsuario,
+    refreshUsuario,
     logout,
     tienePermiso,
 

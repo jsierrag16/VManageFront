@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { useAuth } from "@/shared/context/AuthContext";
 import { Search, Plus, Edit, Trash2, CheckCircle, Filter } from "lucide-react";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -31,12 +30,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../../shared/components/ui/select";
-
-import { departamentosColombia } from "../../../data/colombia";
-
-// ✅ TIPOS + SERVICES (AJUSTA ESTA RUTA A TU PROYECTO)
 import {
   getBodegas,
+  getDepartamentos,
+  getMunicipios,
   createBodega,
   updateBodega,
   deleteBodega,
@@ -44,6 +41,8 @@ import {
   type Bodega,
   type CreateBodegaPayload,
   type UpdateBodegaPayload,
+  type DepartamentoOption,
+  type MunicipioOption,
 } from "../services/bodegas.services";
 interface BodegasProps {
   triggerCreate?: number;
@@ -63,8 +62,6 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
   // ✅ datos
   const [bodegas, setBodegas] = useState<Bodega[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-
-  const { selectedBodegaId } = useAuth();
 
   // ✅ bodega actual por URL
   const bodegaActual = useMemo(() => {
@@ -90,9 +87,16 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
 
   // Form
   const [formNombre, setFormNombre] = useState("");
+  const [formDepartamentoId, setFormDepartamentoId] = useState<number | "">("");
+  const [formMunicipioId, setFormMunicipioId] = useState<number | "">("");
   const [formDepartamento, setFormDepartamento] = useState("");
   const [formMunicipio, setFormMunicipio] = useState("");
+  const [departamentosCatalogo, setDepartamentosCatalogo] = useState<DepartamentoOption[]>([]);
+  const [municipiosCatalogo, setMunicipiosCatalogo] = useState<MunicipioOption[]>([]);
+  const [isLoadingCatalogos, setIsLoadingCatalogos] = useState(false);
   const [formDireccion, setFormDireccion] = useState("");
+
+
 
   const [errors, setErrors] = useState({
     nombre: "",
@@ -110,24 +114,18 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
 
   // ✅ cargar bodegas
   useEffect(() => {
-    (async () => {
-      try {
-        setIsLoading(true);
-        const response = await getBodegas();
-        setBodegas(response.data);
-      } catch {
-        toast.error("No se pudieron cargar las bodegas");
-      } finally {
-        setIsLoading(false);
-      }
-    })();
+    void Promise.all([loadBodegas(), loadDepartamentos()]);
   }, []);
 
   const resetForm = () => {
     setFormNombre("");
     setFormDepartamento("");
     setFormMunicipio("");
+    setFormDepartamentoId("");
+    setFormMunicipioId("");
     setFormDireccion("");
+    setMunicipiosCatalogo([]);
+
     setErrors({ nombre: "", departamento: "", municipio: "", direccion: "" });
     setTouched({
       nombre: false,
@@ -155,16 +153,21 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
   // ✅ /editar: si no existe, sí mostramos error
   useEffect(() => {
     if (!isEditar) return;
+    if (isLoading) return;
 
     if (!bodegaActual) {
       toast.error("Bodega no encontrada");
-      navigate("/app/bodegas"); // ✅ usa navigate directo
+      navigate("/app/bodegas");
       return;
     }
+
+    const idDepartamento = bodegaActual.raw.municipios?.id_departamento ?? "";
 
     setFormNombre(bodegaActual.nombre);
     setFormDepartamento(bodegaActual.departamento);
     setFormMunicipio(bodegaActual.municipio);
+    setFormDepartamentoId(idDepartamento);
+    setFormMunicipioId(bodegaActual.idMunicipio);
     setFormDireccion(bodegaActual.direccion);
 
     setErrors({ nombre: "", departamento: "", municipio: "", direccion: "" });
@@ -174,19 +177,26 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
       municipio: false,
       direccion: false,
     });
-  }, [isEditar, bodegaActual?.id]); // ✅ SOLO id
+  }, [isEditar, isLoading, bodegaActual, navigate]);
 
 
-  // ✅ /eliminar: si no existe, NO toast (evita superposición al eliminar)
   useEffect(() => {
     if (!isEliminar) return;
+    if (isLoading) return;
 
     if (!bodegaActual) {
       goList();
+    }
+  }, [isEliminar, isLoading, bodegaActual]);
+
+  useEffect(() => {
+    if (!formDepartamentoId) {
+      setMunicipiosCatalogo([]);
       return;
     }
-  }, [isEliminar, bodegaActual, goList]);
 
+    void loadMunicipios(Number(formDepartamentoId));
+  }, [formDepartamentoId]);
 
   // Validaciones
   const validateNombre = (value: string) => {
@@ -215,42 +225,66 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
     return "";
   };
 
-  // Municipios segun depto
-  const municipiosDisponibles = useMemo(() => {
-    const dept = departamentosColombia.find((d) => d.nombre === formDepartamento);
-    return dept ? dept.municipios : [];
-  }, [formDepartamento]);
+  const loadBodegas = async () => {
+    try {
+      setIsLoading(true);
+      const response = await getBodegas();
+      setBodegas(response.data);
+    } catch (error) {
+      console.error("Error cargando bodegas:", error);
+      toast.error("No se pudieron cargar las bodegas");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  // Reset municipio cuando cambia depto
-  useEffect(() => {
-    setFormMunicipio("");
-  }, [formDepartamento]);
+  const loadDepartamentos = async () => {
+    try {
+      setIsLoadingCatalogos(true);
+      const data = await getDepartamentos();
+      setDepartamentosCatalogo(data);
+    } catch (error) {
+      console.error("Error cargando departamentos:", error);
+      toast.error("No se pudieron cargar los departamentos");
+    } finally {
+      setIsLoadingCatalogos(false);
+    }
+  };
+
+  const loadMunicipios = async (idDepartamento: number) => {
+    try {
+      setIsLoadingCatalogos(true);
+      const data = await getMunicipios(idDepartamento);
+      setMunicipiosCatalogo(data);
+    } catch (error) {
+      console.error("Error cargando municipios:", error);
+      toast.error("No se pudieron cargar los municipios");
+    } finally {
+      setIsLoadingCatalogos(false);
+    }
+  };
+
+  // Municipios segun depto
+  const municipiosDisponibles = municipiosCatalogo;
 
   // 🔹 1. Filtrado
   const filteredBodegas = useMemo(() => {
     return bodegas.filter((bodega) => {
       const searchLower = searchTerm.toLowerCase();
 
-      // 🔹 Filtro por bodega seleccionada en navbar
-      // 0 = Todas
-      const matchesSelectedBodega =
-        selectedBodegaId === 0 || bodega.id === selectedBodegaId;
-
-      // 🔹 Filtro búsqueda
       const matchesSearch =
         bodega.nombre.toLowerCase().includes(searchLower) ||
         bodega.departamento.toLowerCase().includes(searchLower) ||
         bodega.municipio.toLowerCase().includes(searchLower) ||
         bodega.direccion.toLowerCase().includes(searchLower);
 
-      // 🔹 Filtro estado
       let matchesEstado = true;
       if (estadoFilter === "activas") matchesEstado = bodega.estado === true;
       else if (estadoFilter === "inactivas") matchesEstado = bodega.estado === false;
 
-      return matchesSelectedBodega && matchesSearch && matchesEstado;
+      return matchesSearch && matchesEstado;
     });
-  }, [bodegas, searchTerm, estadoFilter, selectedBodegaId]);
+  }, [bodegas, searchTerm, estadoFilter]);
 
   // 🔹 2. Paginación (DEBE IR DESPUÉS)
   const [currentPage, setCurrentPage] = useState(1);
@@ -269,26 +303,58 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
   // Handlers form con validación
   const handleNombreChange = (value: string) => {
     setFormNombre(value);
-    if (touched.nombre)
+    if (touched.nombre) {
       setErrors((prev) => ({ ...prev, nombre: validateNombre(value) }));
+    }
   };
+
   const handleDepartamentoChange = (value: string) => {
-    setFormDepartamento(value);
-    if (touched.departamento)
+    const parsed = value ? Number(value) : "";
+    const departamentoSeleccionado =
+      departamentosCatalogo.find((d) => d.id === parsed) ?? null;
+
+    setFormDepartamentoId(parsed);
+    setFormDepartamento(departamentoSeleccionado?.nombre ?? "");
+    setFormMunicipioId("");
+    setFormMunicipio("");
+    setMunicipiosCatalogo([]);
+
+    if (touched.departamento) {
       setErrors((prev) => ({
         ...prev,
-        departamento: validateDepartamento(value),
+        departamento: validateDepartamento(departamentoSeleccionado?.nombre ?? ""),
       }));
+    }
+
+    if (touched.municipio) {
+      setErrors((prev) => ({
+        ...prev,
+        municipio: validateMunicipio(""),
+      }));
+    }
   };
+
   const handleMunicipioChange = (value: string) => {
-    setFormMunicipio(value);
-    if (touched.municipio)
-      setErrors((prev) => ({ ...prev, municipio: validateMunicipio(value) }));
+    const parsed = value ? Number(value) : "";
+    const municipioSeleccionado =
+      municipiosCatalogo.find((m) => m.id === parsed) ?? null;
+
+    setFormMunicipioId(parsed);
+    setFormMunicipio(municipioSeleccionado?.nombre ?? "");
+
+    if (touched.municipio) {
+      setErrors((prev) => ({
+        ...prev,
+        municipio: validateMunicipio(municipioSeleccionado?.nombre ?? ""),
+      }));
+    }
   };
+
   const handleDireccionChange = (value: string) => {
     setFormDireccion(value);
-    if (touched.direccion)
+    if (touched.direccion) {
       setErrors((prev) => ({ ...prev, direccion: validateDireccion(value) }));
+    }
   };
 
   const handleNombreBlur = () => {
@@ -346,9 +412,21 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
   };
 
   const onClickEdit = (bodega: Bodega) => goEdit(bodega.id);
-  const onClickDelete = (bodega: Bodega) => goDelete(bodega.id);
+  const onClickDelete = (bodega: Bodega) => {
+    if (bodega.tieneUsuariosAsignados) {
+      toast.error("No se puede eliminar una bodega con usuarios asignados");
+      return;
+    }
+
+    goDelete(bodega.id);
+  };
 
   const onClickToggleEstado = (bodega: Bodega) => {
+    if (bodega.tieneUsuariosAsignados && bodega.estado) {
+      toast.error("No se puede inactivar una bodega con usuarios asignados");
+      return;
+    }
+
     setBodegaParaCambioEstado(bodega);
     setShowConfirmEstadoModal(true);
   };
@@ -371,13 +449,18 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
         estado: true,
       };
 
-      const created = await createBodega(payload);
-      setBodegas((prev) => [created, ...prev]);
+      await createBodega(payload);
+      await loadBodegas();
 
       setShowSuccessModal(true);
       goList();
-    } catch {
-      toast.error("No se pudo crear la bodega");
+    } catch (error: any) {
+      console.error("Error creando bodega:", error);
+      toast.error(
+        error?.response?.data?.error?.message ||
+        error?.response?.data?.message ||
+        "No se pudo crear la bodega"
+      );
     }
   };
 
@@ -402,27 +485,36 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
         estado: bodegaActual.estado,
       };
 
-      const updated = await updateBodega(bodegaActual.id, payload);
-      setBodegas((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+      await updateBodega(bodegaActual.id, payload);
+      await loadBodegas();
 
       toast.success("Bodega actualizada exitosamente");
       goList();
-    } catch {
-      toast.error("No se pudo actualizar la bodega");
+    } catch (error: any) {
+      console.error("Error actualizando bodega:", error);
+      toast.error(
+        error?.response?.data?.error?.message ||
+        error?.response?.data?.message ||
+        "No se pudo actualizar la bodega"
+      );
     }
   };
-
   const confirmDelete = async () => {
     if (!bodegaActual) return;
 
     try {
       await deleteBodega(bodegaActual.id);
-      setBodegas((prev) => prev.filter((b) => b.id !== bodegaActual.id));
+      await loadBodegas();
 
       toast.success("Bodega eliminada exitosamente");
-      goList(); // 🔥 vuelve a lista y quita /eliminar de la URL
-    } catch {
-      toast.error("No se pudo eliminar la bodega");
+      goList();
+    } catch (error: any) {
+      console.error("Error eliminando bodega:", error);
+      toast.error(
+        error?.response?.data?.error?.message ||
+        error?.response?.data?.message ||
+        "No se pudo eliminar la bodega"
+      );
     }
   };
 
@@ -430,16 +522,25 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
     if (!bodegaParaCambioEstado) return;
 
     try {
-      const updated = await toggleEstadoBodega(bodegaParaCambioEstado.id);
-      setBodegas((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+      const updated = await toggleEstadoBodega(
+        bodegaParaCambioEstado.id,
+        bodegaParaCambioEstado.estado
+      );
+
+      await loadBodegas();
 
       toast.success(
         `Bodega ${updated.estado ? "activada" : "desactivada"} exitosamente`
       );
       setShowConfirmEstadoModal(false);
       setBodegaParaCambioEstado(null);
-    } catch {
-      toast.error("No se pudo cambiar el estado");
+    } catch (error: any) {
+      console.error("Error cambiando estado de bodega:", error);
+      toast.error(
+        error?.response?.data?.error?.message ||
+        error?.response?.data?.message ||
+        "No se pudo cambiar el estado"
+      );
     }
   };
 
@@ -564,10 +665,20 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                         size="sm"
                         variant="ghost"
                         onClick={() => onClickToggleEstado(bodega)}
+                        disabled={bodega.tieneUsuariosAsignados && bodega.estado}
                         className={
-                          bodega.estado
-                            ? "bg-green-100 text-green-800 hover:bg-green-200"
-                            : "bg-red-100 text-red-800 hover:bg-red-200"
+                          bodega.tieneUsuariosAsignados && bodega.estado
+                            ? "bg-green-100 text-gray-400 cursor-not-allowed"
+                            : bodega.estado
+                              ? "bg-green-100 text-green-800 hover:bg-green-200"
+                              : "bg-red-100 text-red-800 hover:bg-red-200"
+                        }
+                        title={
+                          bodega.tieneUsuariosAsignados && bodega.estado
+                            ? "No se puede inactivar porque tiene usuarios asignados"
+                            : bodega.estado
+                              ? "Inactivar"
+                              : "Activar"
                         }
                       >
                         {bodega.estado ? "Activa" : "Inactiva"}
@@ -590,8 +701,16 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                           variant="ghost"
                           size="icon"
                           onClick={() => onClickDelete(bodega)}
-                          className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                          title="Eliminar"
+                          disabled={bodega.tieneUsuariosAsignados}
+                          className={`h-8 w-8 ${bodega.tieneUsuariosAsignados
+                            ? "text-gray-400 cursor-not-allowed"
+                            : "text-red-600 hover:text-red-700 hover:bg-red-50"
+                            }`}
+                          title={
+                            bodega.tieneUsuariosAsignados
+                              ? "No se puede eliminar porque tiene usuarios asignados"
+                              : "Eliminar"
+                          }
                         >
                           <Trash2 size={16} />
                         </Button>
@@ -603,8 +722,11 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
             </TableBody>
           </Table>
         </div>
+      </div>
 
-        {/* ✅ Paginación */}
+      {/* ✅ Paginación */}
+
+      <div>
         {!isLoading && filteredBodegas.length > 0 && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
             <div className="text-sm text-gray-600">
@@ -694,9 +816,10 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
               <div>
                 <Label htmlFor="create-departamento">Departamento *</Label>
                 <Select
-                  value={formDepartamento}
+                  value={formDepartamentoId === "" ? "" : String(formDepartamentoId)}
                   onValueChange={handleDepartamentoChange}
                   onOpenChange={(open: boolean) => !open && handleDepartamentoBlur()}
+                  disabled={isLoadingCatalogos}
                 >
                   <SelectTrigger
                     id="create-departamento"
@@ -709,8 +832,8 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                     <SelectValue placeholder="Selecciona un departamento" />
                   </SelectTrigger>
                   <SelectContent>
-                    {departamentosColombia.map((dept) => (
-                      <SelectItem key={dept.nombre} value={dept.nombre}>
+                    {departamentosCatalogo.map((dept) => (
+                      <SelectItem key={dept.id} value={String(dept.id)}>
                         {dept.nombre}
                       </SelectItem>
                     ))}
@@ -724,10 +847,10 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
               <div>
                 <Label htmlFor="create-municipio">Municipio *</Label>
                 <Select
-                  value={formMunicipio}
+                  value={formMunicipioId === "" ? "" : String(formMunicipioId)}
                   onValueChange={handleMunicipioChange}
                   onOpenChange={(open: boolean) => !open && handleMunicipioBlur()}
-                  disabled={!formDepartamento}
+                  disabled={!formDepartamentoId || isLoadingCatalogos}
                 >
                   <SelectTrigger
                     id="create-municipio"
@@ -739,8 +862,8 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                   </SelectTrigger>
                   <SelectContent>
                     {municipiosDisponibles.map((municipio) => (
-                      <SelectItem key={municipio} value={municipio}>
-                        {municipio}
+                      <SelectItem key={municipio.id} value={String(municipio.id)}>
+                        {municipio.nombre}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -816,9 +939,10 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
               <div>
                 <Label htmlFor="edit-departamento">Departamento *</Label>
                 <Select
-                  value={formDepartamento}
+                  value={formDepartamentoId === "" ? "" : String(formDepartamentoId)}
                   onValueChange={handleDepartamentoChange}
                   onOpenChange={(open: boolean) => !open && handleDepartamentoBlur()}
+                  disabled={isLoadingCatalogos}
                 >
                   <SelectTrigger
                     id="edit-departamento"
@@ -831,8 +955,8 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                     <SelectValue placeholder="Selecciona un departamento" />
                   </SelectTrigger>
                   <SelectContent>
-                    {departamentosColombia.map((dept) => (
-                      <SelectItem key={dept.nombre} value={dept.nombre}>
+                    {departamentosCatalogo.map((dept) => (
+                      <SelectItem key={dept.id} value={String(dept.id)}>
                         {dept.nombre}
                       </SelectItem>
                     ))}
@@ -846,10 +970,10 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
               <div>
                 <Label htmlFor="edit-municipio">Municipio *</Label>
                 <Select
-                  value={formMunicipio}
+                  value={formMunicipioId === "" ? "" : String(formMunicipioId)}
                   onValueChange={handleMunicipioChange}
                   onOpenChange={(open: boolean) => !open && handleMunicipioBlur()}
-                  disabled={!formDepartamento}
+                  disabled={!formDepartamentoId || isLoadingCatalogos}
                 >
                   <SelectTrigger
                     id="edit-municipio"
@@ -861,8 +985,8 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                   </SelectTrigger>
                   <SelectContent>
                     {municipiosDisponibles.map((municipio) => (
-                      <SelectItem key={municipio} value={municipio}>
-                        {municipio}
+                      <SelectItem key={municipio.id} value={String(municipio.id)}>
+                        {municipio.nombre}
                       </SelectItem>
                     ))}
                   </SelectContent>
