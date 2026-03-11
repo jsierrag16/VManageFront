@@ -1,12 +1,27 @@
+import api from "@/shared/services/api";
 import { useAuth } from "@/shared/context/AuthContext";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { useOutletContext } from "react-router-dom";
 import type { AppOutletContext } from "@/layouts/MainLayout";
 import { useEffect, useMemo, useState } from "react";
-import { toast } from 'sonner';
-import { Search, Plus, Eye, Edit, Trash2, ChevronLeft, ChevronRight, User as UserIcon, Mail, Building2, CheckCircle, Filter } from 'lucide-react';
-import { Button } from '../../../shared/components/ui/button';
-import { Input } from '../../../shared/components/ui/input';
+import { toast } from "sonner";
+import {
+  Search,
+  Plus,
+  Eye,
+  Edit,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  User as UserIcon,
+  Mail,
+  Building2,
+  CheckCircle,
+  Filter,
+  Loader2,
+} from "lucide-react";
+
+import { Button } from "../../../shared/components/ui/button";
+import { Input } from "../../../shared/components/ui/input";
 import {
   Table,
   TableBody,
@@ -14,159 +29,561 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '../../../shared/components/ui/table';
+} from "../../../shared/components/ui/table";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
-} from '../../../shared/components/ui/dialog';
-import { Label } from '../../../shared/components/ui/label';
-import { Badge } from '../../../shared/components/ui/badge';
+} from "../../../shared/components/ui/dialog";
+import { Label } from "../../../shared/components/ui/label";
+import { Badge } from "../../../shared/components/ui/badge";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../../../shared/components/ui/select';
-import { Checkbox } from '../../../shared/components/ui/checkbox';
+} from "../../../shared/components/ui/select";
+import { Checkbox } from "../../../shared/components/ui/checkbox";
 
-// Datos de usuarios - ESTOS SON LOS USUARIOS REALES DEL SISTEMA
-export const usuariosDataInitial = [
-  {
-    id: 1,
-    tipoDocumento: "CC",
-    numeroDocumento: "1234567890",
-    nombre: "Juan",
-    apellido: "Pérez",
-    email: "administrador@gmail.com",
-    telefono: "3001234567",
-    bodegas: ["Bodega Principal", "Bodega Secundaria"],
-    rol: "Administrador",
-    estado: true,
-  },
-  {
-    id: 2,
-    tipoDocumento: "CC",
-    numeroDocumento: "9876543210",
-    nombre: "María",
-    apellido: "González",
-    email: "vendedor@gmail.com",
-    telefono: "3109876543",
-    bodegas: ["Bodega Secundaria"],
-    rol: "Vendedor",
-    estado: true,
-  },
-  {
-    id: 3,
-    tipoDocumento: "CC",
-    numeroDocumento: "1122334455",
-    nombre: "Carlos",
-    apellido: "Rodríguez",
-    email: "auxadministrativo@gmail.com",
-    telefono: "3201122334",
-    bodegas: ["Bodega Principal"],
-    rol: "Auxiliar Administrativo",
-    estado: true,
-  },
-  {
-    id: 4,
-    tipoDocumento: "CC",
-    numeroDocumento: "5566778899",
-    nombre: "Pedro",
-    apellido: "Martínez",
-    email: "auxlogistico@gmail.com",
-    telefono: "3155667788",
-    bodegas: ["Bodega Medellín"],
-    rol: "Auxiliar de Bodega",
-    estado: true,
-  },
-  {
-    id: 5,
-    tipoDocumento: "CC",
-    numeroDocumento: "6677889900",
-    nombre: "Luis",
-    apellido: "Fernández",
-    email: "conductor@gmail.com",
-    telefono: "3186677889",
-    bodegas: ["Bodega Principal"],
-    rol: "Conductor",
-    estado: true,
-  },
-];
+/* =========================================================
+   TIPOS
+========================================================= */
 
-interface Usuario {
+type ApiListResponse<T> =
+  | T[]
+  | {
+      data?: T[];
+      items?: T[];
+      results?: T[];
+      page?: number;
+      limit?: number;
+      total?: number;
+      pages?: number;
+    };
+
+type CatalogOption = {
   id: number;
+  label: string;
+  shortLabel?: string;
+};
+
+type ApiUsuario = Record<string, any>;
+type ApiRol = Record<string, any>;
+type ApiTipoDocumento = Record<string, any>;
+type ApiBodega = Record<string, any>;
+
+type UsuarioRow = {
+  id: number;
+  idTipoDoc: number | null;
   tipoDocumento: string;
   numeroDocumento: string;
   nombre: string;
   apellido: string;
   email: string;
   telefono: string;
-  bodegas: string[];
+  idRol: number | null;
   rol: string;
   estado: boolean;
+  bodegasIds: number[];
+  bodegas: string[];
+};
+
+type FormErrors = {
+  tipoDoc: string;
+  numeroDoc: string;
+  nombre: string;
+  apellido: string;
+  email: string;
+  telefono: string;
+  bodegas: string;
+  rol: string;
+};
+
+type FormTouched = {
+  tipoDoc: boolean;
+  numeroDoc: boolean;
+  nombre: boolean;
+  apellido: boolean;
+  email: boolean;
+  telefono: boolean;
+  bodegas: boolean;
+  rol: boolean;
+};
+
+/* =========================================================
+   ENDPOINTS
+========================================================= */
+
+const USUARIO_ENDPOINT = "/usuario";
+
+const ROL_ENDPOINTS = [
+  "/rol",
+  "/roles",
+  "/rol/select",
+  "/roles/select",
+];
+
+const TIPO_DOCUMENTO_ENDPOINTS = [
+  "/tipo-documento",
+];
+
+const BODEGA_ENDPOINTS = [
+  "/bodega",
+  "/bodegas",
+];
+
+const BPU_BASE_ENDPOINTS = [
+  "/bodegas-por-usuario",
+  "/bodegas_por_usuario",
+  "/usuario-bodega",
+  "/usuario_bodega",
+  "/bodega-usuario",
+  "/bodega_usuario",
+];
+
+/* =========================================================
+   HELPERS GENERALES
+========================================================= */
+
+function normalizeListResponse<T>(payload: ApiListResponse<T> | any): T[] {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.items)) return payload.items;
+  if (Array.isArray(payload?.results)) return payload.results;
+  return [];
 }
 
+function firstString(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function firstNumber(...values: unknown[]): number | null {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && value.trim() && !Number.isNaN(Number(value))) {
+      return Number(value);
+    }
+  }
+  return null;
+}
+
+function toBoolean(value: unknown): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") return value.toLowerCase() === "true";
+  if (typeof value === "number") return value === 1;
+  return false;
+}
+
+function uniqueNumbers(values: Array<number | null | undefined>): number[] {
+  return Array.from(new Set(values.filter((v): v is number => typeof v === "number" && Number.isFinite(v))));
+}
+
+function uniqueStrings(values: Array<string | null | undefined>): string[] {
+  return Array.from(
+    new Set(values.filter((v): v is string => typeof v === "string" && v.trim().length > 0))
+  );
+}
+
+function normalizeText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .trim()
+    .toLowerCase();
+}
+
+function getApiErrorMessage(error: any, fallback = "Ocurrió un error inesperado") {
+  return (
+    error?.response?.data?.message ||
+    error?.response?.data?.error?.message ||
+    error?.response?.data?.error ||
+    error?.message ||
+    fallback
+  );
+}
+
+async function fetchFirstWorkingList<T>(endpoints: string[]): Promise<T[]> {
+  let lastError: any = null;
+
+  for (const endpoint of endpoints) {
+    try {
+      const response = await api.get(endpoint);
+      return normalizeListResponse<T>(response.data);
+    } catch (error: any) {
+      console.error(`Error cargando catálogo desde ${endpoint}:`, error?.response?.data || error);
+      lastError = error;
+    }
+  }
+
+  throw lastError;
+}
+
+/* =========================================================
+MAPPERS DE CATÁLOGOS
+========================================================= */
+
+function mapRolOption(raw: ApiRol): CatalogOption | null {
+  const id = firstNumber(raw?.id_rol, raw?.id, raw?.value);
+  const label = firstString(
+    raw?.nombre_rol,
+    raw?.rol,
+    raw?.nombre,
+    raw?.descripcion,
+    raw?.label
+  );
+
+  if (!id || !label) return null;
+
+  return {
+    id,
+    label,
+  };
+}
+
+function mapTipoDocumentoOption(raw: ApiTipoDocumento): CatalogOption | null {
+  const id = firstNumber(raw?.id_tipo_doc, raw?.id, raw?.value);
+  const shortLabel = firstString(
+    raw?.abreviatura,
+    raw?.abreviacion,
+    raw?.sigla,
+  );
+  const name = firstString(
+    raw?.nombre_doc,
+    raw?.nombre_tipo_doc,
+    raw?.nombre,
+  );
+
+  if (!id) return null;
+
+  const label =
+    shortLabel && name && normalizeText(shortLabel) !== normalizeText(name)
+      ? `${shortLabel} - ${name}`
+      : shortLabel || name || `Tipo ${id}`;
+
+  return {
+    id,
+    label,
+    shortLabel: shortLabel || name || `Tipo ${id}`,
+  };
+}
+
+function mapBodegaOption(raw: ApiBodega): CatalogOption | null {
+  const id = firstNumber(raw?.id_bodega, raw?.id, raw?.value);
+  const label = firstString(
+    raw?.nombre_bodega,
+    raw?.nombre,
+    raw?.descripcion,
+    raw?.label
+  );
+
+  if (!id || !label) return null;
+
+  return {
+    id,
+    label,
+  };
+}
+
+/* =========================================================
+   MAPPER DE USUARIO
+========================================================= */
+
+function mapUsuarioApiToRow(
+  raw: ApiUsuario,
+  roles: CatalogOption[],
+  tiposDocumento: CatalogOption[],
+  bodegas: CatalogOption[]
+): UsuarioRow {
+  const rolesMap = new Map(roles.map((r) => [r.id, r]));
+  const tiposMap = new Map(tiposDocumento.map((t) => [t.id, t]));
+  const bodegasMap = new Map(bodegas.map((b) => [b.id, b]));
+
+  const id = firstNumber(raw?.id_usuario, raw?.id) ?? 0;
+
+  const idTipoDoc =
+    firstNumber(raw?.id_tipo_doc, raw?.tipo_documento?.id_tipo_doc, raw?.tipoDocumento?.id_tipo_doc) ?? null;
+
+  const tipoDocumento =
+    firstString(
+      raw?.tipo_documento?.abreviatura,
+      raw?.tipo_documento?.abreviacion,
+      raw?.tipo_documento?.sigla,
+      raw?.tipoDocumento?.abreviatura,
+      raw?.tipoDocumento?.abreviacion
+    ) ||
+    tiposMap.get(idTipoDoc ?? -1)?.shortLabel ||
+    "—";
+
+  const idRol =
+    firstNumber(raw?.id_rol, raw?.roles?.id_rol, raw?.rol?.id_rol, raw?.role?.id_rol) ?? null;
+
+  const rol =
+    firstString(
+      raw?.roles?.nombre_rol,
+      raw?.roles?.rol,
+      raw?.roles?.nombre,
+      raw?.rol?.nombre_rol,
+      raw?.rol?.rol,
+      raw?.rol?.nombre,
+      raw?.role?.nombre_rol,
+      raw?.role?.rol,
+      raw?.role?.nombre
+    ) ||
+    rolesMap.get(idRol ?? -1)?.label ||
+    "—";
+
+  const relacionesBodega = Array.isArray(raw?.bodegas_por_usuario)
+    ? raw.bodegas_por_usuario
+    : Array.isArray(raw?.bodegasPorUsuario)
+    ? raw.bodegasPorUsuario
+    : [];
+
+  const bodegasIds = uniqueNumbers(
+    relacionesBodega.map((item: any) =>
+      firstNumber(item?.id_bodega, item?.bodega?.id_bodega, item?.bodega?.id)
+    )
+  );
+
+  const bodegasLabels = uniqueStrings(
+    relacionesBodega.map((item: any) => {
+      const idBodega = firstNumber(item?.id_bodega, item?.bodega?.id_bodega, item?.bodega?.id);
+      return (
+        firstString(item?.bodega?.nombre_bodega, item?.bodega?.nombre) ||
+        (idBodega ? bodegasMap.get(idBodega)?.label : "") ||
+        ""
+      );
+    })
+  );
+
+  return {
+    id,
+    idTipoDoc,
+    tipoDocumento,
+    numeroDocumento: firstString(raw?.num_documento, raw?.numero_documento, raw?.documento),
+    nombre: firstString(raw?.nombre),
+    apellido: firstString(raw?.apellido),
+    email: firstString(raw?.email),
+    telefono: firstString(raw?.telefono),
+    idRol,
+    rol,
+    estado: toBoolean(raw?.estado),
+    bodegasIds,
+    bodegas: bodegasLabels,
+  };
+}
+
+/* =========================================================
+   HELPERS BODEGAS POR USUARIO
+========================================================= */
+
+async function createBodegaUsuarioRelation(payload: { id_usuario: number; id_bodega: number }) {
+  let lastError: any = null;
+
+  for (const base of BPU_BASE_ENDPOINTS) {
+    try {
+      await api.post(base, payload);
+      return;
+    } catch (error: any) {
+      if (error?.response?.status === 409) {
+        return;
+      }
+      lastError = error;
+    }
+  }
+
+  throw lastError;
+}
+
+async function deleteBodegaUsuarioRelation(idUsuario: number, idBodega: number) {
+  let lastError: any = null;
+
+  const strategies = [
+    () => api.delete(`${BPU_BASE_ENDPOINTS[0]}/${idUsuario}/${idBodega}`),
+    () => api.delete(`${BPU_BASE_ENDPOINTS[1]}/${idUsuario}/${idBodega}`),
+    () => api.delete(`${BPU_BASE_ENDPOINTS[2]}/${idUsuario}/${idBodega}`),
+    () => api.delete(`${BPU_BASE_ENDPOINTS[3]}/${idUsuario}/${idBodega}`),
+    () => api.delete(`${BPU_BASE_ENDPOINTS[4]}/${idUsuario}/${idBodega}`),
+    () => api.delete(`${BPU_BASE_ENDPOINTS[5]}/${idUsuario}/${idBodega}`),
+
+    () => api.delete(`${BPU_BASE_ENDPOINTS[0]}?id_usuario=${idUsuario}&id_bodega=${idBodega}`),
+    () => api.delete(`${BPU_BASE_ENDPOINTS[1]}?id_usuario=${idUsuario}&id_bodega=${idBodega}`),
+    () => api.delete(`${BPU_BASE_ENDPOINTS[2]}?id_usuario=${idUsuario}&id_bodega=${idBodega}`),
+    () => api.delete(`${BPU_BASE_ENDPOINTS[3]}?id_usuario=${idUsuario}&id_bodega=${idBodega}`),
+    () => api.delete(`${BPU_BASE_ENDPOINTS[4]}?id_usuario=${idUsuario}&id_bodega=${idBodega}`),
+    () => api.delete(`${BPU_BASE_ENDPOINTS[5]}?id_usuario=${idUsuario}&id_bodega=${idBodega}`),
+
+    () => api.delete(BPU_BASE_ENDPOINTS[0], { data: { id_usuario: idUsuario, id_bodega: idBodega } }),
+    () => api.delete(BPU_BASE_ENDPOINTS[1], { data: { id_usuario: idUsuario, id_bodega: idBodega } }),
+    () => api.delete(BPU_BASE_ENDPOINTS[2], { data: { id_usuario: idUsuario, id_bodega: idBodega } }),
+    () => api.delete(BPU_BASE_ENDPOINTS[3], { data: { id_usuario: idUsuario, id_bodega: idBodega } }),
+    () => api.delete(BPU_BASE_ENDPOINTS[4], { data: { id_usuario: idUsuario, id_bodega: idBodega } }),
+    () => api.delete(BPU_BASE_ENDPOINTS[5], { data: { id_usuario: idUsuario, id_bodega: idBodega } }),
+  ];
+
+  for (const strategy of strategies) {
+    try {
+      await strategy();
+      return;
+    } catch (error: any) {
+      lastError = error;
+    }
+  }
+
+  throw lastError;
+}
+
+async function syncBodegasUsuario(
+  idUsuario: number,
+  actuales: number[],
+  deseadas: number[]
+) {
+  const actualesSet = new Set(actuales);
+  const deseadasSet = new Set(deseadas);
+
+  const porCrear = deseadas.filter((id) => !actualesSet.has(id));
+  const porEliminar = actuales.filter((id) => !deseadasSet.has(id));
+
+  for (const idBodega of porEliminar) {
+    await deleteBodegaUsuarioRelation(idUsuario, idBodega);
+  }
+
+  for (const idBodega of porCrear) {
+    await createBodegaUsuarioRelation({
+      id_usuario: idUsuario,
+      id_bodega: idBodega,
+    });
+  }
+}
+
+/* =========================================================
+   VALIDACIONES
+========================================================= */
+
+function validateTipoDoc(value: string) {
+  if (!value) return "Debes seleccionar el tipo de documento";
+  return "";
+}
+
+function validateNumeroDocumento(value: string) {
+  if (!value.trim()) return "El número de documento es requerido";
+  if (!/^[0-9]+$/.test(value)) return "Solo se permiten números";
+  if (value.trim().length < 6) return "Mínimo 6 dígitos";
+  if (value.trim().length > 20) return "Máximo 20 dígitos";
+  return "";
+}
+
+function validateNombre(value: string) {
+  if (!value.trim()) return "El nombre es requerido";
+  if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/.test(value)) return "Solo se permiten letras";
+  if (value.trim().length < 2) return "Mínimo 2 caracteres";
+  if (value.trim().length > 100) return "Máximo 100 caracteres";
+  return "";
+}
+
+function validateApellido(value: string) {
+  if (!value.trim()) return "El apellido es requerido";
+  if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/.test(value)) return "Solo se permiten letras";
+  if (value.trim().length < 2) return "Mínimo 2 caracteres";
+  if (value.trim().length > 100) return "Máximo 100 caracteres";
+  return "";
+}
+
+function validateEmailField(value: string) {
+  if (!value.trim()) return "El correo es requerido";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) return "Formato de correo inválido";
+  if (value.trim().length > 100) return "Máximo 100 caracteres";
+  return "";
+}
+
+function validateTelefonoField(value: string) {
+  if (!value.trim()) return "";
+  if (!/^[0-9]+$/.test(value)) return "Solo se permiten números";
+  if (value.trim().length < 7) return "Mínimo 7 dígitos";
+  if (value.trim().length > 30) return "Máximo 30 dígitos";
+  return "";
+}
+
+function validateBodegasField(value: number[]) {
+  if (value.length === 0) return "Debes seleccionar al menos una bodega";
+  return "";
+}
+
+function validateRolField(value: string) {
+  if (!value) return "Debes seleccionar un rol";
+  return "";
+}
+
+/* =========================================================
+   COMPONENTE
+========================================================= */
+
 export default function Usuarios() {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [estadoFilter, setEstadoFilter] = useState<string>('todos');
-  const [usuarios, setUsuarios] = useState<Usuario[]>(usuariosDataInitial);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
-  const [usuarioParaCambioEstado, setUsuarioParaCambioEstado] = useState<Usuario | null>(null);
+  const { usuario } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const params = useParams<{ id: string }>();
+
+  const loggedUserId =
+    firstNumber((usuario as any)?.id, (usuario as any)?.id_usuario) ?? null;
+
+  const [usuarios, setUsuarios] = useState<UsuarioRow[]>([]);
+  const [tiposDocumento, setTiposDocumento] = useState<CatalogOption[]>([]);
+  const [roles, setRoles] = useState<CatalogOption[]>([]);
+  const [bodegas, setBodegas] = useState<CatalogOption[]>([]);
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [estadoFilter, setEstadoFilter] = useState<"todos" | "activos" | "inactivos">("todos");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-  const [isConfirmReset, setIsConfirmReset] = useState(false);
-  const [sendingReset, setSendingReset] = useState(false);
-  const [resetEmail, setResetEmail] = useState("");
 
+  const [isLoadingInitial, setIsLoadingInitial] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isChangingEstado, setIsChangingEstado] = useState(false);
 
-  // Form states
-  const [formTipoDoc, setFormTipoDoc] = useState('CC');
-  const [formNumeroDoc, setFormNumeroDoc] = useState('');
-  const [formNombre, setFormNombre] = useState('');
-  const [formApellido, setFormApellido] = useState('');
-  const [formEmail, setFormEmail] = useState('');
-  const [formTelefono, setFormTelefono] = useState('');
-  const [formBodegas, setFormBodegas] = useState<string[]>([]);
-  const [formRol, setFormRol] = useState('');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
+  const [usuarioParaCambioEstado, setUsuarioParaCambioEstado] = useState<UsuarioRow | null>(null);
 
-  // Estados para validaciones en tiempo real
-  const [errors, setErrors] = useState({
-    numeroDoc: '',
-    nombre: '',
-    apellido: '',
-    email: '',
-    telefono: '',
-    bodegas: '',
-    rol: ''
+  // Formulario
+  const [formTipoDocId, setFormTipoDocId] = useState("");
+  const [formNumeroDoc, setFormNumeroDoc] = useState("");
+  const [formNombre, setFormNombre] = useState("");
+  const [formApellido, setFormApellido] = useState("");
+  const [formEmail, setFormEmail] = useState("");
+  const [formTelefono, setFormTelefono] = useState("");
+  const [formBodegasIds, setFormBodegasIds] = useState<number[]>([]);
+  const [formRolId, setFormRolId] = useState("");
+
+  const [errors, setErrors] = useState<FormErrors>({
+    tipoDoc: "",
+    numeroDoc: "",
+    nombre: "",
+    apellido: "",
+    email: "",
+    telefono: "",
+    bodegas: "",
+    rol: "",
   });
-  const [touched, setTouched] = useState({
+
+  const [touched, setTouched] = useState<FormTouched>({
+    tipoDoc: false,
     numeroDoc: false,
     nombre: false,
     apellido: false,
     email: false,
     telefono: false,
     bodegas: false,
-    rol: false
+    rol: false,
   });
 
-  const { usuario } = useAuth();
-  const loggedUserId = usuario?.id ?? null;
-
-  const navigate = useNavigate();
-  const location = useLocation();
-  const params = useParams<{ id: string }>();
-
-  // ✅ Bodega desde MainLayout (igual que Productos)
-  const { selectedBodegaNombre } = useOutletContext<AppOutletContext>();
-  const selectedBodega = selectedBodegaNombre;
-
-  // ✅ flags por URL (igual que Productos)
   const isCrear = location.pathname.endsWith("/usuarios/crear");
   const isVer = location.pathname.endsWith("/ver");
   const isEditar = location.pathname.endsWith("/editar");
@@ -181,35 +598,120 @@ export default function Usuarios() {
 
   const isSelfEdit = !!loggedUserId && usuarioSeleccionado?.id === loggedUserId;
 
-  // ✅ volver al listado (igual que Productos)
   const closeToList = () => navigate("/app/usuarios");
 
-  // ✅ Si entran a /ver, /editar o /eliminar con un id inválido, volvemos al listado
+  const rolesMap = useMemo(() => new Map(roles.map((r) => [r.id, r])), [roles]);
+  const tiposMap = useMemo(() => new Map(tiposDocumento.map((t) => [t.id, t])), [tiposDocumento]);
+  const bodegasMap = useMemo(() => new Map(bodegas.map((b) => [b.id, b])), [bodegas]);
+
+  async function cargarCatalogos() {
+    const [tiposRaw, rolesRaw, bodegasRaw] = await Promise.all([
+      fetchFirstWorkingList<ApiTipoDocumento>(TIPO_DOCUMENTO_ENDPOINTS),
+      fetchFirstWorkingList<ApiRol>(ROL_ENDPOINTS),
+      fetchFirstWorkingList<ApiBodega>(BODEGA_ENDPOINTS),
+    ]);
+
+    const tiposMapeados = tiposRaw
+      .map(mapTipoDocumentoOption)
+      .filter((item): item is CatalogOption => !!item)
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+    const rolesMapeados = rolesRaw
+      .map(mapRolOption)
+      .filter((item): item is CatalogOption => !!item)
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+    const bodegasMapeadas = bodegasRaw
+      .map(mapBodegaOption)
+      .filter((item): item is CatalogOption => !!item)
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+    if (tiposMapeados.length === 0) {
+      throw new Error("No se cargaron tipos de documento desde /tipo-documento");
+    }
+
+    setTiposDocumento(tiposMapeados);
+    setRoles(rolesMapeados);
+    setBodegas(bodegasMapeadas);
+
+    return {
+      tiposDocumento: tiposMapeados,
+      roles: rolesMapeados,
+      bodegas: bodegasMapeadas,
+    };
+  }
+
+  async function cargarUsuarios(
+    cat?: {
+      tiposDocumento: CatalogOption[];
+      roles: CatalogOption[];
+      bodegas: CatalogOption[];
+    }
+  ) {
+    const response = await api.get(USUARIO_ENDPOINT);
+    const rawUsers = normalizeListResponse<ApiUsuario>(response.data);
+
+    const catalogos = cat ?? {
+      tiposDocumento,
+      roles,
+      bodegas,
+    };
+
+    const usuariosMapeados = rawUsers
+      .map((raw) =>
+        mapUsuarioApiToRow(
+          raw,
+          catalogos.roles,
+          catalogos.tiposDocumento,
+          catalogos.bodegas
+        )
+      )
+      .sort((a, b) => b.id - a.id);
+
+    setUsuarios(usuariosMapeados);
+  }
+
+  async function cargarTodo() {
+    setIsLoadingInitial(true);
+    try {
+      const catalogos = await cargarCatalogos();
+      await cargarUsuarios(catalogos);
+    } catch (error: any) {
+      toast.error(getApiErrorMessage(error, "No se pudo cargar el módulo de usuarios"));
+    } finally {
+      setIsLoadingInitial(false);
+    }
+  }
+
   useEffect(() => {
+    cargarTodo();
+  }, []);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, estadoFilter]);
+
+  useEffect(() => {
+    if (isLoadingInitial) return;
     if (!isVer && !isEditar && !isEliminar) return;
 
     if (!usuarioSeleccionado) {
       closeToList();
-      return;
     }
-  }, [isVer, isEditar, isEliminar, usuarioSeleccionado, closeToList]);
+  }, [isLoadingInitial, isVer, isEditar, isEliminar, usuarioSeleccionado]);
 
-  // ✅ Cuando estoy en /editar, precargar el formulario con el usuario seleccionado
-  useEffect(() => {
-    if (!isEditar) return;
-    if (!usuarioSeleccionado) return;
+  function resetForm() {
+    setFormTipoDocId("");
+    setFormNumeroDoc("");
+    setFormNombre("");
+    setFormApellido("");
+    setFormEmail("");
+    setFormTelefono("");
+    setFormBodegasIds([]);
+    setFormRolId("");
 
-    setFormTipoDoc(usuarioSeleccionado.tipoDocumento);
-    setFormNumeroDoc(usuarioSeleccionado.numeroDocumento);
-    setFormNombre(usuarioSeleccionado.nombre);
-    setFormApellido(usuarioSeleccionado.apellido);
-    setFormEmail(usuarioSeleccionado.email);
-    setFormTelefono(usuarioSeleccionado.telefono);
-    setFormBodegas(usuarioSeleccionado.bodegas);
-    setFormRol(usuarioSeleccionado.rol);
-
-    // (opcional pero recomendado) limpiar validaciones al abrir editar
     setErrors({
+      tipoDoc: "",
       numeroDoc: "",
       nombre: "",
       apellido: "",
@@ -218,7 +720,49 @@ export default function Usuarios() {
       bodegas: "",
       rol: "",
     });
+
     setTouched({
+      tipoDoc: false,
+      numeroDoc: false,
+      nombre: false,
+      apellido: false,
+      email: false,
+      telefono: false,
+      bodegas: false,
+      rol: false,
+    });
+  }
+
+  useEffect(() => {
+    if (!isCrear) return;
+    resetForm();
+  }, [isCrear]);
+
+  useEffect(() => {
+    if (!isEditar || !usuarioSeleccionado) return;
+
+    setFormTipoDocId(usuarioSeleccionado.idTipoDoc ? String(usuarioSeleccionado.idTipoDoc) : "");
+    setFormNumeroDoc(usuarioSeleccionado.numeroDocumento);
+    setFormNombre(usuarioSeleccionado.nombre);
+    setFormApellido(usuarioSeleccionado.apellido);
+    setFormEmail(usuarioSeleccionado.email);
+    setFormTelefono(usuarioSeleccionado.telefono ?? "");
+    setFormBodegasIds(usuarioSeleccionado.bodegasIds);
+    setFormRolId(usuarioSeleccionado.idRol ? String(usuarioSeleccionado.idRol) : "");
+
+    setErrors({
+      tipoDoc: "",
+      numeroDoc: "",
+      nombre: "",
+      apellido: "",
+      email: "",
+      telefono: "",
+      bodegas: "",
+      rol: "",
+    });
+
+    setTouched({
+      tipoDoc: false,
       numeroDoc: false,
       nombre: false,
       apellido: false,
@@ -229,441 +773,271 @@ export default function Usuarios() {
     });
   }, [isEditar, usuarioSeleccionado]);
 
-  // ✅ Al entrar a /crear, dejar el form limpio
-  useEffect(() => {
-    if (!isCrear) return;
-
-    setFormTipoDoc("CC");
-    setFormNumeroDoc("");
-    setFormNombre("");
-    setFormApellido("");
-    setFormEmail("");
-    setFormTelefono("");
-    setFormBodegas([]);
-    setFormRol("");
-
-    setErrors({
-      numeroDoc: "",
-      nombre: "",
-      apellido: "",
-      email: "",
-      telefono: "",
-      bodegas: "",
-      rol: "",
-    });
-    setTouched({
-      numeroDoc: false,
-      nombre: false,
-      apellido: false,
-      email: false,
-      telefono: false,
-      bodegas: false,
-      rol: false,
-    });
-  }, [isCrear]);
-
-  // Funciones de validación individuales
-  const validateNumeroDocumento = (value: string) => {
-    if (!value.trim()) {
-      return 'El número de documento es requerido';
-    }
-    // Solo números, sin guiones ni otros caracteres
-    const soloNumeros = /^[0-9]+$/;
-    if (!soloNumeros.test(value)) {
-      return 'Solo se permiten números';
-    }
-    if (value.length < 6) {
-      return 'Mínimo 6 dígitos';
-    }
-    if (value.length > 15) {
-      return 'Máximo 15 dígitos';
-    }
-    return '';
-  };
-
-  const validateNombre = (value: string) => {
-    if (!value.trim()) {
-      return 'El nombre es requerido';
-    }
-    // Solo letras y espacios (permite acentos y ñ)
-    const soloLetras = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/;
-    if (!soloLetras.test(value)) {
-      return 'Solo se permiten letras';
-    }
-    if (value.trim().length < 2) {
-      return 'Mínimo 2 caracteres';
-    }
-    if (value.trim().length > 50) {
-      return 'Máximo 50 caracteres';
-    }
-    return '';
-  };
-
-  const validateApellido = (value: string) => {
-    if (!value.trim()) {
-      return 'El apellido es requerido';
-    }
-    // Solo letras y espacios (permite acentos y ñ)
-    const soloLetras = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/;
-    if (!soloLetras.test(value)) {
-      return 'Solo se permiten letras';
-    }
-    if (value.trim().length < 2) {
-      return 'Mínimo 2 caracteres';
-    }
-    if (value.trim().length > 50) {
-      return 'Máximo 50 caracteres';
-    }
-    return '';
-  };
-
-  const validateEmailField = (value: string) => {
-    if (!value.trim()) {
-      return 'El email es requerido';
-    }
-    // Debe contener un @
-    if (!value.includes('@')) {
-      return 'El email debe contener un @';
-    }
-    // Validación básica de email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(value)) {
-      return 'Formato de email inválido';
-    }
-    return '';
-  };
-
-  const validateTelefonoField = (value: string) => {
-    if (!value.trim()) {
-      return 'El teléfono es requerido';
-    }
-    // Exactamente 10 números seguidos
-    const diezNumeros = /^[0-9]{10}$/;
-    if (!diezNumeros.test(value)) {
-      return 'Debe tener exactamente 10 números';
-    }
-    return '';
-  };
-
-  const validateBodegasField = (value: string[]) => {
-    if (value.length === 0) {
-      return 'Debes seleccionar al menos una bodega';
-    }
-    return '';
-  };
-
-  const validateRolField = (value: string) => {
-    if (!value) {
-      return 'El rol es requerido';
-    }
-    return '';
-  };
-
-  // Handlers con validación en tiempo real
-  const handleOpenResetDialog = (u: Usuario) => {
-    const email = (u.email ?? "").trim();
-
-    if (!email) {
-      toast.error("No hay correo para enviar el cambio de contraseña.");
-      return;
-    }
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      toast.error("El correo no es válido.");
-      return;
-    }
-
-    setResetEmail(email);
-    setIsConfirmReset(true);
-  };
-
-  const handleSendPasswordReset = async () => {
-    try {
-      setSendingReset(true);
-
-      // ✅ Aquí conectas tu backend:
-      // await authService.sendPasswordReset({ email: resetEmail });
-
-      await new Promise((r) => setTimeout(r, 700));
-
-      toast.success(`Se envió el correo de cambio de contraseña a ${resetEmail}`);
-      setIsConfirmReset(false);
-    } catch {
-      toast.error("No se pudo enviar el correo. Intenta de nuevo.");
-    } finally {
-      setSendingReset(false);
-    }
-  };
-  const handleNumeroDocChange = (value: string) => {
-    setFormNumeroDoc(value);
-    if (touched.numeroDoc) {
-      setErrors({ ...errors, numeroDoc: validateNumeroDocumento(value) });
-    }
-  };
-
-  const handleNombreChange = (value: string) => {
-    setFormNombre(value);
-    if (touched.nombre) {
-      setErrors({ ...errors, nombre: validateNombre(value) });
-    }
-  };
-
-  const handleApellidoChange = (value: string) => {
-    setFormApellido(value);
-    if (touched.apellido) {
-      setErrors({ ...errors, apellido: validateApellido(value) });
-    }
-  };
-
-  const handleEmailChange = (value: string) => {
-    setFormEmail(value);
-    if (touched.email) {
-      setErrors({ ...errors, email: validateEmailField(value) });
-    }
-  };
-
-  const handleTelefonoChange = (value: string) => {
-    setFormTelefono(value);
-    if (touched.telefono) {
-      setErrors({ ...errors, telefono: validateTelefonoField(value) });
-    }
-  };
-
-  const handleRolChange = (value: string) => {
-    setFormRol(value);
-    if (touched.rol) {
-      setErrors({ ...errors, rol: validateRolField(value) });
-    }
-  };
-
-  // Handlers onBlur
-  const handleNumeroDocBlur = () => {
-    setTouched({ ...touched, numeroDoc: true });
-    setErrors({ ...errors, numeroDoc: validateNumeroDocumento(formNumeroDoc) });
-  };
-
-  const handleNombreBlur = () => {
-    setTouched({ ...touched, nombre: true });
-    setErrors({ ...errors, nombre: validateNombre(formNombre) });
-  };
-
-  const handleApellidoBlur = () => {
-    setTouched({ ...touched, apellido: true });
-    setErrors({ ...errors, apellido: validateApellido(formApellido) });
-  };
-
-  const handleEmailBlur = () => {
-    setTouched({ ...touched, email: true });
-    setErrors({ ...errors, email: validateEmailField(formEmail) });
-  };
-
-  const handleTelefonoBlur = () => {
-    setTouched({ ...touched, telefono: true });
-    setErrors({ ...errors, telefono: validateTelefonoField(formTelefono) });
-  };
-
-  const handleRolBlur = () => {
-    setTouched({ ...touched, rol: true });
-    setErrors({ ...errors, rol: validateRolField(formRol) });
-  };
-
-  // Lista de bodegas disponibles
-  const bodegasDisponibles = ['Bodega Principal', 'Bodega Secundaria', 'Bodega Medellín', 'Bodega Cali'];
-
-  // Lista de roles disponibles (congruente con módulo de Roles)
-  const rolesDisponibles = [
-    'Administrador',
-    'Vendedor',
-    'Auxiliar Administrativo',
-    'Auxiliar de Bodega',
-    'Conductor',
-  ];
-
-  const filteredUsuarios = useMemo(() => {
-    return usuarios
-      .filter((u) => {
-        // ✅ Si es "Todas las bodegas" (cuando exista), no filtramos por bodega
-        if (selectedBodega === "Todas las bodegas") return true;
-
-        // ✅ Si no, el usuario debe tener esa bodega asignada
-        return u.bodegas.includes(selectedBodega);
-      })
-      .filter((u) => {
-        const searchLower = searchTerm.toLowerCase();
-
-        return (
-          u.nombre.toLowerCase().includes(searchLower) ||
-          u.apellido.toLowerCase().includes(searchLower) ||
-          u.email.toLowerCase().includes(searchLower) ||
-          u.tipoDocumento.toLowerCase().includes(searchLower) ||
-          u.numeroDocumento.toLowerCase().includes(searchLower) ||
-          u.telefono.toLowerCase().includes(searchLower) ||
-          u.bodegas.some((b) => b.toLowerCase().includes(searchLower)) ||
-          u.rol.toLowerCase().includes(searchLower)
-        );
-      })
-      .filter((u) => {
-        if (estadoFilter === "todos") return true;
-        return u.estado === (estadoFilter === "activos");
-      });
-  }, [usuarios, selectedBodega, searchTerm, estadoFilter]);
-
-
-  // Paginación
-  const totalPages = Math.ceil(filteredUsuarios.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentUsuarios = filteredUsuarios.slice(startIndex, endIndex);
-
-  // Resetear a página 1 cuando cambia el filtro
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, estadoFilter, selectedBodega]);
-
-  const handleView = (u: Usuario) => {
-    navigate(`/app/usuarios/${u.id}/ver`);
-  };
-
-  const handleCreate = () => {
-    setFormTipoDoc("CC");
-    setFormNumeroDoc("");
-    setFormNombre("");
-    setFormApellido("");
-    setFormEmail("");
-    setFormTelefono("");
-    setFormBodegas([]);
-    setFormRol("");
-    setErrors({
-      numeroDoc: "",
-      nombre: "",
-      apellido: "",
-      email: "",
-      telefono: "",
-      bodegas: "",
-      rol: "",
-    });
-    setTouched({
-      numeroDoc: false,
-      nombre: false,
-      apellido: false,
-      email: false,
-      telefono: false,
-      bodegas: false,
-      rol: false,
-    });
-
-    navigate("/app/usuarios/crear");
-  };
-
-  const handleEdit = (u: Usuario) => {
-    navigate(`/app/usuarios/${u.id}/editar`);
-  };
-
-  const handleDelete = (u: Usuario) => {
-    if (loggedUserId && u.id === loggedUserId) {
-      toast.error("No puedes eliminar tu propio usuario");
-      return;
-    }
-
-    navigate(`/app/usuarios/${u.id}/eliminar`);
-  };
-  const validateForm = () => {
-    // Marcar todos los campos como tocados
-    setTouched({
+  function validateForm() {
+    const nextTouched: FormTouched = {
+      tipoDoc: true,
       numeroDoc: true,
       nombre: true,
       apellido: true,
       email: true,
       telefono: true,
       bodegas: true,
-      rol: true
-    });
+      rol: true,
+    };
 
-    // Validar con las funciones individuales
-    const numeroDocError = validateNumeroDocumento(formNumeroDoc);
-    const nombreError = validateNombre(formNombre);
-    const apellidoError = validateApellido(formApellido);
-    const emailError = validateEmailField(formEmail);
-    const telefonoError = validateTelefonoField(formTelefono);
-    const bodegasError = validateBodegasField(formBodegas);
-    const rolError = validateRolField(formRol);
+    const nextErrors: FormErrors = {
+      tipoDoc: validateTipoDoc(formTipoDocId),
+      numeroDoc: validateNumeroDocumento(formNumeroDoc),
+      nombre: validateNombre(formNombre),
+      apellido: validateApellido(formApellido),
+      email: validateEmailField(formEmail),
+      telefono: validateTelefonoField(formTelefono),
+      bodegas: validateBodegasField(formBodegasIds),
+      rol: validateRolField(formRolId),
+    };
 
-    setErrors({
-      numeroDoc: numeroDocError,
-      nombre: nombreError,
-      apellido: apellidoError,
-      email: emailError,
-      telefono: telefonoError,
-      bodegas: bodegasError,
-      rol: rolError
-    });
+    setTouched(nextTouched);
+    setErrors(nextErrors);
 
-    // Si hay algún error, no permitir continuar
-    if (numeroDocError || nombreError || apellidoError || emailError || telefonoError || bodegasError || rolError) {
-      toast.error('Por favor corrige los errores en el formulario');
+    const hasErrors = Object.values(nextErrors).some(Boolean);
+
+    if (hasErrors) {
+      toast.error("Por favor corrige los errores del formulario");
       return false;
     }
 
     return true;
-  };
+  }
 
-  const confirmCreate = () => {
-    if (!validateForm()) return;
+  const filteredUsuarios = useMemo(() => {
+    return usuarios
+      .filter((u) => {
+        if (estadoFilter === "todos") return true;
+        return estadoFilter === "activos" ? u.estado : !u.estado;
+      })
+      .filter((u) => {
+        const q = normalizeText(searchTerm);
+        if (!q) return true;
 
-    const newUsuario: Usuario = {
-      id: Math.max(...usuarios.map((u) => u.id), 0) + 1,
-      tipoDocumento: formTipoDoc,
-      numeroDocumento: formNumeroDoc.trim(),
-      nombre: formNombre.trim(),
-      apellido: formApellido.trim(),
-      email: formEmail.trim(),
-      telefono: formTelefono.trim(),
-      bodegas: formBodegas,
-      rol: formRol,
-      estado: true,
-    };
+        return [
+          u.nombre,
+          u.apellido,
+          `${u.nombre} ${u.apellido}`,
+          u.email,
+          u.telefono,
+          u.numeroDocumento,
+          u.tipoDocumento,
+          u.rol,
+          ...u.bodegas,
+        ].some((field) => normalizeText(field || "").includes(q));
+      });
+  }, [usuarios, estadoFilter, searchTerm]);
 
-    setUsuarios([...usuarios, newUsuario]);
+  const totalPages = Math.max(1, Math.ceil(filteredUsuarios.length / itemsPerPage));
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentUsuarios = filteredUsuarios.slice(startIndex, endIndex);
 
-    closeToList();
-    setShowSuccessModal(true);
-  };
+  function handleNumeroDocChange(value: string) {
+    setFormNumeroDoc(value);
+    if (touched.numeroDoc) {
+      setErrors((prev) => ({ ...prev, numeroDoc: validateNumeroDocumento(value) }));
+    }
+  }
 
-  const confirmEdit = () => {
-    if (!usuarioSeleccionado || !validateForm()) return;
+  function handleNombreChange(value: string) {
+    setFormNombre(value);
+    if (touched.nombre) {
+      setErrors((prev) => ({ ...prev, nombre: validateNombre(value) }));
+    }
+  }
 
-    const isSelf = !!loggedUserId && usuarioSeleccionado.id === loggedUserId;
+  function handleApellidoChange(value: string) {
+    setFormApellido(value);
+    if (touched.apellido) {
+      setErrors((prev) => ({ ...prev, apellido: validateApellido(value) }));
+    }
+  }
 
-    setUsuarios(
-      usuarios.map((u) =>
-        u.id === usuarioSeleccionado.id
-          ? {
-            ...u,
-            tipoDocumento: formTipoDoc,
-            numeroDocumento: formNumeroDoc.trim(),
-            nombre: formNombre.trim(),
-            apellido: formApellido.trim(),
-            email: formEmail.trim(),
-            telefono: formTelefono.trim(),
-            bodegas: formBodegas,
-            // ✅ si es tu propio usuario, NO permitimos cambiar rol
-            rol: isSelf ? u.rol : formRol,
-          }
-          : u
-      )
-    );
+  function handleEmailChange(value: string) {
+    setFormEmail(value);
+    if (touched.email) {
+      setErrors((prev) => ({ ...prev, email: validateEmailField(value) }));
+    }
+  }
 
-    if (isSelf && formRol !== usuarioSeleccionado.rol) {
-      toast.warning("No puedes cambiar tu propio rol mientras estás logueado");
-    } else {
-      toast.success("Usuario actualizado exitosamente");
+  function handleTelefonoChange(value: string) {
+    setFormTelefono(value);
+    if (touched.telefono) {
+      setErrors((prev) => ({ ...prev, telefono: validateTelefonoField(value) }));
+    }
+  }
+
+  function handleTipoDocChange(value: string) {
+    setFormTipoDocId(value);
+    setTouched((prev) => ({ ...prev, tipoDoc: true }));
+    setErrors((prev) => ({ ...prev, tipoDoc: validateTipoDoc(value) }));
+  }
+
+  function handleRolChange(value: string) {
+    setFormRolId(value);
+    setTouched((prev) => ({ ...prev, rol: true }));
+    setErrors((prev) => ({ ...prev, rol: validateRolField(value) }));
+  }
+
+  function handleNumeroDocBlur() {
+    setTouched((prev) => ({ ...prev, numeroDoc: true }));
+    setErrors((prev) => ({ ...prev, numeroDoc: validateNumeroDocumento(formNumeroDoc) }));
+  }
+
+  function handleNombreBlur() {
+    setTouched((prev) => ({ ...prev, nombre: true }));
+    setErrors((prev) => ({ ...prev, nombre: validateNombre(formNombre) }));
+  }
+
+  function handleApellidoBlur() {
+    setTouched((prev) => ({ ...prev, apellido: true }));
+    setErrors((prev) => ({ ...prev, apellido: validateApellido(formApellido) }));
+  }
+
+  function handleEmailBlur() {
+    setTouched((prev) => ({ ...prev, email: true }));
+    setErrors((prev) => ({ ...prev, email: validateEmailField(formEmail) }));
+  }
+
+  function handleTelefonoBlur() {
+    setTouched((prev) => ({ ...prev, telefono: true }));
+    setErrors((prev) => ({ ...prev, telefono: validateTelefonoField(formTelefono) }));
+  }
+
+  function toggleBodega(idBodega: number) {
+    const next = formBodegasIds.includes(idBodega)
+      ? formBodegasIds.filter((id) => id !== idBodega)
+      : [...formBodegasIds, idBodega];
+
+    setFormBodegasIds(next);
+    setTouched((prev) => ({ ...prev, bodegas: true }));
+    setErrors((prev) => ({ ...prev, bodegas: validateBodegasField(next) }));
+  }
+
+  function handleView(u: UsuarioRow) {
+    navigate(`/app/usuarios/${u.id}/ver`);
+  }
+
+  function handleCreate() {
+    resetForm();
+    navigate("/app/usuarios/crear");
+  }
+
+  function handleEdit(u: UsuarioRow) {
+    navigate(`/app/usuarios/${u.id}/editar`);
+  }
+
+  function handleDelete(u: UsuarioRow) {
+    if (loggedUserId && u.id === loggedUserId) {
+      toast.error("No puedes eliminar tu propio usuario");
+      return;
     }
 
-    closeToList();
-  };
+    navigate(`/app/usuarios/${u.id}/eliminar`);
+  }
 
-  const confirmDelete = () => {
-    if (!usuarioSeleccionado) return;
+  async function confirmCreate() {
+    if (isSaving) return;
+    if (!validateForm()) return;
+
+    setIsSaving(true);
+
+    try {
+      const payload = {
+        nombre: formNombre.trim(),
+        apellido: formApellido.trim(),
+        id_tipo_doc: Number(formTipoDocId),
+        num_documento: formNumeroDoc.trim(),
+        email: formEmail.trim(),
+        id_rol: Number(formRolId),
+        telefono: formTelefono.trim() || undefined,
+        estado: true,
+      };
+
+      const response = await api.post(USUARIO_ENDPOINT, payload);
+      const created = response.data;
+
+      const idUsuarioCreado =
+        firstNumber(
+          created?.id_usuario,
+          created?.usuario?.id_usuario,
+          created?.data?.id_usuario
+        ) ?? null;
+
+      if (!idUsuarioCreado) {
+        throw new Error("No se recibió el id del usuario creado");
+      }
+
+      await syncBodegasUsuario(idUsuarioCreado, [], formBodegasIds);
+
+      // Recarga completa para asegurar catálogo + lista actualizada
+      await cargarTodo();
+
+      // Lleva el listado a la primera página
+      setCurrentPage(1);
+
+      // Opcional pero recomendado para que sí lo veas de inmediato
+      setSearchTerm("");
+      setEstadoFilter("todos");
+
+      closeToList();
+      setShowSuccessModal(true);
+    } catch (error: any) {
+      toast.error(getApiErrorMessage(error, "No se pudo crear el usuario"));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function confirmEdit() {
+    if (!usuarioSeleccionado || isSaving) return;
+    if (!validateForm()) return;
+
+    if (isSelfEdit && Number(formRolId) !== usuarioSeleccionado.idRol) {
+      toast.error("No puedes cambiar tu propio rol mientras estás logueado");
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      const payload = {
+        nombre: formNombre.trim(),
+        apellido: formApellido.trim(),
+        id_tipo_doc: Number(formTipoDocId),
+        num_documento: formNumeroDoc.trim(),
+        email: formEmail.trim(),
+        id_rol: isSelfEdit ? usuarioSeleccionado.idRol : Number(formRolId),
+        telefono: formTelefono.trim() || null,
+      };
+
+      await api.patch(`${USUARIO_ENDPOINT}/${usuarioSeleccionado.id}`, payload);
+
+      await syncBodegasUsuario(
+        usuarioSeleccionado.id,
+        usuarioSeleccionado.bodegasIds,
+        formBodegasIds
+      );
+
+      await cargarUsuarios();
+
+      toast.success("Usuario actualizado exitosamente");
+      closeToList();
+    } catch (error: any) {
+      toast.error(getApiErrorMessage(error, "No se pudo actualizar el usuario"));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!usuarioSeleccionado || isDeleting) return;
 
     if (loggedUserId && usuarioSeleccionado.id === loggedUserId) {
       toast.error("No puedes eliminar tu propio usuario");
@@ -671,86 +1045,81 @@ export default function Usuarios() {
       return;
     }
 
-    setUsuarios(usuarios.filter((u) => u.id !== usuarioSeleccionado.id));
+    setIsDeleting(true);
 
-    toast.success("Usuario eliminado exitosamente");
-    closeToList();
-  };
+    try {
+      if (usuarioSeleccionado.bodegasIds.length > 0) {
+        await syncBodegasUsuario(usuarioSeleccionado.id, usuarioSeleccionado.bodegasIds, []);
+      }
 
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-  };
+      await api.delete(`${USUARIO_ENDPOINT}/${usuarioSeleccionado.id}`);
+      await cargarUsuarios();
 
-  const handleSuccessModalClose = () => {
-    setShowSuccessModal(false);
-  };
+      toast.success("Usuario eliminado exitosamente");
+      closeToList();
+    } catch (error: any) {
+      toast.error(getApiErrorMessage(error, "No se pudo eliminar el usuario"));
+    } finally {
+      setIsDeleting(false);
+    }
+  }
 
-  const toggleEstado = (u: Usuario) => {
+  function toggleEstado(u: UsuarioRow) {
     if (loggedUserId && u.id === loggedUserId) {
-      toast.error("No puedes inhabilitar tu propio usuario");
+      toast.error("No puedes cambiar tu propio estado");
       return;
     }
+
     setUsuarioParaCambioEstado(u);
     setShowConfirmEstadoModal(true);
-  };
+  }
 
-  const handleConfirmEstado = () => {
-    if (!usuarioParaCambioEstado) return;
+  async function handleConfirmEstado() {
+    if (!usuarioParaCambioEstado || isChangingEstado) return;
 
     if (loggedUserId && usuarioParaCambioEstado.id === loggedUserId) {
-      toast.error("No puedes inhabilitar tu propio usuario");
+      toast.error("No puedes cambiar tu propio estado");
       setShowConfirmEstadoModal(false);
       setUsuarioParaCambioEstado(null);
       return;
     }
 
-    setUsuarios(
-      usuarios.map((u) =>
-        u.id === usuarioParaCambioEstado.id ? { ...u, estado: !u.estado } : u
-      )
-    );
+    setIsChangingEstado(true);
 
-    toast.success(
-      `Usuario ${!usuarioParaCambioEstado.estado ? "activado" : "desactivado"} exitosamente`
-    );
+    try {
+      await api.patch(`${USUARIO_ENDPOINT}/${usuarioParaCambioEstado.id}`, {
+        estado: !usuarioParaCambioEstado.estado,
+      });
 
-    setShowConfirmEstadoModal(false);
-    setUsuarioParaCambioEstado(null);
-  };
+      await cargarUsuarios();
 
-  const toggleBodega = (bodega: string) => {
-    const newBodegas = formBodegas.includes(bodega)
-      ? formBodegas.filter((b) => b !== bodega)
-      : [...formBodegas, bodega];
+      toast.success(
+        `Usuario ${usuarioParaCambioEstado.estado ? "desactivado" : "activado"} exitosamente`
+      );
 
-    setFormBodegas(newBodegas);
-
-    // Validar en tiempo real si ya se tocó el campo
-    if (touched.bodegas) {
-      setErrors({ ...errors, bodegas: validateBodegasField(newBodegas) });
+      setShowConfirmEstadoModal(false);
+      setUsuarioParaCambioEstado(null);
+    } catch (error: any) {
+      toast.error(getApiErrorMessage(error, "No se pudo cambiar el estado"));
+    } finally {
+      setIsChangingEstado(false);
     }
-  };
+  }
 
-  const getRolBadgeColor = (rol: string) => {
-    switch (rol) {
-      case 'Administrador':
-        return 'bg-purple-100 text-purple-800 border-purple-200';
-      case 'Vendedor':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'Auxiliar Administrativo':
-        return 'bg-cyan-100 text-cyan-800 border-cyan-200';
-      case 'Auxiliar de Bodega':
-        return 'bg-orange-100 text-orange-800 border-orange-200';
-      case 'Conductor':
-        return 'bg-indigo-100 text-indigo-800 border-indigo-200';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
+  function getRolBadgeColor(rolNombre: string) {
+    const rol = normalizeText(rolNombre);
+
+    if (rol.includes("admin")) return "bg-purple-100 text-purple-800 border-purple-200";
+    if (rol.includes("vendedor")) return "bg-yellow-100 text-yellow-800 border-yellow-200";
+    if (rol.includes("bodega")) return "bg-orange-100 text-orange-800 border-orange-200";
+    if (rol.includes("conductor")) return "bg-indigo-100 text-indigo-800 border-indigo-200";
+    if (rol.includes("auxiliar")) return "bg-cyan-100 text-cyan-800 border-cyan-200";
+
+    return "bg-gray-100 text-gray-800 border-gray-200";
+  }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h2 className="text-gray-900">Gestión de Usuarios</h2>
         <p className="text-gray-600 mt-1">
@@ -758,10 +1127,12 @@ export default function Usuarios() {
         </p>
       </div>
 
-      {/* Search Bar and Action Buttons */}
       <div className="flex items-center gap-4">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+          <Search
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+            size={20}
+          />
           <Input
             placeholder="Buscar usuarios..."
             value={searchTerm}
@@ -770,51 +1141,59 @@ export default function Usuarios() {
           />
         </div>
 
-        {/* Filtro de Estado */}
         <div className="flex items-center gap-2 border border-gray-300 rounded-lg p-1 bg-gray-50">
           <Filter size={16} className="text-gray-500 ml-2" />
+
           <Button
             size="sm"
-            variant={estadoFilter === 'todos' ? 'default' : 'ghost'}
-            onClick={() => setEstadoFilter('todos')}
-            className={`h-8 ${estadoFilter === 'todos'
-              ? 'bg-blue-600 text-white hover:bg-blue-700'
-              : 'hover:bg-gray-200'
-              }`}
+            variant={estadoFilter === "todos" ? "default" : "ghost"}
+            onClick={() => setEstadoFilter("todos")}
+            className={`h-8 ${
+              estadoFilter === "todos"
+                ? "bg-blue-600 text-white hover:bg-blue-700"
+                : "hover:bg-gray-200"
+            }`}
           >
             Todos
           </Button>
+
           <Button
             size="sm"
-            variant={estadoFilter === 'activos' ? 'default' : 'ghost'}
-            onClick={() => setEstadoFilter('activos')}
-            className={`h-8 ${estadoFilter === 'activos'
-              ? 'bg-green-600 text-white hover:bg-green-700'
-              : 'hover:bg-gray-200'
-              }`}
+            variant={estadoFilter === "activos" ? "default" : "ghost"}
+            onClick={() => setEstadoFilter("activos")}
+            className={`h-8 ${
+              estadoFilter === "activos"
+                ? "bg-green-600 text-white hover:bg-green-700"
+                : "hover:bg-gray-200"
+            }`}
           >
             Activos
           </Button>
+
           <Button
             size="sm"
-            variant={estadoFilter === 'inactivos' ? 'default' : 'ghost'}
-            onClick={() => setEstadoFilter('inactivos')}
-            className={`h-8 ${estadoFilter === 'inactivos'
-              ? 'bg-red-600 text-white hover:bg-red-700'
-              : 'hover:bg-gray-200'
-              }`}
+            variant={estadoFilter === "inactivos" ? "default" : "ghost"}
+            onClick={() => setEstadoFilter("inactivos")}
+            className={`h-8 ${
+              estadoFilter === "inactivos"
+                ? "bg-red-600 text-white hover:bg-red-700"
+                : "hover:bg-gray-200"
+            }`}
           >
             Inactivos
           </Button>
         </div>
 
-        <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
+        <Button
+          onClick={handleCreate}
+          className="bg-blue-600 hover:bg-blue-700"
+          disabled={isLoadingInitial}
+        >
           <Plus size={18} className="mr-2" />
           Nuevo Usuario
         </Button>
       </div>
 
-      {/* Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <Table>
@@ -824,7 +1203,7 @@ export default function Usuarios() {
                 <TableHead>Nombre Completo</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Teléfono</TableHead>
-                <TableHead>Bodega Asignada</TableHead>
+                <TableHead>Bodegas Asignadas</TableHead>
                 <TableHead>Rol</TableHead>
                 <TableHead className="text-center">Estado</TableHead>
                 <TableHead className="text-right w-40">Acciones</TableHead>
@@ -832,53 +1211,54 @@ export default function Usuarios() {
             </TableHeader>
 
             <TableBody>
-              {currentUsuarios.length === 0 ? (
+              {isLoadingInitial ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={8} className="py-10 text-center text-gray-500">
+                    <div className="flex items-center justify-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Cargando usuarios...
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : currentUsuarios.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="py-10 text-center text-gray-500">
                     No se encontraron usuarios
                   </TableCell>
                 </TableRow>
               ) : (
-                currentUsuarios.map((usuario, index) => {
-                  const isSelfRow = !!loggedUserId && usuario.id === loggedUserId;
+                currentUsuarios.map((item, index) => {
+                  const isSelfRow = !!loggedUserId && item.id === loggedUserId;
 
                   return (
-                    <TableRow key={usuario.id} className="hover:bg-gray-50">
+                    <TableRow key={item.id} className="hover:bg-gray-50">
                       <TableCell>{startIndex + index + 1}</TableCell>
 
                       <TableCell className="font-medium text-gray-900">
-                        {usuario.nombre} {usuario.apellido}
+                        {item.nombre} {item.apellido}
                       </TableCell>
+
+                      <TableCell className="text-gray-700">{item.email}</TableCell>
 
                       <TableCell className="text-gray-700">
-                        {usuario.email}
+                        {item.telefono || "—"}
                       </TableCell>
 
-                      <TableCell className="text-gray-700">
-                        {usuario.telefono}
-                      </TableCell>
-
-                      <TableCell className="max-w-[240px] whitespace-normal break-words">
+                      <TableCell className="max-w-[260px] whitespace-normal break-words">
                         <Badge
                           variant="outline"
                           className="bg-purple-50 text-purple-700 border-purple-200 whitespace-normal"
                         >
-                          {usuario.bodegas.slice(0, 2).join(", ")}
-                          {usuario.bodegas.length > 2 && (
-                            <>
-                              <br />
-                              {usuario.bodegas.slice(2).join(", ")}
-                            </>
-                          )}
+                          {item.bodegas.length > 0 ? item.bodegas.join(", ") : "Sin bodegas"}
                         </Badge>
                       </TableCell>
 
                       <TableCell>
                         <Badge
                           variant="outline"
-                          className={getRolBadgeColor(usuario.rol)}
+                          className={getRolBadgeColor(item.rol)}
                         >
-                          {usuario.rol}
+                          {item.rol}
                         </Badge>
                       </TableCell>
 
@@ -886,21 +1266,20 @@ export default function Usuarios() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          disabled={isSelfRow}
-                          onClick={() => {
-                            if (isSelfRow) {
-                              toast.error("No puedes inhabilitar tu propio usuario");
-                              return;
-                            }
-                            toggleEstado(usuario);
-                          }}
-                          className={`${usuario.estado
-                            ? "bg-green-100 text-green-800 hover:bg-green-200"
-                            : "bg-red-100 text-red-800 hover:bg-red-200"
-                            } ${isSelfRow ? "opacity-40 cursor-not-allowed" : ""}`}
-                          title={isSelfRow ? "No puedes cambiar tu propio estado" : "Cambiar estado"}
+                          disabled={isSelfRow || isChangingEstado}
+                          onClick={() => toggleEstado(item)}
+                          className={`${
+                            item.estado
+                              ? "bg-green-100 text-green-800 hover:bg-green-200"
+                              : "bg-red-100 text-red-800 hover:bg-red-200"
+                          } ${isSelfRow ? "opacity-40 cursor-not-allowed" : ""}`}
+                          title={
+                            isSelfRow
+                              ? "No puedes cambiar tu propio estado"
+                              : "Cambiar estado"
+                          }
                         >
-                          {usuario.estado ? "Activo" : "Inactivo"}
+                          {item.estado ? "Activo" : "Inactivo"}
                         </Button>
                       </TableCell>
 
@@ -909,17 +1288,7 @@ export default function Usuarios() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => handleOpenResetDialog(usuario)}
-                            className="h-8 w-8 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
-                            title="Enviar link de contraseña"
-                          >
-                            <Mail size={16} />
-                          </Button>
-
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleView(usuario)}
+                            onClick={() => handleView(item)}
                             className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                             title="Ver detalles"
                           >
@@ -929,7 +1298,7 @@ export default function Usuarios() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => handleEdit(usuario)}
+                            onClick={() => handleEdit(item)}
                             className="h-8 w-8 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
                             title="Editar"
                           >
@@ -939,12 +1308,13 @@ export default function Usuarios() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => handleDelete(usuario)}
+                            onClick={() => handleDelete(item)}
                             disabled={isSelfRow}
-                            className={`h-8 w-8 ${isSelfRow
-                              ? "opacity-40 cursor-not-allowed"
-                              : "text-red-600 hover:text-red-700 hover:bg-red-50"
-                              }`}
+                            className={`h-8 w-8 ${
+                              isSelfRow
+                                ? "opacity-40 cursor-not-allowed"
+                                : "text-red-600 hover:text-red-700 hover:bg-red-50"
+                            }`}
                             title={
                               isSelfRow
                                 ? "No puedes eliminar tu propio usuario"
@@ -964,41 +1334,43 @@ export default function Usuarios() {
         </div>
       </div>
 
-      {/* Paginación */}
-      {filteredUsuarios.length > 0 && (
+      {filteredUsuarios.length > 0 && !isLoadingInitial && (
         <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
           <div className="text-sm text-gray-600">
-            Mostrando {startIndex + 1} - {Math.min(endIndex, filteredUsuarios.length)} de{' '}
+            Mostrando {startIndex + 1} - {Math.min(endIndex, filteredUsuarios.length)} de{" "}
             {filteredUsuarios.length} usuarios
           </div>
+
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => handlePageChange(currentPage - 1)}
+              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
               disabled={currentPage === 1}
               className="h-8"
             >
               <ChevronLeft size={16} />
               Anterior
             </Button>
+
             <div className="flex items-center gap-1">
               {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                 <Button
                   key={page}
-                  variant={currentPage === page ? 'default' : 'outline'}
+                  variant={currentPage === page ? "default" : "outline"}
                   size="sm"
-                  onClick={() => handlePageChange(page)}
+                  onClick={() => setCurrentPage(page)}
                   className="h-8 w-8 p-0"
                 >
                   {page}
                 </Button>
               ))}
             </div>
+
             <Button
               variant="outline"
               size="sm"
-              onClick={() => handlePageChange(currentPage + 1)}
+              onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
               disabled={currentPage === totalPages}
               className="h-8"
             >
@@ -1009,7 +1381,7 @@ export default function Usuarios() {
         </div>
       )}
 
-      {/* Modal Ver Detalles */}
+      {/* VER */}
       <Dialog
         open={isVer}
         onOpenChange={(open) => {
@@ -1019,7 +1391,7 @@ export default function Usuarios() {
         <DialogContent
           className="max-w-6xl"
           aria-describedby="view-usuario-description"
-          onInteractOutside={(e) => e.preventDefault()} // ✅ NO cerrar al click por fuera
+          onInteractOutside={(e) => e.preventDefault()}
         >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1033,7 +1405,6 @@ export default function Usuarios() {
 
           {usuarioSeleccionado && (
             <div className="space-y-6">
-              {/* Información Principal */}
               <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-6 border border-blue-100">
                 <div className="flex items-start justify-between">
                   <div className="space-y-2">
@@ -1041,10 +1412,9 @@ export default function Usuarios() {
                       {usuarioSeleccionado.nombre} {usuarioSeleccionado.apellido}
                     </h3>
 
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-4 flex-wrap">
                       <Badge variant="outline" className="bg-white">
-                        {usuarioSeleccionado.tipoDocumento}:{" "}
-                        {usuarioSeleccionado.numeroDocumento}
+                        {usuarioSeleccionado.tipoDocumento}: {usuarioSeleccionado.numeroDocumento}
                       </Badge>
 
                       <Badge
@@ -1068,7 +1438,6 @@ export default function Usuarios() {
                 </div>
               </div>
 
-              {/* Información de Contacto */}
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Mail className="h-4 w-4 text-blue-600" />
@@ -1077,34 +1446,31 @@ export default function Usuarios() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                    <Label className="text-xs text-gray-500 mb-1">Email</Label>
-                    <p className="font-medium text-gray-900">
-                      {usuarioSeleccionado.email}
-                    </p>
+                    <Label className="text-xs text-gray-500 mb-1">Correo</Label>
+                    <p className="font-medium text-gray-900">{usuarioSeleccionado.email}</p>
                   </div>
 
                   <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                     <Label className="text-xs text-gray-500 mb-1">Teléfono</Label>
                     <p className="font-medium text-gray-900">
-                      {usuarioSeleccionado.telefono}
+                      {usuarioSeleccionado.telefono || "—"}
                     </p>
                   </div>
                 </div>
               </div>
 
-              {/* Información de Asignación */}
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Building2 className="h-4 w-4 text-blue-600" />
-                  Asignación de Bodega
+                  Asignación de Bodegas
                 </h4>
 
                 <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                  <Label className="text-xs text-gray-500 mb-1">
-                    Bodegas Asignadas
-                  </Label>
+                  <Label className="text-xs text-gray-500 mb-1">Bodegas Asignadas</Label>
                   <p className="font-medium text-gray-900">
-                    {usuarioSeleccionado.bodegas.join(", ")}
+                    {usuarioSeleccionado.bodegas.length > 0
+                      ? usuarioSeleccionado.bodegas.join(", ")
+                      : "Sin bodegas asignadas"}
                   </p>
                 </div>
               </div>
@@ -1119,7 +1485,7 @@ export default function Usuarios() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Crear Usuario */}
+      {/* CREAR */}
       <Dialog
         open={isCrear}
         onOpenChange={(open) => {
@@ -1134,7 +1500,7 @@ export default function Usuarios() {
           <DialogHeader>
             <DialogTitle>Nuevo Usuario</DialogTitle>
             <DialogDescription id="create-usuario-description">
-              Completa la información del nuevo usuario del sistema
+              Completa la información del nuevo usuario. La contraseña no se define aquí.
             </DialogDescription>
           </DialogHeader>
 
@@ -1142,16 +1508,21 @@ export default function Usuarios() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="create-tipo-doc">Tipo de Documento *</Label>
-                <Select value={formTipoDoc} onValueChange={setFormTipoDoc}>
+                <Select value={formTipoDocId} onValueChange={handleTipoDocChange}>
                   <SelectTrigger id="create-tipo-doc">
-                    <SelectValue />
+                    <SelectValue placeholder="Selecciona tipo de documento" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="CC">Cédula de Ciudadanía</SelectItem>
-                    <SelectItem value="CE">Cédula de Extranjería</SelectItem>
-                    <SelectItem value="Pasaporte">Pasaporte</SelectItem>
+                    {tiposDocumento.map((tipo) => (
+                      <SelectItem key={tipo.id} value={String(tipo.id)}>
+                        {tipo.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+                {errors.tipoDoc && touched.tipoDoc && (
+                  <p className="text-red-500 text-sm mt-1">{errors.tipoDoc}</p>
+                )}
               </div>
 
               <div>
@@ -1204,7 +1575,7 @@ export default function Usuarios() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="create-email">Email *</Label>
+                <Label htmlFor="create-email">Correo *</Label>
                 <Input
                   id="create-email"
                   type="email"
@@ -1220,9 +1591,8 @@ export default function Usuarios() {
               </div>
 
               <div>
-                <Label htmlFor="create-telefono">Teléfono *</Label>
+                <Label htmlFor="create-telefono">Teléfono</Label>
                 <Input
-                  maxLength={10}
                   id="create-telefono"
                   value={formTelefono}
                   onChange={(e) => handleTelefonoChange(e.target.value)}
@@ -1240,21 +1610,25 @@ export default function Usuarios() {
               <div>
                 <Label htmlFor="create-bodega">Bodegas Asignadas *</Label>
                 <div className="space-y-2 mt-2 border border-gray-200 rounded-md p-3">
-                  {bodegasDisponibles.map((bodega) => (
-                    <div key={bodega} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`create-bodega-${bodega}`}
-                        checked={formBodegas.includes(bodega)}
-                        onCheckedChange={() => toggleBodega(bodega)}
-                      />
-                      <label
-                        htmlFor={`create-bodega-${bodega}`}
-                        className="text-sm cursor-pointer"
-                      >
-                        {bodega}
-                      </label>
-                    </div>
-                  ))}
+                  {bodegas.length === 0 ? (
+                    <p className="text-sm text-gray-500">No hay bodegas disponibles</p>
+                  ) : (
+                    bodegas.map((bodega) => (
+                      <div key={bodega.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`create-bodega-${bodega.id}`}
+                          checked={formBodegasIds.includes(bodega.id)}
+                          onCheckedChange={() => toggleBodega(bodega.id)}
+                        />
+                        <label
+                          htmlFor={`create-bodega-${bodega.id}`}
+                          className="text-sm cursor-pointer"
+                        >
+                          {bodega.label}
+                        </label>
+                      </div>
+                    ))
+                  )}
                 </div>
                 {errors.bodegas && touched.bodegas && (
                   <p className="text-red-500 text-sm mt-1">{errors.bodegas}</p>
@@ -1263,14 +1637,14 @@ export default function Usuarios() {
 
               <div>
                 <Label htmlFor="create-rol">Rol *</Label>
-                <Select value={formRol} onValueChange={handleRolChange} onBlur={handleRolBlur}>
+                <Select value={formRolId} onValueChange={handleRolChange}>
                   <SelectTrigger id="create-rol">
                     <SelectValue placeholder="Selecciona un rol" />
                   </SelectTrigger>
                   <SelectContent>
-                    {rolesDisponibles.map((rol) => (
-                      <SelectItem key={rol} value={rol}>
-                        {rol}
+                    {roles.map((rol) => (
+                      <SelectItem key={rol.id} value={String(rol.id)}>
+                        {rol.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1283,17 +1657,22 @@ export default function Usuarios() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={closeToList}>
+            <Button variant="outline" onClick={closeToList} disabled={isSaving}>
               Cancelar
             </Button>
-            <Button onClick={confirmCreate} className="bg-blue-600 hover:bg-blue-700">
+            <Button
+              onClick={confirmCreate}
+              className="bg-blue-600 hover:bg-blue-700"
+              disabled={isSaving}
+            >
+              {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Crear Usuario
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal Editar Usuario */}
+      {/* EDITAR */}
       <Dialog
         open={isEditar}
         onOpenChange={(open) => {
@@ -1316,16 +1695,21 @@ export default function Usuarios() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="edit-tipo-doc">Tipo de Documento *</Label>
-                <Select value={formTipoDoc} onValueChange={setFormTipoDoc}>
+                <Select value={formTipoDocId} onValueChange={handleTipoDocChange}>
                   <SelectTrigger id="edit-tipo-doc">
-                    <SelectValue />
+                    <SelectValue placeholder="Selecciona tipo de documento" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="CC">Cédula de Ciudadanía</SelectItem>
-                    <SelectItem value="CE">Cédula de Extranjería</SelectItem>
-                    <SelectItem value="Pasaporte">Pasaporte</SelectItem>
+                    {tiposDocumento.map((tipo) => (
+                      <SelectItem key={tipo.id} value={String(tipo.id)}>
+                        {tipo.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+                {errors.tipoDoc && touched.tipoDoc && (
+                  <p className="text-red-500 text-sm mt-1">{errors.tipoDoc}</p>
+                )}
               </div>
 
               <div>
@@ -1378,7 +1762,7 @@ export default function Usuarios() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="edit-email">Email *</Label>
+                <Label htmlFor="edit-email">Correo *</Label>
                 <Input
                   id="edit-email"
                   type="email"
@@ -1394,7 +1778,7 @@ export default function Usuarios() {
               </div>
 
               <div>
-                <Label htmlFor="edit-telefono">Teléfono *</Label>
+                <Label htmlFor="edit-telefono">Teléfono</Label>
                 <Input
                   id="edit-telefono"
                   value={formTelefono}
@@ -1413,21 +1797,25 @@ export default function Usuarios() {
               <div>
                 <Label htmlFor="edit-bodega">Bodegas Asignadas *</Label>
                 <div className="space-y-2 mt-2 border border-gray-200 rounded-md p-3">
-                  {bodegasDisponibles.map((bodega) => (
-                    <div key={bodega} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`edit-bodega-${bodega}`}
-                        checked={formBodegas.includes(bodega)}
-                        onCheckedChange={() => toggleBodega(bodega)}
-                      />
-                      <label
-                        htmlFor={`edit-bodega-${bodega}`}
-                        className="text-sm cursor-pointer"
-                      >
-                        {bodega}
-                      </label>
-                    </div>
-                  ))}
+                  {bodegas.length === 0 ? (
+                    <p className="text-sm text-gray-500">No hay bodegas disponibles</p>
+                  ) : (
+                    bodegas.map((bodega) => (
+                      <div key={bodega.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`edit-bodega-${bodega.id}`}
+                          checked={formBodegasIds.includes(bodega.id)}
+                          onCheckedChange={() => toggleBodega(bodega.id)}
+                        />
+                        <label
+                          htmlFor={`edit-bodega-${bodega.id}`}
+                          className="text-sm cursor-pointer"
+                        >
+                          {bodega.label}
+                        </label>
+                      </div>
+                    ))
+                  )}
                 </div>
                 {errors.bodegas && touched.bodegas && (
                   <p className="text-red-500 text-sm mt-1">{errors.bodegas}</p>
@@ -1436,21 +1824,21 @@ export default function Usuarios() {
 
               <div>
                 <Label htmlFor="edit-rol">Rol *</Label>
-
                 <Select
-                  value={formRol}
+                  value={formRolId}
                   onValueChange={handleRolChange}
-                  onBlur={handleRolBlur}
                   disabled={isSelfEdit}
                 >
-                  <SelectTrigger id="edit-rol" className={isSelfEdit ? "opacity-60 cursor-not-allowed" : ""}>
+                  <SelectTrigger
+                    id="edit-rol"
+                    className={isSelfEdit ? "opacity-60 cursor-not-allowed" : ""}
+                  >
                     <SelectValue placeholder="Selecciona un rol" />
                   </SelectTrigger>
-
                   <SelectContent>
-                    {rolesDisponibles.map((rol) => (
-                      <SelectItem key={rol} value={rol}>
-                        {rol}
+                    {roles.map((rol) => (
+                      <SelectItem key={rol.id} value={String(rol.id)}>
+                        {rol.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1470,63 +1858,22 @@ export default function Usuarios() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={closeToList}>
+            <Button variant="outline" onClick={closeToList} disabled={isSaving}>
               Cancelar
             </Button>
-            <Button onClick={confirmEdit} className="bg-orange-600 hover:bg-orange-700">
+            <Button
+              onClick={confirmEdit}
+              className="bg-orange-600 hover:bg-orange-700"
+              disabled={isSaving}
+            >
+              {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Guardar Cambios
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* ✅ MODAL RESET PASSWORD (igual a Profile) */}
-      <Dialog
-        open={isConfirmReset}
-        modal
-        onOpenChange={(open) => {
-          if (!open && !sendingReset) setIsConfirmReset(false);
-        }}
-      >
-        <DialogContent
-          className="max-w-lg"
-          onInteractOutside={(e) => e.preventDefault()}
-          onEscapeKeyDown={(e) => {
-            // ✅ permitir ESC para cerrar (como pediste)
-            if (sendingReset) e.preventDefault();
-          }}
-        >
-          <DialogHeader>
-            <DialogTitle>Enviar cambio de contraseña</DialogTitle>
-            <DialogDescription>
-              Se enviará un enlace de cambio de contraseña al correo:{" "}
-              <span className="font-semibold text-gray-900">{resetEmail}</span>
-              <br />
-              ¿Deseas continuar?
-            </DialogDescription>
-          </DialogHeader>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsConfirmReset(false)}
-              disabled={sendingReset}
-            >
-              Cancelar
-            </Button>
-
-            <Button
-              className="bg-blue-600 hover:bg-blue-700"
-              onClick={handleSendPasswordReset}
-              disabled={sendingReset}
-            >
-              {sendingReset ? "Enviando..." : "Enviar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal Eliminar Usuario */}
+      {/* ELIMINAR */}
       <Dialog
         open={isEliminar}
         onOpenChange={(open) => {
@@ -1550,33 +1897,37 @@ export default function Usuarios() {
                 </span>
               </p>
               <p className="text-gray-600 text-sm mt-1">
-                Email: {usuarioSeleccionado.email}
+                Correo: {usuarioSeleccionado.email}
               </p>
             </div>
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={closeToList}>
+            <Button variant="outline" onClick={closeToList} disabled={isDeleting}>
               Cancelar
             </Button>
             <Button
               variant="destructive"
               onClick={confirmDelete}
-              disabled={!!loggedUserId && usuarioSeleccionado?.id === loggedUserId}
+              disabled={!!loggedUserId && usuarioSeleccionado?.id === loggedUserId || isDeleting}
               title={
                 !!loggedUserId && usuarioSeleccionado?.id === loggedUserId
                   ? "No puedes eliminar tu propio usuario"
                   : "Eliminar"
               }
             >
+              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Eliminar
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal Confirmación Cambio de Estado */}
-      <Dialog open={showConfirmEstadoModal} onOpenChange={setShowConfirmEstadoModal}>
+      {/* CAMBIO DE ESTADO */}
+      <Dialog
+        open={showConfirmEstadoModal}
+        onOpenChange={setShowConfirmEstadoModal}
+      >
         <DialogContent className="max-w-lg" aria-describedby="confirm-estado-description">
           <DialogHeader>
             <DialogTitle>Confirmar Cambio de Estado</DialogTitle>
@@ -1584,36 +1935,59 @@ export default function Usuarios() {
               ¿Estás seguro de que deseas cambiar el estado de este usuario?
             </DialogDescription>
           </DialogHeader>
+
           <div className="space-y-3 py-4">
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Usuario:</span>
-              <span className="font-medium">{usuarioParaCambioEstado?.nombre} {usuarioParaCambioEstado?.apellido}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Estado Actual:</span>
-              <span className={`font-medium ${usuarioParaCambioEstado?.estado ? 'text-green-700' : 'text-red-700'}`}>
-                {usuarioParaCambioEstado?.estado ? 'Activo' : 'Inactivo'}
+              <span className="font-medium">
+                {usuarioParaCambioEstado?.nombre} {usuarioParaCambioEstado?.apellido}
               </span>
             </div>
+
             <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Nuevo Estado:</span>
-              <span className={`font-medium ${!usuarioParaCambioEstado?.estado ? 'text-green-700' : 'text-red-700'}`}>
-                {!usuarioParaCambioEstado?.estado ? 'Activo' : 'Inactivo'}
+              <span className="text-gray-600">Estado actual:</span>
+              <span
+                className={`font-medium ${
+                  usuarioParaCambioEstado?.estado ? "text-green-700" : "text-red-700"
+                }`}
+              >
+                {usuarioParaCambioEstado?.estado ? "Activo" : "Inactivo"}
+              </span>
+            </div>
+
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">Nuevo estado:</span>
+              <span
+                className={`font-medium ${
+                  !usuarioParaCambioEstado?.estado ? "text-green-700" : "text-red-700"
+                }`}
+              >
+                {!usuarioParaCambioEstado?.estado ? "Activo" : "Inactivo"}
               </span>
             </div>
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowConfirmEstadoModal(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setShowConfirmEstadoModal(false)}
+              disabled={isChangingEstado}
+            >
               Cancelar
             </Button>
-            <Button onClick={handleConfirmEstado} className="bg-blue-600 hover:bg-blue-700">
+            <Button
+              onClick={handleConfirmEstado}
+              className="bg-blue-600 hover:bg-blue-700"
+              disabled={isChangingEstado}
+            >
+              {isChangingEstado && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Confirmar
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Éxito */}
+      {/* ÉXITO CREACIÓN */}
       <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
         <DialogContent className="max-w-lg" aria-describedby="success-usuario-description">
           <DialogHeader>
@@ -1621,23 +1995,29 @@ export default function Usuarios() {
             <DialogDescription id="success-usuario-description" className="sr-only">
               El usuario se ha registrado correctamente
             </DialogDescription>
+
             <div className="flex justify-center mb-4">
               <div className="rounded-full bg-green-100 p-3">
                 <CheckCircle className="h-12 w-12 text-green-600" />
               </div>
             </div>
+
             <DialogTitle className="text-center">¡Registro Exitoso!</DialogTitle>
             <DialogDescription className="text-center">
-              El usuario ha sido creado correctamente en el sistema
+              El usuario ha sido creado correctamente en el sistema.
             </DialogDescription>
           </DialogHeader>
+
           <DialogFooter className="flex justify-center">
-            <Button onClick={handleSuccessModalClose} className="bg-green-600 hover:bg-green-700">
+            <Button
+              onClick={() => setShowSuccessModal(false)}
+              className="bg-green-600 hover:bg-green-700"
+            >
               Aceptar
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div >
+    </div>
   );
 }
