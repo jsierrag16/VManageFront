@@ -71,27 +71,49 @@ type OpcionCatalogo = {
 };
 
 export default function Usuarios() {
+  // =========================================================
+  // Contexto, navegación y permisos
+  // =========================================================
+  const { tienePermiso, usuario, refreshUsuario } = useAuth();
+  const loggedUserId = usuario?.id ?? null;
+
+  const navigate = useNavigate();
+  const location = useLocation();
+  const params = useParams<{ id: string }>();
+
+  const { selectedBodegaNombre } = useOutletContext<AppOutletContext>();
+  const selectedBodega = selectedBodegaNombre;
+
+  // =========================================================
+  // Estados del módulo
+  // =========================================================
   const [searchTerm, setSearchTerm] = useState("");
   const [estadoFilter, setEstadoFilter] = useState<string>("todos");
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
-  const [generosCatalogo, setGenerosCatalogo] = useState<OpcionCatalogo[]>([]);
   const [isLoadingUsuarios, setIsLoadingUsuarios] = useState(false);
 
   const [isConfirmCreateOpen, setIsConfirmCreateOpen] = useState(false);
   const [isConfirmEditOpen, setIsConfirmEditOpen] = useState(false);
   const [isCreatingUsuario, setIsCreatingUsuario] = useState(false);
   const [isUpdatingUsuario, setIsUpdatingUsuario] = useState(false);
+  const [isDeletingUsuario, setIsDeletingUsuario] = useState(false);
+  const [isChangingEstadoUsuario, setIsChangingEstadoUsuario] = useState(false);
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
   const [usuarioParaCambioEstado, setUsuarioParaCambioEstado] = useState<Usuario | null>(null);
+
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+
   const [isConfirmReset, setIsConfirmReset] = useState(false);
   const [sendingReset, setSendingReset] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
-  const [formGeneroId, setFormGeneroId] = useState<number | "">("");
 
+  // =========================================================
+  // Estados del formulario
+  // =========================================================
+  const [formGeneroId, setFormGeneroId] = useState<number | "">("");
   const [formTipoDocId, setFormTipoDocId] = useState<number | "">("");
   const [formNumeroDoc, setFormNumeroDoc] = useState("");
   const [formNombre, setFormNombre] = useState("");
@@ -102,20 +124,27 @@ export default function Usuarios() {
   const [formBodegasIds, setFormBodegasIds] = useState<number[]>([]);
   const [formRolId, setFormRolId] = useState<number | "">("");
 
+  // =========================================================
+  // Estados de catálogos
+  // =========================================================
+  const [generosCatalogo, setGenerosCatalogo] = useState<OpcionCatalogo[]>([]);
   const [tiposDocumento, setTiposDocumento] = useState<OpcionCatalogo[]>([]);
   const [rolesCatalogo, setRolesCatalogo] = useState<OpcionCatalogo[]>([]);
   const [bodegasCatalogo, setBodegasCatalogo] = useState<OpcionCatalogo[]>([]);
   const [isLoadingCatalogos, setIsLoadingCatalogos] = useState(false);
 
-  const { tienePermiso } = useAuth();
-
-  const canViewUsuarios = tienePermiso("administracion", "usuarios", "ver");
+  // =========================================================
+  // Permisos
+  // =========================================================
   const canCreateUsuarios = tienePermiso("administracion", "usuarios", "crear");
   const canEditUsuarios = tienePermiso("administracion", "usuarios", "editar");
   const canChangeEstadoUsuarios = tienePermiso("administracion", "usuarios", "cambiarEstado");
   const canResetPasswordUsuarios = tienePermiso("administracion", "usuarios", "restablecerContrasena");
   const canDeleteUsuarios = tienePermiso("administracion", "usuarios", "eliminar");
 
+  // =========================================================
+  // Estados de errores y touched
+  // =========================================================
   const [errors, setErrors] = useState({
     tipoDoc: "",
     numeroDoc: "",
@@ -140,21 +169,17 @@ export default function Usuarios() {
     rol: false,
   });
 
-  const { usuario } = useAuth();
-  const loggedUserId = usuario?.id ?? null;
-
-  const navigate = useNavigate();
-  const location = useLocation();
-  const params = useParams<{ id: string }>();
-
-  const { selectedBodegaNombre } = useOutletContext<AppOutletContext>();
-  const selectedBodega = selectedBodegaNombre;
-
+  // =========================================================
+  // Flags de ruta
+  // =========================================================
   const isCrear = location.pathname.endsWith("/usuarios/crear");
   const isVer = location.pathname.endsWith("/ver");
   const isEditar = location.pathname.endsWith("/editar");
   const isEliminar = location.pathname.endsWith("/eliminar");
 
+  // =========================================================
+  // Datos derivados / useMemo
+  // =========================================================
   const usuarioSeleccionado = useMemo(() => {
     if (!params.id) return null;
     const numericId = Number(params.id);
@@ -164,6 +189,40 @@ export default function Usuarios() {
 
   const isSelfEdit = !!loggedUserId && usuarioSeleccionado?.id === loggedUserId;
 
+  const filteredUsuarios = useMemo(() => {
+    return usuarios
+      .filter((u) => {
+        if (selectedBodega === "Todas las bodegas") return true;
+        return u.bodegas.includes(selectedBodega);
+      })
+      .filter((u) => {
+        const searchLower = searchTerm.toLowerCase();
+
+        return (
+          u.nombre.toLowerCase().includes(searchLower) ||
+          u.apellido.toLowerCase().includes(searchLower) ||
+          u.email.toLowerCase().includes(searchLower) ||
+          u.tipoDocumento.toLowerCase().includes(searchLower) ||
+          u.numeroDocumento.toLowerCase().includes(searchLower) ||
+          u.telefono.toLowerCase().includes(searchLower) ||
+          u.bodegas.some((b) => b.toLowerCase().includes(searchLower)) ||
+          u.rol.toLowerCase().includes(searchLower)
+        );
+      })
+      .filter((u) => {
+        if (estadoFilter === "todos") return true;
+        return u.estado === (estadoFilter === "activos");
+      });
+  }, [usuarios, selectedBodega, searchTerm, estadoFilter]);
+
+  const totalPages = Math.ceil(filteredUsuarios.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentUsuarios = filteredUsuarios.slice(startIndex, endIndex);
+
+  // =========================================================
+  // Funciones de carga
+  // =========================================================
   const loadUsuarios = useCallback(async () => {
     try {
       setIsLoadingUsuarios(true);
@@ -192,7 +251,6 @@ export default function Usuarios() {
       setRolesCatalogo(roles);
       setBodegasCatalogo(bodegas);
       setGenerosCatalogo(generos);
-
     } catch (error) {
       console.error("Error cargando catálogos:", error);
       toast.error("No se pudieron cargar los catálogos");
@@ -201,12 +259,15 @@ export default function Usuarios() {
     }
   }, []);
 
+  const closeToList = () => navigate("/app/usuarios");
+
+  // =========================================================
+  // Efectos
+  // =========================================================
   useEffect(() => {
     loadCatalogos();
     loadUsuarios();
   }, [loadCatalogos, loadUsuarios]);
-
-  const closeToList = () => navigate("/app/usuarios");
 
   useEffect(() => {
     if (!isVer && !isEditar && !isEliminar) return;
@@ -296,7 +357,13 @@ export default function Usuarios() {
     });
   }, [isCrear]);
 
-  // Funciones de validación individuales
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, estadoFilter, selectedBodega]);
+
+  // =========================================================
+  // Validaciones y helpers
+  // =========================================================
   const validateTipoDocField = (value: number | "") => {
     if (!value) {
       return "El tipo de documento es requerido";
@@ -412,255 +479,6 @@ export default function Usuarios() {
     return "";
   };
 
-  // Handlers con validación en tiempo real
-  const handleOpenResetDialog = (u: Usuario) => {
-    if (!canResetPasswordUsuarios) {
-      toast.error("No tienes permiso para restablecer contraseñas");
-      return;
-    }
-    const email = (u.email ?? "").trim();
-
-    if (!email) {
-      toast.error("No hay correo para enviar el cambio de contraseña.");
-      return;
-    }
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      toast.error("El correo no es válido.");
-      return;
-    }
-
-    setResetEmail(email);
-    setIsConfirmReset(true);
-  };
-
-  const handleSendPasswordReset = async () => {
-    if (!canResetPasswordUsuarios) {
-      toast.error("No tienes permiso para restablecer contraseñas");
-      return;
-    }
-    try {
-      setSendingReset(true);
-
-      await solicitarRestablecimientoContrasena(resetEmail);
-
-      toast.success(
-        `Si el correo existe, se generó el enlace de restablecimiento para ${resetEmail}`
-      );
-      setIsConfirmReset(false);
-    } catch (error) {
-      console.error("Error enviando restablecimiento:", error);
-      toast.error("No se pudo generar el enlace. Intenta de nuevo.");
-    } finally {
-      setSendingReset(false);
-    }
-  };
-
-  const handleOpenCreateConfirm = () => {
-    if (isCreatingUsuario) return;
-    if (!validateForm()) return;
-
-    if (!formTipoDocId) {
-      toast.error("Debes seleccionar tipo de documento");
-      return;
-    }
-
-    if (!formRolId) {
-      toast.error("Debes seleccionar rol");
-      return;
-    }
-
-    setIsConfirmCreateOpen(true);
-  };
-
-  const handleConfirmCreateModalChange = (open: boolean) => {
-    if (isCreatingUsuario) return;
-    setIsConfirmCreateOpen(open);
-  };
-
-  const handleNumeroDocChange = (value: string) => {
-    setFormNumeroDoc(value);
-    if (touched.numeroDoc) {
-      setErrors({ ...errors, numeroDoc: validateNumeroDocumento(value) });
-    }
-  };
-
-  const handleNombreChange = (value: string) => {
-    setFormNombre(value);
-    if (touched.nombre) {
-      setErrors({ ...errors, nombre: validateNombre(value) });
-    }
-  };
-
-  const handleApellidoChange = (value: string) => {
-    setFormApellido(value);
-    if (touched.apellido) {
-      setErrors({ ...errors, apellido: validateApellido(value) });
-    }
-  };
-
-  const handleEmailChange = (value: string) => {
-    setFormEmail(value);
-    if (touched.email) {
-      setErrors({ ...errors, email: validateEmailField(value) });
-    }
-  };
-
-  const handleTelefonoChange = (value: string) => {
-    setFormTelefono(value);
-    if (touched.telefono) {
-      setErrors({ ...errors, telefono: validateTelefonoField(value) });
-    }
-  };
-
-  const handleRolChange = (value: number | "") => {
-    setFormRolId(value);
-    if (touched.rol) {
-      setErrors({ ...errors, rol: validateRolField(value) });
-    }
-  };
-
-  const handleTipoDocChange = (value: number | "") => {
-    setFormTipoDocId(value);
-    if (touched.tipoDoc) {
-      setErrors({ ...errors, tipoDoc: validateTipoDocField(value) });
-    }
-  };
-
-  // Handlers onBlur
-  const handleNumeroDocBlur = () => {
-    setTouched({ ...touched, numeroDoc: true });
-    setErrors({ ...errors, numeroDoc: validateNumeroDocumento(formNumeroDoc) });
-  };
-
-  const handleNombreBlur = () => {
-    setTouched({ ...touched, nombre: true });
-    setErrors({ ...errors, nombre: validateNombre(formNombre) });
-  };
-
-  const handleApellidoBlur = () => {
-    setTouched({ ...touched, apellido: true });
-    setErrors({ ...errors, apellido: validateApellido(formApellido) });
-  };
-
-  const handleFechaNacimientoBlur = () => {
-    setTouched({ ...touched, fechaNacimiento: true });
-    setErrors({
-      ...errors,
-      fechaNacimiento: validateFechaNacimientoField(formFechaNacimiento),
-    });
-  };
-
-  const handleEmailBlur = () => {
-    setTouched({ ...touched, email: true });
-    setErrors({ ...errors, email: validateEmailField(formEmail) });
-  };
-
-  const handleTelefonoBlur = () => {
-    setTouched({ ...touched, telefono: true });
-    setErrors({ ...errors, telefono: validateTelefonoField(formTelefono) });
-  };
-
-  const filteredUsuarios = useMemo(() => {
-    return usuarios
-      .filter((u) => {
-        // ✅ Si es "Todas las bodegas" (cuando exista), no filtramos por bodega
-        if (selectedBodega === "Todas las bodegas") return true;
-
-        // ✅ Si no, el usuario debe tener esa bodega asignada
-        return u.bodegas.includes(selectedBodega);
-      })
-      .filter((u) => {
-        const searchLower = searchTerm.toLowerCase();
-
-        return (
-          u.nombre.toLowerCase().includes(searchLower) ||
-          u.apellido.toLowerCase().includes(searchLower) ||
-          u.email.toLowerCase().includes(searchLower) ||
-          u.tipoDocumento.toLowerCase().includes(searchLower) ||
-          u.numeroDocumento.toLowerCase().includes(searchLower) ||
-          u.telefono.toLowerCase().includes(searchLower) ||
-          u.bodegas.some((b) => b.toLowerCase().includes(searchLower)) ||
-          u.rol.toLowerCase().includes(searchLower)
-        );
-      })
-      .filter((u) => {
-        if (estadoFilter === "todos") return true;
-        return u.estado === (estadoFilter === "activos");
-      });
-  }, [usuarios, selectedBodega, searchTerm, estadoFilter]);
-
-
-  // Paginación
-  const totalPages = Math.ceil(filteredUsuarios.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentUsuarios = filteredUsuarios.slice(startIndex, endIndex);
-
-  // Resetear a página 1 cuando cambia el filtro
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, estadoFilter, selectedBodega]);
-
-  const handleView = (u: Usuario) => {
-    navigate(`/app/usuarios/${u.id}/ver`);
-  };
-
-  const handleCreate = () => {
-    setFormTipoDocId("");
-    setFormNumeroDoc("");
-    setFormNombre("");
-    setFormApellido("");
-    setFormFechaNacimiento("");
-    setFormEmail("");
-    setFormTelefono("");
-    setFormBodegasIds([]);
-    setFormRolId("");
-
-    setErrors({
-      tipoDoc: "",
-      numeroDoc: "",
-      nombre: "",
-      apellido: "",
-      fechaNacimiento: "",
-      email: "",
-      telefono: "",
-      bodegas: "",
-      rol: "",
-    });
-
-    setTouched({
-      tipoDoc: false,
-      numeroDoc: false,
-      nombre: false,
-      apellido: false,
-      fechaNacimiento: false,
-      email: false,
-      telefono: false,
-      bodegas: false,
-      rol: false,
-    });
-
-    navigate("/app/usuarios/crear");
-  };
-
-  const handleEdit = (u: Usuario) => {
-    navigate(`/app/usuarios/${u.id}/editar`);
-  };
-
-  const handleDelete = (u: Usuario) => {
-    if (!canDeleteUsuarios) {
-      toast.error("No tienes permiso para eliminar usuarios");
-      return;
-    }
-    if (loggedUserId && u.id === loggedUserId) {
-      toast.error("No puedes eliminar tu propio usuario");
-      return;
-    }
-
-    navigate(`/app/usuarios/${u.id}/eliminar`);
-  };
-
   const validateForm = () => {
     setTouched({
       tipoDoc: true,
@@ -714,8 +532,319 @@ export default function Usuarios() {
     return true;
   };
 
-  const { refreshUsuario } = useAuth();
+  const getRolBadgeColor = (rol: string) => {
+    switch (rol) {
+      case "Administrador":
+        return "bg-purple-100 text-purple-800 border-purple-200";
+      case "Vendedor":
+        return "bg-yellow-100 text-yellow-800 border-yellow-200";
+      case "Auxiliar Administrativo":
+        return "bg-cyan-100 text-cyan-800 border-cyan-200";
+      case "Auxiliar de Bodega":
+        return "bg-orange-100 text-orange-800 border-orange-200";
+      case "Conductor":
+        return "bg-indigo-100 text-indigo-800 border-indigo-200";
+      default:
+        return "bg-gray-100 text-gray-800 border-gray-200";
+    }
+  };
 
+  // =========================================================
+  // Handlers de formulario
+  // =========================================================
+  const handleNumeroDocChange = (value: string) => {
+    const limpio = value.replace(/\D/g, "").slice(0, 15);
+    setFormNumeroDoc(limpio);
+
+    if (touched.numeroDoc) {
+      setErrors({ ...errors, numeroDoc: validateNumeroDocumento(limpio) });
+    }
+  };
+
+  const handleNombreChange = (value: string) => {
+    const limpio = value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, "").slice(0, 50);
+    setFormNombre(limpio);
+
+    if (touched.nombre) {
+      setErrors({ ...errors, nombre: validateNombre(limpio) });
+    }
+  };
+
+  const handleApellidoChange = (value: string) => {
+    const limpio = value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, "").slice(0, 50);
+    setFormApellido(limpio);
+
+    if (touched.apellido) {
+      setErrors({ ...errors, apellido: validateApellido(limpio) });
+    }
+  };
+
+  const handleFechaNacimientoChange = (value: string) => {
+    setFormFechaNacimiento(value);
+    if (touched.fechaNacimiento) {
+      setErrors({
+        ...errors,
+        fechaNacimiento: validateFechaNacimientoField(value),
+      });
+    }
+  };
+
+  const handleEmailChange = (value: string) => {
+    setFormEmail(value);
+    if (touched.email) {
+      setErrors({ ...errors, email: validateEmailField(value) });
+    }
+  };
+
+  const handleTelefonoChange = (value: string) => {
+    setFormTelefono(value);
+    if (touched.telefono) {
+      setErrors({ ...errors, telefono: validateTelefonoField(value) });
+    }
+  };
+
+  const handleRolChange = (value: number | "") => {
+    setFormRolId(value);
+    if (touched.rol) {
+      setErrors({ ...errors, rol: validateRolField(value) });
+    }
+  };
+
+  const handleTipoDocChange = (value: number | "") => {
+    setFormTipoDocId(value);
+    if (touched.tipoDoc) {
+      setErrors({ ...errors, tipoDoc: validateTipoDocField(value) });
+    }
+  };
+
+  const handleNumeroDocBlur = () => {
+    setTouched({ ...touched, numeroDoc: true });
+    setErrors({ ...errors, numeroDoc: validateNumeroDocumento(formNumeroDoc) });
+  };
+
+  const handleNombreBlur = () => {
+    setTouched({ ...touched, nombre: true });
+    setErrors({ ...errors, nombre: validateNombre(formNombre) });
+  };
+
+  const handleApellidoBlur = () => {
+    setTouched({ ...touched, apellido: true });
+    setErrors({ ...errors, apellido: validateApellido(formApellido) });
+  };
+
+  const handleFechaNacimientoBlur = () => {
+    setTouched({ ...touched, fechaNacimiento: true });
+    setErrors({
+      ...errors,
+      fechaNacimiento: validateFechaNacimientoField(formFechaNacimiento),
+    });
+  };
+
+  const handleEmailBlur = () => {
+    setTouched({ ...touched, email: true });
+    setErrors({ ...errors, email: validateEmailField(formEmail) });
+  };
+
+  const handleTelefonoBlur = () => {
+    setTouched({ ...touched, telefono: true });
+    setErrors({ ...errors, telefono: validateTelefonoField(formTelefono) });
+  };
+
+  const toggleBodega = (idBodega: number) => {
+    const newBodegas = formBodegasIds.includes(idBodega)
+      ? formBodegasIds.filter((id) => id !== idBodega)
+      : [...formBodegasIds, idBodega];
+
+    setFormBodegasIds(newBodegas);
+
+    if (touched.bodegas) {
+      setErrors({ ...errors, bodegas: validateBodegasField(newBodegas) });
+    }
+  };
+
+  // =========================================================
+  // Handlers de navegación
+  // =========================================================
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handleSuccessModalClose = () => {
+    setShowSuccessModal(false);
+  };
+
+  const handleView = (u: Usuario) => {
+    navigate(`/app/usuarios/${u.id}/ver`);
+  };
+
+  const handleCreate = () => {
+    if (!canCreateUsuarios) {
+      toast.error("No tienes permiso para crear usuarios");
+      return;
+    }
+
+    setFormTipoDocId("");
+    setFormNumeroDoc("");
+    setFormNombre("");
+    setFormApellido("");
+    setFormFechaNacimiento("");
+    setFormEmail("");
+    setFormTelefono("");
+    setFormBodegasIds([]);
+    setFormRolId("");
+
+    setErrors({
+      tipoDoc: "",
+      numeroDoc: "",
+      nombre: "",
+      apellido: "",
+      fechaNacimiento: "",
+      email: "",
+      telefono: "",
+      bodegas: "",
+      rol: "",
+    });
+
+    setTouched({
+      tipoDoc: false,
+      numeroDoc: false,
+      nombre: false,
+      apellido: false,
+      fechaNacimiento: false,
+      email: false,
+      telefono: false,
+      bodegas: false,
+      rol: false,
+    });
+
+    navigate("/app/usuarios/crear");
+  };
+
+  const handleEdit = (u: Usuario) => {
+    if (!canCreateUsuarios) {
+      toast.error("No tienes permiso para crear usuarios");
+      return;
+    }
+    navigate(`/app/usuarios/${u.id}/editar`);
+  };
+
+  const handleDelete = (u: Usuario) => {
+    if (!canDeleteUsuarios) {
+      toast.error("No tienes permiso para eliminar usuarios");
+      return;
+    }
+    if (loggedUserId && u.id === loggedUserId) {
+      toast.error("No puedes eliminar tu propio usuario");
+      return;
+    }
+
+    navigate(`/app/usuarios/${u.id}/eliminar`);
+  };
+
+  // =========================================================
+  // Handlers de acciones / modales
+  // =========================================================
+  const handleOpenResetDialog = (u: Usuario) => {
+    if (!canResetPasswordUsuarios) {
+      toast.error("No tienes permiso para restablecer contraseñas");
+      return;
+    }
+
+    const email = (u.email ?? "").trim();
+
+    if (!email) {
+      toast.error("No hay correo para enviar el cambio de contraseña.");
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error("El correo no es válido.");
+      return;
+    }
+
+    setResetEmail(email);
+    setIsConfirmReset(true);
+  };
+
+  const handleSendPasswordReset = async () => {
+    if (!canResetPasswordUsuarios) {
+      toast.error("No tienes permiso para restablecer contraseñas");
+      return;
+    }
+
+    try {
+      setSendingReset(true);
+
+      await solicitarRestablecimientoContrasena(resetEmail);
+
+      toast.success(
+        `Si el correo existe, se generó el enlace de restablecimiento para ${resetEmail}`
+      );
+      setIsConfirmReset(false);
+    } catch (error) {
+      console.error("Error enviando restablecimiento:", error);
+      toast.error("No se pudo generar el enlace. Intenta de nuevo.");
+    } finally {
+      setSendingReset(false);
+    }
+  };
+
+  const handleOpenCreateConfirm = () => {
+    if (isCreatingUsuario) return;
+    if (!validateForm()) return;
+
+    if (!formTipoDocId) {
+      toast.error("Debes seleccionar tipo de documento");
+      return;
+    }
+
+    if (!formRolId) {
+      toast.error("Debes seleccionar rol");
+      return;
+    }
+
+    setIsConfirmCreateOpen(true);
+  };
+
+  const handleConfirmCreateModalChange = (open: boolean) => {
+    if (isCreatingUsuario) return;
+    setIsConfirmCreateOpen(open);
+  };
+
+  const handleOpenEditConfirm = () => {
+    if (isUpdatingUsuario) return;
+    if (!usuarioSeleccionado) return;
+    if (!validateForm()) return;
+
+    if (!formTipoDocId) {
+      toast.error("Debes seleccionar tipo de documento");
+      return;
+    }
+
+    if (!formRolId) {
+      toast.error("Debes seleccionar rol");
+      return;
+    }
+
+    setIsConfirmEditOpen(true);
+  };
+
+  const toggleEstado = (u: Usuario) => {
+    if (!canChangeEstadoUsuarios) {
+      toast.error("No tienes permiso para cambiar el estado de usuarios");
+      return;
+    }
+    if (loggedUserId && u.id === loggedUserId) {
+      toast.error("No puedes inhabilitar tu propio usuario");
+      return;
+    }
+    setUsuarioParaCambioEstado(u);
+    setShowConfirmEstadoModal(true);
+  };
+
+  // =========================================================
+  // Confirmaciones / acciones async
+  // =========================================================
   const confirmCreate = async () => {
     if (isCreatingUsuario) return;
     if (!validateForm()) return;
@@ -863,29 +992,13 @@ export default function Usuarios() {
     }
   };
 
-  const handleOpenEditConfirm = () => {
-    if (isUpdatingUsuario) return;
-    if (!usuarioSeleccionado) return;
-    if (!validateForm()) return;
-
-    if (!formTipoDocId) {
-      toast.error("Debes seleccionar tipo de documento");
-      return;
-    }
-
-    if (!formRolId) {
-      toast.error("Debes seleccionar rol");
-      return;
-    }
-
-    setIsConfirmEditOpen(true);
-  };
-
   const confirmDelete = async () => {
     if (!canDeleteUsuarios) {
       toast.error("No tienes permiso para eliminar usuarios");
       return;
     }
+
+    if (isDeletingUsuario) return;
     if (!usuarioSeleccionado) return;
 
     if (loggedUserId && usuarioSeleccionado.id === loggedUserId) {
@@ -895,6 +1008,8 @@ export default function Usuarios() {
     }
 
     try {
+      setIsDeletingUsuario(true);
+
       await deleteUsuario(usuarioSeleccionado.id);
       await loadUsuarios();
       toast.success("Usuario eliminado exitosamente");
@@ -906,37 +1021,9 @@ export default function Usuarios() {
         error?.response?.data?.message ||
         "No se pudo eliminar el usuario"
       );
+    } finally {
+      setIsDeletingUsuario(false);
     }
-  };
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-  };
-
-  const handleFechaNacimientoChange = (value: string) => {
-    setFormFechaNacimiento(value);
-    if (touched.fechaNacimiento) {
-      setErrors({
-        ...errors,
-        fechaNacimiento: validateFechaNacimientoField(value),
-      });
-    }
-  };
-
-  const handleSuccessModalClose = () => {
-    setShowSuccessModal(false);
-  };
-
-  const toggleEstado = (u: Usuario) => {
-    if (!canChangeEstadoUsuarios) {
-      toast.error("No tienes permiso para cambiar el estado de usuarios");
-      return;
-    }
-    if (loggedUserId && u.id === loggedUserId) {
-      toast.error("No puedes inhabilitar tu propio usuario");
-      return;
-    }
-    setUsuarioParaCambioEstado(u);
-    setShowConfirmEstadoModal(true);
   };
 
   const handleConfirmEstado = async () => {
@@ -944,6 +1031,8 @@ export default function Usuarios() {
       toast.error("No tienes permiso para cambiar el estado de usuarios");
       return;
     }
+
+    if (isChangingEstadoUsuario) return;
     if (!usuarioParaCambioEstado) return;
 
     if (loggedUserId && usuarioParaCambioEstado.id === loggedUserId) {
@@ -954,6 +1043,8 @@ export default function Usuarios() {
     }
 
     try {
+      setIsChangingEstadoUsuario(true);
+
       await cambiarEstadoUsuario(
         usuarioParaCambioEstado.id,
         !usuarioParaCambioEstado.estado
@@ -972,54 +1063,34 @@ export default function Usuarios() {
         "No se pudo cambiar el estado del usuario"
       );
     } finally {
+      setIsChangingEstadoUsuario(false);
       setShowConfirmEstadoModal(false);
       setUsuarioParaCambioEstado(null);
     }
   };
 
-  const toggleBodega = (idBodega: number) => {
-    const newBodegas = formBodegasIds.includes(idBodega)
-      ? formBodegasIds.filter((id) => id !== idBodega)
-      : [...formBodegasIds, idBodega];
+  const formatFechaDisplay = (value?: string | Date | null) => {
+    if (!value) return "No registrada";
 
-    setFormBodegasIds(newBodegas);
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "No registrada";
 
-    if (touched.bodegas) {
-      setErrors({ ...errors, bodegas: validateBodegasField(newBodegas) });
-    }
+    return date.toLocaleDateString("es-CO", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
   };
 
-  const getRolBadgeColor = (rol: string) => {
-    switch (rol) {
-      case 'Administrador':
-        return 'bg-purple-100 text-purple-800 border-purple-200';
-      case 'Vendedor':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'Auxiliar Administrativo':
-        return 'bg-cyan-100 text-cyan-800 border-cyan-200';
-      case 'Auxiliar de Bodega':
-        return 'bg-orange-100 text-orange-800 border-orange-200';
-      case 'Conductor':
-        return 'bg-indigo-100 text-indigo-800 border-indigo-200';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
+  const getUsuarioFoto = (u: any) => {
+    return u?.avatarUrl || u?.imgUrl || u?.img_url || u?.raw?.img_url || "";
   };
 
-  if (!canViewUsuarios) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-center">
-          <h2 className="text-xl font-semibold text-gray-800">
-            Sin acceso al módulo
-          </h2>
-          <p className="text-gray-500 mt-2">
-            No tienes permisos para visualizar usuarios.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  const getUsuarioIniciales = (u: any) => {
+    const nombre = u?.nombre?.charAt(0) || "";
+    const apellido = u?.apellido?.charAt(0) || "";
+    return `${nombre}${apellido}` || "U";
+  };
 
   return (
     <div className="space-y-6">
@@ -1291,7 +1362,6 @@ export default function Usuarios() {
       )}
 
       {/* Modal Ver Usuarios */}
-
       <Dialog
         open={isVer}
         onOpenChange={(open) => {
@@ -1299,175 +1369,211 @@ export default function Usuarios() {
         }}
       >
         <DialogContent
-          className="max-w-3xl"
+          className="max-w-4xl !p-0 overflow-hidden"
           aria-describedby="view-usuario-description"
           onInteractOutside={(e) => e.preventDefault()}
         >
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-xl font-semibold leading-tight">
-              <UserIcon className="h-5 w-5 text-blue-600" />
-              Detalles del Usuario
-            </DialogTitle>
-            <DialogDescription
-              id="view-usuario-description"
-              className="text-sm text-gray-500"
-            >
-              Información completa del usuario
-            </DialogDescription>
-          </DialogHeader>
-
           {usuarioSeleccionado && (
-            <div className="space-y-5">
-              {/* Cabecera */}
-              <div className="rounded-xl border border-gray-200 bg-gradient-to-r from-blue-50 to-white p-4">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  <div className="flex items-center gap-4 min-w-0">
-                    <div className="h-16 w-16 shrink-0 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-sm">
-                      <span className="text-xl font-semibold">
-                        {usuarioSeleccionado.nombre?.charAt(0)}
-                        {usuarioSeleccionado.apellido?.charAt(0)}
-                      </span>
-                    </div>
+            <div className="max-h-[85vh] overflow-y-auto bg-gradient-to-br from-gray-50 to-blue-50">
+              <div className="p-5 border-b border-gray-200 bg-white sticky top-0 z-10">
+                <DialogHeader className="pr-8">
+                  <DialogTitle className="flex items-center gap-2 text-gray-900">
+                    <UserIcon className="h-5 w-5 text-blue-600" />
+                    Perfil del Usuario
+                  </DialogTitle>
+                  <DialogDescription
+                    id="view-usuario-description"
+                    className="text-gray-500"
+                  >
+                    Información completa del usuario
+                  </DialogDescription>
+                </DialogHeader>
+              </div>
 
-                    <div className="min-w-0">
-                      <div className="text-2xl font-semibold text-gray-900 leading-tight truncate">
+              <div className="p-5">
+                <div className="flex flex-col gap-4">
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+                    <div className="flex flex-col items-center">
+                      <div className="relative">
+                        <div className="h-32 w-32 rounded-full border-4 border-white shadow-lg overflow-hidden bg-gray-100">
+                          {getUsuarioFoto(usuarioSeleccionado) ? (
+                            <img
+                              src={getUsuarioFoto(usuarioSeleccionado)}
+                              alt={`${usuarioSeleccionado.nombre} ${usuarioSeleccionado.apellido}`}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="h-full w-full flex items-center justify-center bg-gradient-to-br from-blue-500 to-blue-600 text-white text-3xl font-semibold">
+                              {getUsuarioIniciales(usuarioSeleccionado)}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <h3 className="mt-3 text-gray-900 text-center text-lg font-semibold">
                         {usuarioSeleccionado.nombre} {usuarioSeleccionado.apellido}
+                      </h3>
+
+                      <div className="mt-4 w-full">
+                        <div className="w-full flex items-center justify-center gap-2 bg-blue-50 text-blue-700 px-4 py-3 rounded-lg border border-blue-200">
+                          <Building2 size={16} />
+                          <span className="text-sm font-medium">
+                            {usuarioSeleccionado.rol}
+                          </span>
+                        </div>
                       </div>
-                      <div className="text-sm text-gray-500 mt-1">
-                        {usuarioSeleccionado.tipoDocumento}: {usuarioSeleccionado.numeroDocumento}
+
+                      <div className="mt-3">
+                        <Badge
+                          className={`h-8 px-3 text-sm ${usuarioSeleccionado.estado
+                            ? "bg-green-100 text-green-800 hover:bg-green-100"
+                            : "bg-red-100 text-red-800 hover:bg-red-100"
+                            }`}
+                        >
+                          {usuarioSeleccionado.estado ? "Activo" : "Inactivo"}
+                        </Badge>
                       </div>
+
+                      {Array.isArray(usuarioSeleccionado.bodegas) &&
+                        usuarioSeleccionado.bodegas.length > 0 && (
+                          <div className="mt-4 w-full">
+                            <p className="text-xs text-gray-500 mb-2 text-center">
+                              Bodegas asignadas
+                            </p>
+                            <div className="flex flex-wrap gap-2 justify-center">
+                              {usuarioSeleccionado.bodegas.map((bodega) => (
+                                <span
+                                  key={bodega}
+                                  className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700 border border-gray-200"
+                                >
+                                  {bodega}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-2">
-                    <Badge
-                      variant="outline"
-                      className={`h-8 px-3 text-sm ${getRolBadgeColor(usuarioSeleccionado.rol)}`}
-                    >
-                      {usuarioSeleccionado.rol}
-                    </Badge>
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <h3 className="text-gray-900 mb-6">Información Personal</h3>
 
-                    <Badge
-                      className={`h-8 px-3 text-sm ${usuarioSeleccionado.estado
-                        ? "bg-green-100 text-green-800 hover:bg-green-100"
-                        : "bg-red-100 text-red-800 hover:bg-red-100"
-                        }`}
-                    >
-                      {usuarioSeleccionado.estado ? "Activo" : "Inactivo"}
-                    </Badge>
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="flex items-center gap-2">
+                            <UserIcon size={16} className="text-gray-400" />
+                            Nombre
+                          </Label>
+                          <Input
+                            value={usuarioSeleccionado.nombre}
+                            disabled
+                            className="bg-gray-50 border-gray-300 text-gray-700"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="flex items-center gap-2">
+                            <UserIcon size={16} className="text-gray-400" />
+                            Apellido
+                          </Label>
+                          <Input
+                            value={usuarioSeleccionado.apellido}
+                            disabled
+                            className="bg-gray-50 border-gray-300 text-gray-700"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="flex items-center gap-2">
+                            <Mail size={16} className="text-gray-400" />
+                            Correo Electrónico
+                          </Label>
+                          <Input
+                            value={usuarioSeleccionado.email ?? ""}
+                            disabled
+                            className="bg-gray-50 border-gray-300 text-gray-500"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="flex items-center gap-2">
+                            <Building2 size={16} className="text-gray-400" />
+                            Teléfono
+                          </Label>
+                          <Input
+                            value={usuarioSeleccionado.telefono || "No registrado"}
+                            disabled
+                            className="bg-gray-50 border-gray-300 text-gray-700"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="flex items-center gap-2">
+                            <UserIcon size={16} className="text-gray-400" />
+                            Tipo de Documento
+                          </Label>
+                          <Input
+                            value={usuarioSeleccionado.tipoDocumento}
+                            disabled
+                            className="bg-gray-50 border-gray-300 text-gray-500"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="flex items-center gap-2">
+                            <UserIcon size={16} className="text-gray-400" />
+                            Documento de Identidad
+                          </Label>
+                          <Input
+                            value={usuarioSeleccionado.numeroDocumento}
+                            disabled
+                            className="bg-gray-50 border-gray-300 text-gray-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="flex items-center gap-2">
+                            <UserIcon size={16} className="text-gray-400" />
+                            Fecha de nacimiento
+                          </Label>
+                          <Input
+                            value={formatFechaDisplay(usuarioSeleccionado.fechaNacimiento)}
+                            disabled
+                            className="bg-gray-50 border-gray-300 text-gray-700"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="flex items-center gap-2">
+                            <UserIcon size={16} className="text-gray-400" />
+                            Género
+                          </Label>
+                          <Input
+                            value={usuarioSeleccionado.genero || "No definido"}
+                            disabled
+                            className="bg-gray-50 border-gray-300 text-gray-700"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end pt-4 border-t border-gray-200">
+                        <Button variant="outline" onClick={closeToList} className="gap-2 h-11">
+                          Cerrar
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-
-              {/* Información */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-                {/* Contacto */}
-                <div className="rounded-xl border border-gray-200 bg-white p-4">
-                  <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-gray-700">
-                    <Mail className="h-4 w-4 text-blue-600" />
-                    Información de Contacto
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="rounded-lg bg-gray-50 px-4 py-3">
-                      <div className="text-xs text-gray-500">Email</div>
-                      <div className="mt-1 text-base font-medium text-gray-900 break-all">
-                        {usuarioSeleccionado.email}
-                      </div>
-                    </div>
-
-                    <div className="rounded-lg bg-gray-50 px-4 py-3">
-                      <div className="text-xs text-gray-500">Teléfono</div>
-                      <div className="mt-1 text-base font-medium text-gray-900">
-                        {usuarioSeleccionado.telefono || "No registrado"}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Datos personales */}
-                <div className="rounded-xl border border-gray-200 bg-white p-4">
-                  <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-gray-700">
-                    <UserIcon className="h-4 w-4 text-blue-600" />
-                    Datos Personales
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="rounded-lg bg-gray-50 px-4 py-3">
-                      <div className="text-xs text-gray-500">Nombre</div>
-                      <div className="mt-1 text-base font-medium text-gray-900">
-                        {usuarioSeleccionado.nombre}
-                      </div>
-                    </div>
-
-                    <div className="rounded-lg bg-gray-50 px-4 py-3">
-                      <div className="text-xs text-gray-500">Apellido</div>
-                      <div className="mt-1 text-base font-medium text-gray-900">
-                        {usuarioSeleccionado.apellido}
-                      </div>
-                    </div>
-
-                    <div className="rounded-lg bg-gray-50 px-4 py-3">
-                      <div className="text-xs text-gray-500">Fecha de Nacimiento</div>
-                      <div className="mt-1 text-base font-medium text-gray-900">
-                        {usuarioSeleccionado.fechaNacimiento}
-                      </div>
-                    </div>
-
-                    <div className="rounded-lg bg-gray-50 px-4 py-3">
-                      <div className="text-xs text-gray-500">Tipo de documento</div>
-                      <div className="mt-1 text-base font-medium text-gray-900">
-                        {usuarioSeleccionado.tipoDocumento}
-                      </div>
-                    </div>
-
-                    <div className="rounded-lg bg-gray-50 px-4 py-3">
-                      <div className="text-xs text-gray-500">Documento</div>
-                      <div className="mt-1 text-base font-medium text-gray-900">
-                        {usuarioSeleccionado.numeroDocumento}
-                      </div>
-                    </div>
-
-                    <div className="rounded-lg bg-gray-50 px-4 py-3 sm:col-span-2">
-                      <div className="text-xs text-gray-500">Género</div>
-                      <div className="mt-1 text-base font-medium text-gray-900">
-                        {usuarioSeleccionado.genero || "No definido"}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Bodegas */}
-              <div className="rounded-xl border border-gray-200 bg-white p-4">
-                <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-gray-700">
-                  <Building2 className="h-4 w-4 text-blue-600" />
-                  Bodegas Asignadas
-                </div>
-
-                {usuarioSeleccionado.bodegas.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {usuarioSeleccionado.bodegas.map((bodega) => (
-                      <span
-                        key={bodega}
-                        className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700"
-                      >
-                        {bodega}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-sm text-gray-500">No tiene bodegas asignadas.</div>
-                )}
               </div>
             </div>
           )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={closeToList}>
-              Cerrar
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1559,6 +1665,7 @@ export default function Usuarios() {
                     value={formNumeroDoc}
                     onChange={(e) => handleNumeroDocChange(e.target.value)}
                     onBlur={handleNumeroDocBlur}
+                    maxLength={15}
                     placeholder="Ej: 1234567890"
                     disabled={isCreatingUsuario || isLoadingCatalogos}
                     className={errors.numeroDoc && touched.numeroDoc ? "border-red-500" : ""}
@@ -1658,10 +1765,10 @@ export default function Usuarios() {
                   <Label htmlFor="create-telefono">Teléfono *</Label>
                   <Input
                     id="create-telefono"
-                    maxLength={10}
                     value={formTelefono}
                     onChange={(e) => handleTelefonoChange(e.target.value)}
                     onBlur={handleTelefonoBlur}
+                    maxLength={10}
                     placeholder="3001234567"
                     disabled={isCreatingUsuario || isLoadingCatalogos}
                     className={errors.telefono && touched.telefono ? "border-red-500" : ""}
@@ -1823,6 +1930,7 @@ export default function Usuarios() {
                   value={formNumeroDoc}
                   onChange={(e) => handleNumeroDocChange(e.target.value)}
                   onBlur={handleNumeroDocBlur}
+                  maxLength={15}
                   placeholder="Ej: 1234567890"
                   className={errors.numeroDoc && touched.numeroDoc ? "border-red-500" : ""}
                 />
@@ -1922,6 +2030,7 @@ export default function Usuarios() {
                   value={formTelefono}
                   onChange={(e) => handleTelefonoChange(e.target.value)}
                   onBlur={handleTelefonoBlur}
+                  maxLength={10}
                   placeholder="3001234567"
                   className={errors.telefono && touched.telefono ? "border-red-500" : ""}
                 />
@@ -2082,14 +2191,19 @@ export default function Usuarios() {
             <Button
               variant="destructive"
               onClick={confirmDelete}
-              disabled={!!loggedUserId && usuarioSeleccionado?.id === loggedUserId}
+              disabled={
+                isDeletingUsuario ||
+                (!!loggedUserId && usuarioSeleccionado?.id === loggedUserId)
+              }
               title={
                 !!loggedUserId && usuarioSeleccionado?.id === loggedUserId
                   ? "No puedes eliminar tu propio usuario"
-                  : "Eliminar"
+                  : isDeletingUsuario
+                    ? "Eliminando usuario..."
+                    : "Eliminar"
               }
             >
-              Eliminar
+              {isDeletingUsuario ? "Eliminando..." : "Eliminar"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2125,11 +2239,19 @@ export default function Usuarios() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowConfirmEstadoModal(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setShowConfirmEstadoModal(false)}
+              disabled={isChangingEstadoUsuario}
+            >
               Cancelar
             </Button>
-            <Button onClick={handleConfirmEstado} className="bg-blue-600 hover:bg-blue-700">
-              Confirmar
+            <Button
+              onClick={handleConfirmEstado}
+              className="bg-blue-600 hover:bg-blue-700"
+              disabled={isChangingEstadoUsuario}
+            >
+              {isChangingEstadoUsuario ? "Procesando..." : "Confirmar"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2257,5 +2379,5 @@ export default function Usuarios() {
         </DialogContent>
       </Dialog>
     </div >
-  );
+  )
 }

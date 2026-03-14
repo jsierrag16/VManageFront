@@ -1,5 +1,5 @@
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, type ReactElement } from "react";
 import { useAuth } from "@/shared/context/AuthContext";
 
 // Guards
@@ -33,14 +33,117 @@ import vManageLogo from "@/assets/images/VManageLogo.png";
 import vManageLogoSmall from "@/assets/images/VLogo.png";
 import gvmLogo from "@/assets/images/GVMLogo.png";
 
-// ✅ data mock
+// data mock
 import { productosData } from "@/data/productos";
 import { trasladosData } from "@/data/traslados";
 
+type CrudRouteConfig = {
+  basePath: string;
+  element: ReactElement;
+  modulo: string;
+  submodulo: string;
+  redirectTo?: string;
+  includeView?: boolean;
+  includeCreate?: boolean;
+  includeEdit?: boolean;
+  includeDelete?: boolean;
+  includeAnular?: boolean;
+  includeAbonar?: boolean;
+};
+
 export default function RoutesModule() {
   const { usuario, logout } = useAuth();
-
   const [activeSection, setActiveSection] = useState("dashboard");
+
+  const withPermission = (
+    element: ReactElement,
+    modulo: string,
+    submodulo: string,
+    accion: string,
+    redirectTo: string
+  ) => (
+    <ProtectedRoute
+      modulo={modulo}
+      submodulo={submodulo}
+      accion={accion}
+      redirectTo={redirectTo}
+    >
+      {element}
+    </ProtectedRoute>
+  );
+
+  const buildCrudRoutes = ({
+    basePath,
+    element,
+    modulo,
+    submodulo,
+    redirectTo,
+    includeView = true,
+    includeCreate = true,
+    includeEdit = true,
+    includeDelete = false,
+    includeAnular = false,
+    includeAbonar = false,
+  }: CrudRouteConfig) => {
+    const redirect = redirectTo ?? `/app/${basePath}`;
+
+    return (
+      <>
+        <Route
+          path={basePath}
+          element={withPermission(element, modulo, submodulo, "ver", "/app")}
+        />
+
+        {includeCreate && (
+          <Route
+            path={`${basePath}/crear`}
+            element={withPermission(element, modulo, submodulo, "crear", redirect)}
+          />
+        )}
+
+        {includeView && (
+          <Route
+            path={`${basePath}/:id/ver`}
+            element={withPermission(element, modulo, submodulo, "ver", redirect)}
+          />
+        )}
+
+        {includeEdit && (
+          <Route
+            path={`${basePath}/:id/editar`}
+            element={withPermission(element, modulo, submodulo, "editar", redirect)}
+          />
+        )}
+
+        {includeDelete && (
+          <Route
+            path={`${basePath}/:id/eliminar`}
+            element={withPermission(element, modulo, submodulo, "eliminar", redirect)}
+          />
+        )}
+
+        {includeAnular && (
+          <Route
+            path={`${basePath}/:id/anular`}
+            element={withPermission(element, modulo, submodulo, "anular", redirect)}
+          />
+        )}
+
+        {includeAbonar && (
+          <Route
+            path={`${basePath}/:id/abonar`}
+            element={withPermission(
+              element,
+              modulo,
+              submodulo,
+              "agregarAbonos",
+              redirect
+            )}
+          />
+        )}
+      </>
+    );
+  };
 
   return (
     <BrowserRouter>
@@ -49,7 +152,7 @@ export default function RoutesModule() {
           path="/login"
           element={
             <PublicRoute>
-              < Login/>
+              <Login />
             </PublicRoute>
           }
         />
@@ -77,85 +180,141 @@ export default function RoutesModule() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<Dashboard />} />
+          <Route
+            index
+            element={
+              <ProtectedRoute
+                modulo="dashboard"
+                accion="acceder"
+                redirectTo="/app/perfil"
+              >
+                <Dashboard />
+              </ProtectedRoute>
+            }
+          />
 
-          <Route path="productos" element={<Productos />} />
-          <Route path="productos/crear" element={<Productos />} />
-          <Route path="productos/:id/ver" element={<Productos />} />
-          <Route path="productos/:id/editar" element={<Productos />} />
+          {buildCrudRoutes({
+            basePath: "productos",
+            element: <Productos />,
+            modulo: "existencias",
+            submodulo: "productos",
+            includeDelete: false,
+          })}
 
-          <Route path="traslados" element={<Traslados />} />
-          <Route path="traslados/crear" element={<Traslados />} />
-          <Route path="traslados/:id/ver" element={<Traslados />} />
-          <Route path="traslados/:id/editar" element={<Traslados />} />
-          <Route path="traslados/:id/anular" element={<Traslados />} />
+          {buildCrudRoutes({
+            basePath: "traslados",
+            element: <Traslados />,
+            modulo: "existencias",
+            submodulo: "traslados",
+            includeDelete: false,
+            includeAnular: true,
+          })}
 
-          <Route path="bodegas" element={<Bodegas />} />
-          <Route path="bodegas/crear" element={<Bodegas />} />
-          <Route path="bodegas/:id/editar" element={<Bodegas />} />
-          <Route path="bodegas/:id/eliminar" element={<Bodegas />} />
+          {buildCrudRoutes({
+            basePath: "bodegas",
+            element: <Bodegas />,
+            modulo: "existencias",
+            submodulo: "bodegas",
+            includeView: false,
+            includeDelete: true,
+          })}
 
-          <Route path="proveedores" element={<Proveedores />} />
-          <Route path="proveedores/crear" element={<Proveedores />} />
-          <Route path="proveedores/:id/ver" element={<Proveedores />} />
-          <Route path="proveedores/:id/editar" element={<Proveedores />} />
-          <Route path="proveedores/:id/eliminar" element={<Proveedores />} />
+          {buildCrudRoutes({
+            basePath: "proveedores",
+            element: <Proveedores />,
+            modulo: "compras",
+            submodulo: "proveedores",
+            includeDelete: true,
+          })}
 
-          <Route path="compras" element={<Compras />} />
-          <Route path="compras/crear" element={<Compras />} />
-          <Route path="compras/:id/ver" element={<Compras />} />
-          <Route path="compras/:id/editar" element={<Compras />} />
-          <Route path="compras/:id/anular" element={<Compras />} />
+          {buildCrudRoutes({
+            basePath: "compras",
+            element: <Compras />,
+            modulo: "compras",
+            submodulo: "ordenesCompra",
+            includeDelete: false,
+            includeAnular: true,
+          })}
 
-          <Route path="remcompras" element={<RemisionesCompra />} />
-          <Route path="remcompras/crear" element={<RemisionesCompra />} />
-          <Route path="remcompras/:id/ver" element={<RemisionesCompra />} />
-          <Route path="remcompras/:id/editar" element={<RemisionesCompra />} />
-          <Route path="remcompras/:id/anular" element={<RemisionesCompra />} />
+          {buildCrudRoutes({
+            basePath: "remcompras",
+            element: <RemisionesCompra />,
+            modulo: "compras",
+            submodulo: "remisionesCompra",
+            includeDelete: false,
+            includeAnular: true,
+          })}
 
-          <Route path="clientes" element={<Clientes />} />
-          <Route path="clientes/crear" element={<Clientes />} />
-          <Route path="clientes/:id/ver" element={<Clientes />} />
-          <Route path="clientes/:id/editar" element={<Clientes />} />
-          <Route path="clientes/:id/eliminar" element={<Clientes />} />
+          {buildCrudRoutes({
+            basePath: "clientes",
+            element: <Clientes />,
+            modulo: "ventas",
+            submodulo: "clientes",
+            includeDelete: true,
+          })}
 
-          <Route path="cotizaciones" element={<Cotizaciones />} />
-          <Route path="cotizaciones/crear" element={<Cotizaciones />} />
-          <Route path="cotizaciones/:id/ver" element={<Cotizaciones />} />
-          <Route path="cotizaciones/:id/editar" element={<Cotizaciones />} />
-          <Route path="cotizaciones/:id/anular" element={<Cotizaciones />} />
+          {buildCrudRoutes({
+            basePath: "cotizaciones",
+            element: <Cotizaciones />,
+            modulo: "ventas",
+            submodulo: "cotizaciones",
+            includeDelete: false,
+            includeAnular: true,
+          })}
 
-          <Route path="ordenes" element={<Ordenes />} />
-          <Route path="ordenes/crear" element={<Ordenes />} />
-          <Route path="ordenes/:id/ver" element={<Ordenes />} />
-          <Route path="ordenes/:id/editar" element={<Ordenes />} />
-          <Route path="ordenes/:id/anular" element={<Ordenes />} />
+          {buildCrudRoutes({
+            basePath: "ordenes",
+            element: <Ordenes />,
+            modulo: "ventas",
+            submodulo: "ordenesVenta",
+            includeDelete: false,
+            includeAnular: true,
+          })}
 
-          <Route path="remisiones" element={<Remisiones />} />
-          <Route path="remisiones/crear" element={<Remisiones />} />
-          <Route path="remisiones/:id/ver" element={<Remisiones />} />
-          <Route path="remisiones/:id/editar" element={<Remisiones />} />
-          <Route path="remisiones/:id/anular" element={<Remisiones />} />
+          {buildCrudRoutes({
+            basePath: "remisiones",
+            element: <Remisiones />,
+            modulo: "ventas",
+            submodulo: "remisionesVenta",
+            includeDelete: false,
+            includeAnular: true,
+          })}
 
-          <Route path="pagos" element={<PagosAbonos />} />
-          <Route path="pagos/crear" element={<PagosAbonos />} />
-          <Route path="pagos/:id/ver" element={<PagosAbonos />} />
-          <Route path="pagos/:id/abonar" element={<PagosAbonos />} />
-          <Route path="pagos/:id/anular" element={<PagosAbonos />} />
+          {buildCrudRoutes({
+            basePath: "pagos",
+            element: <PagosAbonos />,
+            modulo: "ventas",
+            submodulo: "pagos",
+            includeEdit: false,
+            includeDelete: false,
+            includeAnular: true,
+            includeAbonar: true,
+          })}
 
-          <Route path="roles" element={<Roles />} />
-          <Route path="roles/crear" element={<Roles />} />
-          <Route path="roles/:id/editar" element={<Roles />} />
-          <Route path="roles/:id/ver" element={<Roles />} />
-          <Route path="roles/:id/eliminar" element={<Roles />} />
+          {buildCrudRoutes({
+            basePath: "roles",
+            element: <Roles />,
+            modulo: "administracion",
+            submodulo: "roles",
+            includeDelete: true,
+          })}
 
-          <Route path="usuarios" element={<Usuarios />} />
-          <Route path="usuarios/crear" element={<Usuarios />} />
-          <Route path="usuarios/:id/editar" element={<Usuarios />} />
-          <Route path="usuarios/:id/ver" element={<Usuarios />} />
-          <Route path="usuarios/:id/eliminar" element={<Usuarios />} />
+          {buildCrudRoutes({
+            basePath: "usuarios",
+            element: <Usuarios />,
+            modulo: "administracion",
+            submodulo: "usuarios",
+            includeDelete: true,
+          })}
 
-          <Route path="perfil" element={<Perfil />} />
+          <Route
+            path="perfil"
+            element={
+              <ProtectedRoute>
+                <Perfil />
+              </ProtectedRoute>
+            }
+          />
 
           <Route path="*" element={<div>Ruta no encontrada dentro de /app</div>} />
         </Route>

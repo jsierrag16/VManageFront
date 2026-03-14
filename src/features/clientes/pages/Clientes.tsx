@@ -1,7 +1,21 @@
-import { useState, useMemo, useEffect } from 'react';
-import { Search, Eye, Edit, Trash2, ChevronLeft, ChevronRight, Plus, CheckCircle, Mail, MapPin, User, FileText, Phone, Filter } from 'lucide-react';
-import { Button } from '../../../shared/components/ui/button';
-import { Input } from '../../../shared/components/ui/input';
+import { useState, useMemo, useEffect, useCallback } from "react";
+import {
+  Search,
+  Eye,
+  Edit,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  CheckCircle,
+  Mail,
+  MapPin,
+  User,
+  Phone,
+  Filter,
+} from "lucide-react";
+import { Button } from "../../../shared/components/ui/button";
+import { Input } from "../../../shared/components/ui/input";
 import {
   Table,
   TableBody,
@@ -9,7 +23,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '../../../shared/components/ui/table';
+} from "../../../shared/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -17,20 +31,31 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from '../../../shared/components/ui/dialog';
+} from "../../../shared/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../../../shared/components/ui/select';
-import { Label } from '../../../shared/components/ui/label';
-import { Badge } from '../../../shared/components/ui/badge';
-import { Textarea } from '../../../shared/components/ui/textarea';
-import { toast } from 'sonner';
-import { clientesData as initialClientesData, Cliente } from '../../../data/clientes';
-import { departamentosColombia } from '../../../data/colombia';
+} from "../../../shared/components/ui/select";
+import { Label } from "../../../shared/components/ui/label";
+import { Badge } from "../../../shared/components/ui/badge";
+import { toast } from "sonner";
+import { clientesService } from "../services/clientes.service";
+import {
+  mapClienteApiToUi,
+  mapFormToClientePayload,
+  mapTiposCliente,
+  mapTiposDocumento,
+  mapMunicipios,
+} from "../services/clientes.mapper";
+import type {
+  ClienteUI,
+  TipoClienteOption,
+  TipoDocumentoOption,
+  MunicipioOption,
+} from "../types/clientes.types";
 import {
   useNavigate,
   useLocation,
@@ -40,75 +65,90 @@ import {
 import type { AppOutletContext } from "../../../layouts/MainLayout";
 
 export default function Clientes() {
-  // ✅ router + bodega + flags URL
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams<{ id: string }>();
 
-  const { selectedBodegaNombre } = useOutletContext<AppOutletContext>();
-  const selectedBodega = selectedBodegaNombre;
+  useOutletContext<AppOutletContext>();
 
   const isCrear = location.pathname.endsWith("/crear");
   const isVer = location.pathname.endsWith("/ver");
   const isEditar = location.pathname.endsWith("/editar");
   const isEliminar = location.pathname.endsWith("/eliminar");
 
-  const closeToList = () => navigate("/app/clientes");
+  const closeToList = useCallback(() => navigate("/app/clientes"), [navigate]);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [estadoFilter, setEstadoFilter] = useState<string>("todos");
-  const [clientes, setClientes] = useState<Cliente[]>(initialClientesData);
+  const [clientes, setClientes] = useState<ClienteUI[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const [tiposDocumento, setTiposDocumento] = useState<TipoDocumentoOption[]>(
+    []
+  );
+  const [tiposCliente, setTiposCliente] = useState<TipoClienteOption[]>([]);
+  const [municipios, setMunicipios] = useState<MunicipioOption[]>([]);
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
   const [clienteParaCambioEstado, setClienteParaCambioEstado] =
-    useState<Cliente | null>(null);
+    useState<ClienteUI | null>(null);
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  // ✅ cliente seleccionado por URL (:id)
+  // -------------------------
+  // Form states
+  // -------------------------
+  const [formTipoDocId, setFormTipoDocId] = useState("");
+  const [formNumeroDoc, setFormNumeroDoc] = useState("");
+  const [formNombre, setFormNombre] = useState("");
+  const [formEmail, setFormEmail] = useState("");
+  const [formTelefono, setFormTelefono] = useState("");
+  const [formDireccion, setFormDireccion] = useState("");
+  const [formMunicipioId, setFormMunicipioId] = useState("");
+  const [formTipoClienteId, setFormTipoClienteId] = useState("");
+
+  // -------------------------
+  // Helpers de ubicación
+  // -------------------------
+  const municipioSeleccionado = useMemo(() => {
+    return municipios.find((m) => String(m.id) === formMunicipioId) || null;
+  }, [municipios, formMunicipioId]);
+
+  const ciudadSeleccionada = municipioSeleccionado?.nombre ?? "";
+  const departamentoSeleccionado = municipioSeleccionado?.departamento ?? "";
+
+  // -------------------------
+  // Cliente seleccionado por URL
+  // -------------------------
   const clienteSeleccionado = useMemo(() => {
     if (!params.id) return null;
-    return clientes.find((c) => c.id === params.id) ?? null;
+    const numericId = Number(params.id);
+    if (Number.isNaN(numericId)) return null;
+    return clientes.find((c) => c.id === numericId) ?? null;
   }, [clientes, params.id]);
 
-  // ✅ si entran a /ver, /editar o /eliminar con id inválido → volver
   useEffect(() => {
     if (!isVer && !isEditar && !isEliminar) return;
 
     if (!clienteSeleccionado) {
       closeToList();
-      return;
     }
   }, [isVer, isEditar, isEliminar, clienteSeleccionado, closeToList]);
 
-  // Form states
-  const [formTipoDoc, setFormTipoDoc] = useState("CC");
-  const [formNumeroDoc, setFormNumeroDoc] = useState("");
-  const [formNombre, setFormNombre] = useState("");
-  const [formEmail, setFormEmail] = useState("");
-  const [formTelefono, setFormTelefono] = useState("");
-  const [formTelefonoSecundario, setFormTelefonoSecundario] = useState("");
-  const [formDireccion, setFormDireccion] = useState("");
-  const [formDepartamento, setFormDepartamento] = useState("");
-  const [formCiudad, setFormCiudad] = useState("");
-  const [formTipoCliente, setFormTipoCliente] = useState("");
-  const [formNotas, setFormNotas] = useState("");
-
-  // Estados para validaciones en tiempo real
+  // -------------------------
+  // Validaciones
+  // -------------------------
   const [errors, setErrors] = useState({
     tipoDoc: "",
     numeroDoc: "",
     nombre: "",
     email: "",
     telefono: "",
-    telefonoSecundario: "",
     direccion: "",
-    departamento: "",
-    ciudad: "",
+    municipio: "",
     tipoCliente: "",
-    notas: "",
   });
 
   const [touched, setTouched] = useState({
@@ -117,329 +157,242 @@ export default function Clientes() {
     nombre: false,
     email: false,
     telefono: false,
-    telefonoSecundario: false,
     direccion: false,
-    departamento: false,
-    ciudad: false,
+    municipio: false,
     tipoCliente: false,
-    notas: false,
   });
 
-  // Funciones de validación individuales
   const validateTipoDoc = (value: string) => {
-    if (!value) {
-      return "El tipo de documento es requerido";
-    }
+    if (!value) return "El tipo de documento es requerido";
     return "";
   };
 
   const validateNumeroDoc = (value: string) => {
-    if (!value.trim()) {
-      return "El número de documento es requerido";
-    }
+    if (!value.trim()) return "El número de documento es requerido";
     const validPattern = /^[0-9-]+$/;
-    if (!validPattern.test(value)) {
-      return "Solo se permiten números y guiones";
-    }
-    if (value.length < 6) {
-      return "Mínimo 6 caracteres";
-    }
-    if (value.length > 20) {
-      return "Máximo 20 caracteres";
-    }
+    if (!validPattern.test(value)) return "Solo se permiten números y guiones";
+    if (value.length < 6) return "Mínimo 6 caracteres";
+    if (value.length > 20) return "Máximo 20 caracteres";
     return "";
   };
 
   const validateNombre = (value: string) => {
-    if (!value.trim()) {
-      return "El nombre del cliente es requerido";
-    }
+    if (!value.trim()) return "El nombre del cliente es requerido";
     const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/;
-    if (!validPattern.test(value)) {
-      return "Solo se permiten letras y espacios";
-    }
-    if (value.trim().length < 3) {
-      return "Mínimo 3 caracteres";
-    }
-    if (value.trim().length > 100) {
-      return "Máximo 100 caracteres";
-    }
+    if (!validPattern.test(value)) return "Solo se permiten letras y espacios";
+    if (value.trim().length < 3) return "Mínimo 3 caracteres";
+    if (value.trim().length > 100) return "Máximo 100 caracteres";
     return "";
   };
 
   const validateEmail = (value: string) => {
-    if (!value.trim()) {
-      return "El email es requerido";
-    }
-    if (!value.includes("@")) {
-      return "El email debe contener un @";
-    }
+    if (!value.trim()) return "El email es requerido";
+    if (!value.includes("@")) return "El email debe contener un @";
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(value)) {
-      return "Formato de email inválido";
-    }
+    if (!emailRegex.test(value)) return "Formato de email inválido";
     return "";
   };
 
   const validateTelefono = (value: string) => {
-    if (!value.trim()) {
-      return "El teléfono es requerido";
-    }
-    const diezNumeros = /^[0-9]{10}$/;
-    if (!diezNumeros.test(value)) {
-      return "Debe tener exactamente 10 números";
-    }
-    return "";
-  };
-
-  const validateTelefonoSecundario = (value: string) => {
-    if (!value.trim()) {
-      return "";
-    }
-    const diezNumeros = /^[0-9]{10}$/;
-    if (!diezNumeros.test(value)) {
+    if (!value.trim()) return "El teléfono es requerido";
+    const soloNumeros = value.replace(/\D/g, "");
+    if (!/^[0-9]{10}$/.test(soloNumeros)) {
       return "Debe tener exactamente 10 números";
     }
     return "";
   };
 
   const validateDireccion = (value: string) => {
-    if (!value.trim()) {
-      return "La dirección es requerida";
-    }
+    if (!value.trim()) return "La dirección es requerida";
     const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s\-,#.]+$/;
     if (!validPattern.test(value)) {
       return "Solo se permiten letras, números, espacios, guiones, comas, puntos y #";
     }
-    if (value.trim().length < 5) {
-      return "Mínimo 5 caracteres";
-    }
-    if (value.trim().length > 200) {
-      return "Máximo 200 caracteres";
-    }
+    if (value.trim().length < 5) return "Mínimo 5 caracteres";
+    if (value.trim().length > 200) return "Máximo 200 caracteres";
     return "";
   };
 
-  const validateDepartamento = (value: string) => {
-    if (!value || value === "") {
-      return "El departamento es requerido";
-    }
-    return "";
-  };
-
-  const validateCiudad = (value: string) => {
-    if (!value || value === "") {
-      return "La ciudad es requerida";
-    }
+  const validateMunicipio = (value: string) => {
+    if (!value) return "La ciudad / municipio es requerida";
     return "";
   };
 
   const validateTipoCliente = (value: string) => {
-    if (!value || value === "") {
-      return "El tipo de cliente es requerido";
-    }
+    if (!value) return "El tipo de cliente es requerido";
     return "";
   };
 
-  const validateNotas = (value: string) => {
-    if (!value.trim()) {
-      return "";
-    }
-    const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s.,;:()\-¿?¡!]+$/;
-    if (!validPattern.test(value)) {
-      return "Solo se permiten letras, números, espacios y puntuación básica";
-    }
-    if (value.trim().length > 500) {
-      return "Máximo 500 caracteres";
-    }
-    return "";
-  };
-
-  // Handlers con validación en tiempo real
+  // -------------------------
+  // Handlers
+  // -------------------------
   const handleTipoDocChange = (value: string) => {
-    setFormTipoDoc(value);
+    setFormTipoDocId(value);
     if (touched.tipoDoc) {
-      setErrors({ ...errors, tipoDoc: validateTipoDoc(value) });
+      setErrors((prev) => ({ ...prev, tipoDoc: validateTipoDoc(value) }));
     }
   };
 
   const handleNumeroDocChange = (value: string) => {
     setFormNumeroDoc(value);
     if (touched.numeroDoc) {
-      setErrors({ ...errors, numeroDoc: validateNumeroDoc(value) });
+      setErrors((prev) => ({ ...prev, numeroDoc: validateNumeroDoc(value) }));
     }
   };
 
   const handleNombreChange = (value: string) => {
     setFormNombre(value);
     if (touched.nombre) {
-      setErrors({ ...errors, nombre: validateNombre(value) });
+      setErrors((prev) => ({ ...prev, nombre: validateNombre(value) }));
     }
   };
 
   const handleEmailChange = (value: string) => {
     setFormEmail(value);
     if (touched.email) {
-      setErrors({ ...errors, email: validateEmail(value) });
+      setErrors((prev) => ({ ...prev, email: validateEmail(value) }));
     }
   };
 
   const handleTelefonoChange = (value: string) => {
-    setFormTelefono(value);
+    const limpio = value.replace(/\D/g, "").slice(0, 10);
+    setFormTelefono(limpio);
     if (touched.telefono) {
-      setErrors({ ...errors, telefono: validateTelefono(value) });
-    }
-  };
-
-  const handleTelefonoSecundarioChange = (value: string) => {
-    setFormTelefonoSecundario(value);
-    if (touched.telefonoSecundario) {
-      setErrors({
-        ...errors,
-        telefonoSecundario: validateTelefonoSecundario(value),
-      });
+      setErrors((prev) => ({ ...prev, telefono: validateTelefono(limpio) }));
     }
   };
 
   const handleDireccionChange = (value: string) => {
     setFormDireccion(value);
     if (touched.direccion) {
-      setErrors({ ...errors, direccion: validateDireccion(value) });
+      setErrors((prev) => ({ ...prev, direccion: validateDireccion(value) }));
     }
   };
 
-  const handleDepartamentoChange = (value: string) => {
-    setFormDepartamento(value);
-    if (touched.departamento) {
-      setErrors({ ...errors, departamento: validateDepartamento(value) });
-    }
-  };
-
-  const handleCiudadChange = (value: string) => {
-    setFormCiudad(value);
-    if (touched.ciudad) {
-      setErrors({ ...errors, ciudad: validateCiudad(value) });
+  const handleMunicipioChange = (value: string) => {
+    setFormMunicipioId(value);
+    if (touched.municipio) {
+      setErrors((prev) => ({ ...prev, municipio: validateMunicipio(value) }));
     }
   };
 
   const handleTipoClienteChange = (value: string) => {
-    setFormTipoCliente(value);
+    setFormTipoClienteId(value);
     if (touched.tipoCliente) {
-      setErrors({ ...errors, tipoCliente: validateTipoCliente(value) });
-    }
-  };
-
-  const handleNotasChange = (value: string) => {
-    setFormNotas(value);
-    if (touched.notas) {
-      setErrors({ ...errors, notas: validateNotas(value) });
+      setErrors((prev) => ({ ...prev, tipoCliente: validateTipoCliente(value) }));
     }
   };
 
   const handleNumeroDocBlur = () => {
-    setTouched({ ...touched, numeroDoc: true });
-    setErrors({ ...errors, numeroDoc: validateNumeroDoc(formNumeroDoc) });
+    setTouched((prev) => ({ ...prev, numeroDoc: true }));
+    setErrors((prev) => ({
+      ...prev,
+      numeroDoc: validateNumeroDoc(formNumeroDoc),
+    }));
   };
 
   const handleNombreBlur = () => {
-    setTouched({ ...touched, nombre: true });
-    setErrors({ ...errors, nombre: validateNombre(formNombre) });
+    setTouched((prev) => ({ ...prev, nombre: true }));
+    setErrors((prev) => ({ ...prev, nombre: validateNombre(formNombre) }));
   };
 
   const handleEmailBlur = () => {
-    setTouched({ ...touched, email: true });
-    setErrors({ ...errors, email: validateEmail(formEmail) });
+    setTouched((prev) => ({ ...prev, email: true }));
+    setErrors((prev) => ({ ...prev, email: validateEmail(formEmail) }));
   };
 
   const handleTelefonoBlur = () => {
-    setTouched({ ...touched, telefono: true });
-    setErrors({ ...errors, telefono: validateTelefono(formTelefono) });
-  };
-
-  const handleTelefonoSecundarioBlur = () => {
-    setTouched({ ...touched, telefonoSecundario: true });
-    setErrors({
-      ...errors,
-      telefonoSecundario: validateTelefonoSecundario(formTelefonoSecundario),
-    });
+    setTouched((prev) => ({ ...prev, telefono: true }));
+    setErrors((prev) => ({ ...prev, telefono: validateTelefono(formTelefono) }));
   };
 
   const handleDireccionBlur = () => {
-    setTouched({ ...touched, direccion: true });
-    setErrors({ ...errors, direccion: validateDireccion(formDireccion) });
+    setTouched((prev) => ({ ...prev, direccion: true }));
+    setErrors((prev) => ({ ...prev, direccion: validateDireccion(formDireccion) }));
   };
 
-  const handleNotasBlur = () => {
-    setTouched({ ...touched, notas: true });
-    setErrors({ ...errors, notas: validateNotas(formNotas) });
-  };
+  // -------------------------
+  // Carga de datos
+  // -------------------------
+  const loadClientes = useCallback(async () => {
+    try {
+      setLoading(true);
 
-  // Obtener municipios del departamento seleccionado
-  const municipiosDisponibles = useMemo(() => {
-    const dept = departamentosColombia.find((d) => d.nombre === formDepartamento);
-    return dept ? dept.municipios : [];
-  }, [formDepartamento]);
-
-  // Resetear municipio cuando cambia el departamento
-  useEffect(() => {
-    setFormCiudad("");
-  }, [formDepartamento]);
-
-  // Filtrar clientes
-  const filteredClientes = useMemo(() => {
-    return clientes
-      .filter((cliente) => {
-        if (selectedBodega === "Todas las bodegas") {
-          return true;
-        }
-        return cliente.bodega === selectedBodega;
-      })
-      .filter((cliente) => {
-        const searchLower = searchTerm.toLowerCase();
-        return (
-          cliente.nombre.toLowerCase().includes(searchLower) ||
-          cliente.tipoDocumento.toLowerCase().includes(searchLower) ||
-          cliente.numeroDocumento.toLowerCase().includes(searchLower) ||
-          cliente.email.toLowerCase().includes(searchLower) ||
-          cliente.telefono.toLowerCase().includes(searchLower) ||
-          (cliente.tipoCliente &&
-            cliente.tipoCliente.toLowerCase().includes(searchLower))
-        );
-      })
-      .filter((cliente) => {
-        if (estadoFilter === "todos") {
-          return true;
-        }
-        return cliente.estado.toLowerCase() === estadoFilter;
+      const data = await clientesService.getAll({
+        q: searchTerm || undefined,
+        incluirInactivos: true,
       });
-  }, [clientes, searchTerm, selectedBodega, estadoFilter]);
 
+      setClientes(data.map(mapClienteApiToUi));
+    } catch (error) {
+      console.error(error);
+      toast.error("No se pudieron cargar los clientes");
+    } finally {
+      setLoading(false);
+    }
+  }, [searchTerm]);
+
+  const loadMeta = useCallback(async () => {
+    try {
+      const meta = await clientesService.getMeta();
+
+      setTiposDocumento(mapTiposDocumento(meta.tiposDocumento || []));
+      setTiposCliente(mapTiposCliente(meta.tiposCliente || []));
+      setMunicipios(mapMunicipios(meta.municipios || []));
+    } catch (error) {
+      console.error(error);
+      toast.error("No se pudieron cargar los catálogos");
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMeta();
+  }, [loadMeta]);
+
+  useEffect(() => {
+    const delay = setTimeout(() => {
+      loadClientes();
+    }, 300);
+
+    return () => clearTimeout(delay);
+  }, [loadClientes]);
+
+  // -------------------------
+  // Filtrar clientes
+  // -------------------------
+  const filteredClientes = useMemo(() => {
+    return clientes.filter((cliente) => {
+      if (estadoFilter === "todos") return true;
+      return cliente.estado.toLowerCase() === estadoFilter;
+    });
+  }, [clientes, estadoFilter]);
+
+  // -------------------------
   // Paginación
+  // -------------------------
   const totalPages = Math.ceil(filteredClientes.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const currentClientes = filteredClientes.slice(startIndex, endIndex);
 
-  // Resetear a página 1 cuando cambia filtro
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, estadoFilter, selectedBodega]);
+  }, [searchTerm, estadoFilter]);
 
-  // ✅ al entrar a /crear, limpiar el form
+  // -------------------------
+  // Reset crear
+  // -------------------------
   useEffect(() => {
     if (!isCrear) return;
 
-    setFormTipoDoc("CC");
+    setFormTipoDocId("");
     setFormNumeroDoc("");
     setFormNombre("");
     setFormEmail("");
     setFormTelefono("");
-    setFormTelefonoSecundario("");
     setFormDireccion("");
-    setFormDepartamento("");
-    setFormCiudad("");
-    setFormTipoCliente("");
-    setFormNotas("");
+    setFormMunicipioId("");
+    setFormTipoClienteId("");
 
     setErrors({
       tipoDoc: "",
@@ -447,12 +400,9 @@ export default function Clientes() {
       nombre: "",
       email: "",
       telefono: "",
-      telefonoSecundario: "",
       direccion: "",
-      departamento: "",
-      ciudad: "",
+      municipio: "",
       tipoCliente: "",
-      notas: "",
     });
 
     setTouched({
@@ -461,31 +411,27 @@ export default function Clientes() {
       nombre: false,
       email: false,
       telefono: false,
-      telefonoSecundario: false,
       direccion: false,
-      departamento: false,
-      ciudad: false,
+      municipio: false,
       tipoCliente: false,
-      notas: false,
     });
   }, [isCrear]);
 
-  // ✅ al entrar a /editar, precargar formulario
+  // -------------------------
+  // Precarga editar
+  // -------------------------
   useEffect(() => {
     if (!isEditar) return;
     if (!clienteSeleccionado) return;
 
-    setFormTipoDoc(clienteSeleccionado.tipoDocumento);
+    setFormTipoDocId(String(clienteSeleccionado.idTipoDocumento));
     setFormNumeroDoc(clienteSeleccionado.numeroDocumento);
     setFormNombre(clienteSeleccionado.nombre);
     setFormEmail(clienteSeleccionado.email);
     setFormTelefono(clienteSeleccionado.telefono);
-    setFormTelefonoSecundario(clienteSeleccionado.telefonoSecundario || "");
     setFormDireccion(clienteSeleccionado.direccion);
-    setFormDepartamento(clienteSeleccionado.departamento || "");
-    setFormCiudad(clienteSeleccionado.ciudad);
-    setFormTipoCliente(clienteSeleccionado.tipoCliente || "");
-    setFormNotas(clienteSeleccionado.notas || "");
+    setFormMunicipioId(String(clienteSeleccionado.idMunicipio));
+    setFormTipoClienteId(String(clienteSeleccionado.idTipoCliente));
 
     setErrors({
       tipoDoc: "",
@@ -493,12 +439,9 @@ export default function Clientes() {
       nombre: "",
       email: "",
       telefono: "",
-      telefonoSecundario: "",
       direccion: "",
-      departamento: "",
-      ciudad: "",
+      municipio: "",
       tipoCliente: "",
-      notas: "",
     });
 
     setTouched({
@@ -507,17 +450,16 @@ export default function Clientes() {
       nombre: false,
       email: false,
       telefono: false,
-      telefonoSecundario: false,
       direccion: false,
-      departamento: false,
-      ciudad: false,
+      municipio: false,
       tipoCliente: false,
-      notas: false,
     });
   }, [isEditar, clienteSeleccionado]);
 
-  // Navegación (modales por URL)
-  const handleView = (cliente: Cliente) => {
+  // -------------------------
+  // Navegación
+  // -------------------------
+  const handleView = (cliente: ClienteUI) => {
     navigate(`/app/clientes/${cliente.id}/ver`);
   };
 
@@ -525,59 +467,50 @@ export default function Clientes() {
     navigate("/app/clientes/crear");
   };
 
-  const handleEdit = (cliente: Cliente) => {
+  const handleEdit = (cliente: ClienteUI) => {
     navigate(`/app/clientes/${cliente.id}/editar`);
   };
 
-  const handleDelete = (cliente: Cliente) => {
+  const handleDelete = (cliente: ClienteUI) => {
     navigate(`/app/clientes/${cliente.id}/eliminar`);
   };
 
-  const handleConfirmEstado = (cliente: Cliente) => {
+  const handleConfirmEstado = (cliente: ClienteUI) => {
     setClienteParaCambioEstado(cliente);
     setShowConfirmEstadoModal(true);
   };
 
+  // -------------------------
+  // Validación general
+  // -------------------------
   const validateForm = () => {
-    if (
-      !formTipoDoc ||
-      !formNumeroDoc.trim() ||
-      !formNombre.trim() ||
-      !formEmail.trim() ||
-      !formTelefono.trim() ||
-      !formDireccion.trim() ||
-      !formDepartamento ||
-      !formCiudad ||
-      !formTipoCliente
-    ) {
-      toast.error("Por favor completa todos los campos obligatorios");
-      return false;
-    }
+    const nextErrors = {
+      tipoDoc: validateTipoDoc(formTipoDocId),
+      numeroDoc: validateNumeroDoc(formNumeroDoc),
+      nombre: validateNombre(formNombre),
+      email: validateEmail(formEmail),
+      telefono: validateTelefono(formTelefono),
+      direccion: validateDireccion(formDireccion),
+      municipio: validateMunicipio(formMunicipioId),
+      tipoCliente: validateTipoCliente(formTipoClienteId),
+    };
 
-    if (!/^[0-9-]+$/.test(formNumeroDoc)) {
-      toast.error("El número de documento solo debe contener números y guiones");
-      return false;
-    }
+    setErrors(nextErrors);
+    setTouched({
+      tipoDoc: true,
+      numeroDoc: true,
+      nombre: true,
+      email: true,
+      telefono: true,
+      direccion: true,
+      municipio: true,
+      tipoCliente: true,
+    });
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formEmail)) {
-      toast.error("El email no tiene un formato válido");
-      return false;
-    }
+    const hasErrors = Object.values(nextErrors).some(Boolean);
 
-    if (!/^[0-9\s\-()]+$/.test(formTelefono)) {
-      toast.error(
-        "El teléfono principal solo debe contener números, espacios, guiones y paréntesis"
-      );
-      return false;
-    }
-
-    if (
-      formTelefonoSecundario.trim() &&
-      !/^[0-9\s\-()]+$/.test(formTelefonoSecundario)
-    ) {
-      toast.error(
-        "El teléfono secundario solo debe contener números, espacios, guiones y paréntesis"
-      );
+    if (hasErrors) {
+      toast.error("Por favor corrige los campos obligatorios");
       return false;
     }
 
@@ -589,89 +522,110 @@ export default function Clientes() {
     return true;
   };
 
-  const confirmCreate = () => {
+  // -------------------------
+  // CRUD
+  // -------------------------
+  const confirmCreate = async () => {
     if (!validateForm()) return;
 
-    const newCliente: Cliente = {
-      id: `CLI-${String(clientes.length + 1).padStart(3, "0")}`,
-      tipoDocumento: formTipoDoc,
-      numeroDocumento: formNumeroDoc.trim(),
-      nombre: formNombre.trim(),
-      email: formEmail.trim(),
-      telefono: formTelefono.trim(),
-      telefonoSecundario: formTelefonoSecundario.trim() || undefined,
-      direccion: formDireccion.trim(),
-      departamento: formDepartamento,
-      ciudad: formCiudad,
-      tipoCliente: formTipoCliente,
-      notas: formNotas.trim(),
-      fechaRegistro: new Date().toISOString().split("T")[0],
-      bodega: selectedBodega,
-      pais: "Colombia",
-      estado: "Activo",
-    };
+    try {
+      const payload = mapFormToClientePayload({
+        nombre: formNombre,
+        email: formEmail,
+        telefono: formTelefono,
+        direccion: formDireccion,
+        numeroDocumento: formNumeroDoc,
+        idTipoCliente: Number(formTipoClienteId),
+        idMunicipio: Number(formMunicipioId),
+        idTipoDocumento: Number(formTipoDocId),
+        estado: true,
+      });
 
-    setClientes([...clientes, newCliente]);
-    closeToList();
-    setShowSuccessModal(true);
+      await clientesService.create(payload);
+      await loadClientes();
+
+      closeToList();
+      setShowSuccessModal(true);
+    } catch (error: any) {
+      console.error(error);
+      toast.error(
+        error?.response?.data?.message ||
+          "No se pudo crear el cliente"
+      );
+    }
   };
 
-  const confirmEdit = () => {
+  const confirmEdit = async () => {
     if (!clienteSeleccionado || !validateForm()) return;
 
-    setClientes(
-      clientes.map((c) =>
-        c.id === clienteSeleccionado.id
-          ? {
-            ...c,
-            tipoDocumento: formTipoDoc,
-            numeroDocumento: formNumeroDoc.trim(),
-            nombre: formNombre.trim(),
-            email: formEmail.trim(),
-            telefono: formTelefono.trim(),
-            telefonoSecundario:
-              formTelefonoSecundario.trim() || undefined,
-            direccion: formDireccion.trim(),
-            departamento: formDepartamento,
-            ciudad: formCiudad,
-            tipoCliente: formTipoCliente,
-            notas: formNotas.trim(),
-          }
-          : c
-      )
-    );
+    try {
+      const payload = mapFormToClientePayload({
+        nombre: formNombre,
+        email: formEmail,
+        telefono: formTelefono,
+        direccion: formDireccion,
+        numeroDocumento: formNumeroDoc,
+        idTipoCliente: Number(formTipoClienteId),
+        idMunicipio: Number(formMunicipioId),
+        idTipoDocumento: Number(formTipoDocId),
+        estado: clienteSeleccionado.estado === "Activo",
+      });
 
-    closeToList();
-    toast.success("Cliente actualizado exitosamente");
+      await clientesService.update(clienteSeleccionado.id, payload);
+      await loadClientes();
+
+      closeToList();
+      toast.success("Cliente actualizado exitosamente");
+    } catch (error: any) {
+      console.error(error);
+      toast.error(
+        error?.response?.data?.message ||
+          "No se pudo actualizar el cliente"
+      );
+    }
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!clienteSeleccionado) return;
 
-    setClientes(clientes.filter((c) => c.id !== clienteSeleccionado.id));
-    closeToList();
-    toast.success("Cliente eliminado exitosamente");
+    try {
+      await clientesService.remove(clienteSeleccionado.id);
+      await loadClientes();
+
+      closeToList();
+      toast.success("Cliente inactivado exitosamente");
+    } catch (error: any) {
+      console.error(error);
+      toast.error(
+        error?.response?.data?.message ||
+          "No se pudo eliminar el cliente"
+      );
+    }
   };
 
-  const confirmEstado = () => {
+  const confirmEstado = async () => {
     if (!clienteParaCambioEstado) return;
 
-    setClientes(
-      clientes.map((c) =>
-        c.id === clienteParaCambioEstado.id
-          ? {
-            ...c,
-            estado: c.estado === "Activo" ? "Inactivo" : "Activo",
-          }
-          : c
-      )
-    );
+    try {
+      const nuevoEstado = clienteParaCambioEstado.estado !== "Activo";
 
-    setShowConfirmEstadoModal(false);
-    toast.success(
-      `Estado del cliente cambiado a ${clienteParaCambioEstado.estado === "Activo" ? "Inactivo" : "Activo"
-      }`
-    );
+      await clientesService.update(clienteParaCambioEstado.id, {
+        estado: nuevoEstado,
+      });
+
+      await loadClientes();
+      setShowConfirmEstadoModal(false);
+
+      toast.success(
+        `Estado del cliente cambiado a ${nuevoEstado ? "Activo" : "Inactivo"}`
+      );
+    } catch (error: any) {
+      console.error(error);
+      toast.error(
+        error?.response?.data?.message ||
+          "No se pudo cambiar el estado"
+      );
+    }
   };
 
   const handlePageChange = (page: number) => {
@@ -684,7 +638,6 @@ export default function Clientes() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h2 className="text-gray-900">Gestión de Clientes</h2>
         <p className="text-gray-600 mt-1">
@@ -692,32 +645,31 @@ export default function Clientes() {
         </p>
       </div>
 
-      {/* Search Bar and Action Buttons */}
       <div className="flex items-center gap-4">
         <div className="relative flex-1">
           <Search
-            className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
             size={20}
           />
           <Input
-            placeholder="Buscar por nombre, tipo de documento, email, teléfono o tipo de cliente..."
+            placeholder="Buscar por nombre, documento, email o código..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
           />
         </div>
 
-        {/* Filtro de Estado */}
         <div className="flex items-center gap-2 border border-gray-300 rounded-lg p-1 bg-gray-50">
           <Filter size={16} className="text-gray-500 ml-2" />
           <Button
             size="sm"
             variant={estadoFilter === "todos" ? "default" : "ghost"}
             onClick={() => setEstadoFilter("todos")}
-            className={`h-8 ${estadoFilter === "todos"
+            className={`h-8 ${
+              estadoFilter === "todos"
                 ? "bg-blue-600 text-white hover:bg-blue-700"
                 : "hover:bg-gray-200"
-              }`}
+            }`}
           >
             Todos
           </Button>
@@ -725,10 +677,11 @@ export default function Clientes() {
             size="sm"
             variant={estadoFilter === "activo" ? "default" : "ghost"}
             onClick={() => setEstadoFilter("activo")}
-            className={`h-8 ${estadoFilter === "activo"
+            className={`h-8 ${
+              estadoFilter === "activo"
                 ? "bg-green-600 text-white hover:bg-green-700"
                 : "hover:bg-gray-200"
-              }`}
+            }`}
           >
             Activos
           </Button>
@@ -736,10 +689,11 @@ export default function Clientes() {
             size="sm"
             variant={estadoFilter === "inactivo" ? "default" : "ghost"}
             onClick={() => setEstadoFilter("inactivo")}
-            className={`h-8 ${estadoFilter === "inactivo"
+            className={`h-8 ${
+              estadoFilter === "inactivo"
                 ? "bg-red-600 text-white hover:bg-red-700"
                 : "hover:bg-gray-200"
-              }`}
+            }`}
           >
             Inactivos
           </Button>
@@ -754,13 +708,13 @@ export default function Clientes() {
         </Button>
       </div>
 
-      {/* Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50">
                 <TableHead className="w-16">#</TableHead>
+                <TableHead>Código</TableHead>
                 <TableHead>Nombre</TableHead>
                 <TableHead>Tipo Doc.</TableHead>
                 <TableHead>N° Documento</TableHead>
@@ -772,10 +726,19 @@ export default function Clientes() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {currentClientes.length === 0 ? (
+              {loading ? (
                 <TableRow>
                   <TableCell
-                    colSpan={9}
+                    colSpan={10}
+                    className="text-center py-8 text-gray-500"
+                  >
+                    Cargando clientes...
+                  </TableCell>
+                </TableRow>
+              ) : currentClientes.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={10}
                     className="text-center py-8 text-gray-500"
                   >
                     No se encontraron clientes
@@ -785,6 +748,9 @@ export default function Clientes() {
                 currentClientes.map((cliente, index) => (
                   <TableRow key={cliente.id} className="hover:bg-gray-50">
                     <TableCell>{startIndex + index + 1}</TableCell>
+                    <TableCell className="font-mono text-sm">
+                      {cliente.codigo}
+                    </TableCell>
                     <TableCell className="font-medium text-gray-900">
                       {cliente.nombre}
                     </TableCell>
@@ -793,10 +759,10 @@ export default function Clientes() {
                       {cliente.numeroDocumento}
                     </TableCell>
                     <TableCell className="text-gray-700">
-                      {cliente.email}
+                      {cliente.email || "N/A"}
                     </TableCell>
                     <TableCell className="text-gray-700">
-                      {cliente.telefono}
+                      {cliente.telefono || "N/A"}
                     </TableCell>
                     <TableCell>
                       <Badge
@@ -811,10 +777,11 @@ export default function Clientes() {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleConfirmEstado(cliente)}
-                        className={`h-7 ${cliente.estado === "Activo"
+                        className={`h-7 ${
+                          cliente.estado === "Activo"
                             ? "bg-green-100 text-green-800 hover:bg-green-200"
                             : "bg-red-100 text-red-800 hover:bg-red-200"
-                          }`}
+                        }`}
                       >
                         {cliente.estado}
                       </Button>
@@ -844,7 +811,7 @@ export default function Clientes() {
                           size="icon"
                           onClick={() => handleDelete(cliente)}
                           className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                          title="Eliminar"
+                          title="Inactivar"
                         >
                           <Trash2 size={16} />
                         </Button>
@@ -857,14 +824,14 @@ export default function Clientes() {
           </Table>
         </div>
 
-        {/* Paginación */}
-        {filteredClientes.length > 0 && (
+        {filteredClientes.length > 0 && !loading && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
             <div className="text-sm text-gray-600">
               Mostrando {startIndex + 1} -{" "}
               {Math.min(endIndex, filteredClientes.length)} de{" "}
               {filteredClientes.length} clientes
             </div>
+
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
@@ -876,6 +843,7 @@ export default function Clientes() {
                 <ChevronLeft size={16} />
                 Anterior
               </Button>
+
               <div className="flex items-center gap-1">
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map(
                   (page) => (
@@ -891,6 +859,7 @@ export default function Clientes() {
                   )
                 )}
               </div>
+
               <Button
                 variant="outline"
                 size="sm"
@@ -906,7 +875,7 @@ export default function Clientes() {
         )}
       </div>
 
-      {/* Modal Ver Detalles */}
+      {/* Modal Ver */}
       <Dialog
         open={isVer}
         onOpenChange={(open) => {
@@ -926,6 +895,7 @@ export default function Clientes() {
               Información completa del cliente
             </DialogDescription>
           </DialogHeader>
+
           {clienteSeleccionado && (
             <div className="space-y-4">
               <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-100">
@@ -941,10 +911,11 @@ export default function Clientes() {
                     {clienteSeleccionado.tipoCliente}
                   </Badge>
                   <Badge
-                    className={`text-xs hover:bg-current ${clienteSeleccionado.estado === "Activo"
+                    className={`text-xs hover:bg-current ${
+                      clienteSeleccionado.estado === "Activo"
                         ? "bg-green-100 text-green-800"
                         : "bg-red-100 text-red-800"
-                      }`}
+                    }`}
                   >
                     {clienteSeleccionado.estado}
                   </Badge>
@@ -958,7 +929,7 @@ export default function Clientes() {
                     <Label className="text-xs text-gray-500">Email</Label>
                   </div>
                   <p className="text-sm font-medium text-gray-900">
-                    {clienteSeleccionado.email}
+                    {clienteSeleccionado.email || "N/A"}
                   </p>
                 </div>
 
@@ -968,23 +939,9 @@ export default function Clientes() {
                     <Label className="text-xs text-gray-500">Teléfono</Label>
                   </div>
                   <p className="text-sm font-medium text-gray-900">
-                    {clienteSeleccionado.telefono}
+                    {clienteSeleccionado.telefono || "N/A"}
                   </p>
                 </div>
-
-                {clienteSeleccionado.telefonoSecundario && (
-                  <div className="col-span-2 bg-gray-50 rounded-lg p-3 border border-gray-200">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Phone className="h-3.5 w-3.5 text-blue-600" />
-                      <Label className="text-xs text-gray-500">
-                        Teléfono Secundario
-                      </Label>
-                    </div>
-                    <p className="text-sm font-medium text-gray-900">
-                      {clienteSeleccionado.telefonoSecundario}
-                    </p>
-                  </div>
-                )}
 
                 <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                   <div className="flex items-center gap-2 mb-1">
@@ -992,7 +949,7 @@ export default function Clientes() {
                     <Label className="text-xs text-gray-500">Ciudad</Label>
                   </div>
                   <p className="text-sm font-medium text-gray-900">
-                    {clienteSeleccionado.ciudad}
+                    {clienteSeleccionado.ciudad || "N/A"}
                   </p>
                 </div>
 
@@ -1014,24 +971,13 @@ export default function Clientes() {
                     <Label className="text-xs text-gray-500">Dirección</Label>
                   </div>
                   <p className="text-sm font-medium text-gray-900">
-                    {clienteSeleccionado.direccion}
+                    {clienteSeleccionado.direccion || "N/A"}
                   </p>
                 </div>
               </div>
-
-              {clienteSeleccionado.notas && (
-                <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
-                  <div className="flex items-center gap-2 mb-1">
-                    <FileText className="h-3.5 w-3.5 text-amber-600" />
-                    <Label className="text-xs text-gray-600">Notas</Label>
-                  </div>
-                  <p className="text-sm text-gray-700">
-                    {clienteSeleccionado.notas}
-                  </p>
-                </div>
-              )}
             </div>
           )}
+
           <DialogFooter>
             <Button variant="outline" onClick={closeToList}>
               Cerrar
@@ -1040,7 +986,7 @@ export default function Clientes() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Crear Cliente */}
+      {/* Modal Crear */}
       <Dialog
         open={isCrear}
         onOpenChange={(open) => {
@@ -1058,25 +1004,31 @@ export default function Clientes() {
               Completa la información del nuevo cliente
             </DialogDescription>
           </DialogHeader>
+
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="create-tipo-doc">Tipo de Documento *</Label>
-                <Select value={formTipoDoc} onValueChange={handleTipoDocChange}>
+                <Select
+                  value={formTipoDocId}
+                  onValueChange={handleTipoDocChange}
+                >
                   <SelectTrigger id="create-tipo-doc">
-                    <SelectValue />
+                    <SelectValue placeholder="Selecciona un tipo de documento" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="CC">Cédula de Ciudadanía</SelectItem>
-                    <SelectItem value="CE">Cédula de Extranjería</SelectItem>
-                    <SelectItem value="Pasaporte">Pasaporte</SelectItem>
-                    <SelectItem value="NIT">NIT</SelectItem>
+                    {tiposDocumento.map((tipo) => (
+                      <SelectItem key={tipo.id} value={String(tipo.id)}>
+                        {tipo.nombre}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 {errors.tipoDoc && touched.tipoDoc && (
                   <p className="text-red-500 text-xs mt-1">{errors.tipoDoc}</p>
                 )}
               </div>
+
               <div>
                 <Label htmlFor="create-numero-doc">N° de Documento *</Label>
                 <Input
@@ -1121,20 +1073,22 @@ export default function Clientes() {
                   <p className="text-red-500 text-xs mt-1">{errors.email}</p>
                 )}
               </div>
+
               <div>
                 <Label htmlFor="create-tipo-cliente">Tipo de Cliente *</Label>
                 <Select
-                  value={formTipoCliente}
+                  value={formTipoClienteId}
                   onValueChange={handleTipoClienteChange}
                 >
                   <SelectTrigger id="create-tipo-cliente">
                     <SelectValue placeholder="Selecciona el tipo" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Minorista">Minorista</SelectItem>
-                    <SelectItem value="Mayorista">Mayorista</SelectItem>
-                    <SelectItem value="Distribuidor">Distribuidor</SelectItem>
-                    <SelectItem value="Corporativo">Corporativo</SelectItem>
+                    {tiposCliente.map((tipo) => (
+                      <SelectItem key={tipo.id} value={String(tipo.id)}>
+                        {tipo.nombre}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 {errors.tipoCliente && touched.tipoCliente && (
@@ -1152,79 +1106,46 @@ export default function Clientes() {
                   id="create-telefono"
                   value={formTelefono}
                   onChange={(e) => handleTelefonoChange(e.target.value)}
-                  placeholder="300 123 4567"
+                  placeholder="3001234567"
                   onBlur={handleTelefonoBlur}
                 />
                 {errors.telefono && touched.telefono && (
                   <p className="text-red-500 text-xs mt-1">{errors.telefono}</p>
                 )}
               </div>
+
               <div>
-                <Label htmlFor="create-telefono-sec">
-                  Teléfono Secundario (opcional)
-                </Label>
-                <Input
-                  id="create-telefono-sec"
-                  value={formTelefonoSecundario}
-                  onChange={(e) =>
-                    handleTelefonoSecundarioChange(e.target.value)
-                  }
-                  placeholder="301 987 6543"
-                  onBlur={handleTelefonoSecundarioBlur}
-                />
-                {errors.telefonoSecundario && touched.telefonoSecundario && (
-                  <p className="text-red-500 text-xs mt-1">
-                    {errors.telefonoSecundario}
-                  </p>
+                <Label htmlFor="create-ciudad">Ciudad / Municipio *</Label>
+                <Select
+                  value={formMunicipioId}
+                  onValueChange={handleMunicipioChange}
+                >
+                  <SelectTrigger id="create-ciudad">
+                    <SelectValue placeholder="Selecciona un municipio" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {municipios.map((municipio) => (
+                      <SelectItem key={municipio.id} value={String(municipio.id)}>
+                        {municipio.nombre} - {municipio.departamento}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.municipio && touched.municipio && (
+                  <p className="text-red-500 text-xs mt-1">{errors.municipio}</p>
                 )}
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="create-departamento">Departamento *</Label>
-                <Select
-                  value={formDepartamento}
-                  onValueChange={handleDepartamentoChange}
-                >
-                  <SelectTrigger id="create-departamento">
-                    <SelectValue placeholder="Selecciona un departamento" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {departamentosColombia.map((dept) => (
-                      <SelectItem key={dept.nombre} value={dept.nombre}>
-                        {dept.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.departamento && touched.departamento && (
-                  <p className="text-red-500 text-xs mt-1">
-                    {errors.departamento}
-                  </p>
-                )}
+                <Label>Departamento</Label>
+                <Input value={departamentoSeleccionado} disabled />
               </div>
+
               <div>
-                <Label htmlFor="create-ciudad">Ciudad / Municipio *</Label>
-                <Select
-                  value={formCiudad}
-                  onValueChange={handleCiudadChange}
-                  disabled={!formDepartamento}
-                >
-                  <SelectTrigger id="create-ciudad">
-                    <SelectValue placeholder="Selecciona un municipio" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {municipiosDisponibles.map((municipio) => (
-                      <SelectItem key={municipio} value={municipio}>
-                        {municipio}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.ciudad && touched.ciudad && (
-                  <p className="text-red-500 text-xs mt-1">{errors.ciudad}</p>
-                )}
+                <Label>Ciudad</Label>
+                <Input value={ciudadSeleccionada} disabled />
               </div>
             </div>
 
@@ -1241,22 +1162,8 @@ export default function Clientes() {
                 <p className="text-red-500 text-xs mt-1">{errors.direccion}</p>
               )}
             </div>
-
-            <div>
-              <Label htmlFor="create-notas">Notas (opcional)</Label>
-              <Textarea
-                id="create-notas"
-                value={formNotas}
-                onChange={(e) => handleNotasChange(e.target.value)}
-                placeholder="Información adicional sobre el cliente"
-                rows={3}
-                onBlur={handleNotasBlur}
-              />
-              {errors.notas && touched.notas && (
-                <p className="text-red-500 text-xs mt-1">{errors.notas}</p>
-              )}
-            </div>
           </div>
+
           <DialogFooter>
             <Button variant="outline" onClick={closeToList}>
               Cancelar
@@ -1271,7 +1178,7 @@ export default function Clientes() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Editar Cliente */}
+      {/* Modal Editar */}
       <Dialog
         open={isEditar}
         onOpenChange={(open) => {
@@ -1289,25 +1196,31 @@ export default function Clientes() {
               Modifica la información del cliente
             </DialogDescription>
           </DialogHeader>
+
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="edit-tipo-doc">Tipo de Documento *</Label>
-                <Select value={formTipoDoc} onValueChange={handleTipoDocChange}>
+                <Select
+                  value={formTipoDocId}
+                  onValueChange={handleTipoDocChange}
+                >
                   <SelectTrigger id="edit-tipo-doc">
-                    <SelectValue />
+                    <SelectValue placeholder="Selecciona un tipo de documento" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="CC">Cédula de Ciudadanía</SelectItem>
-                    <SelectItem value="CE">Cédula de Extranjería</SelectItem>
-                    <SelectItem value="Pasaporte">Pasaporte</SelectItem>
-                    <SelectItem value="NIT">NIT</SelectItem>
+                    {tiposDocumento.map((tipo) => (
+                      <SelectItem key={tipo.id} value={String(tipo.id)}>
+                        {tipo.nombre}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 {errors.tipoDoc && touched.tipoDoc && (
                   <p className="text-red-500 text-xs mt-1">{errors.tipoDoc}</p>
                 )}
               </div>
+
               <div>
                 <Label htmlFor="edit-numero-doc">N° de Documento *</Label>
                 <Input
@@ -1352,20 +1265,22 @@ export default function Clientes() {
                   <p className="text-red-500 text-xs mt-1">{errors.email}</p>
                 )}
               </div>
+
               <div>
                 <Label htmlFor="edit-tipo-cliente">Tipo de Cliente *</Label>
                 <Select
-                  value={formTipoCliente}
+                  value={formTipoClienteId}
                   onValueChange={handleTipoClienteChange}
                 >
                   <SelectTrigger id="edit-tipo-cliente">
                     <SelectValue placeholder="Selecciona el tipo" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Minorista">Minorista</SelectItem>
-                    <SelectItem value="Mayorista">Mayorista</SelectItem>
-                    <SelectItem value="Distribuidor">Distribuidor</SelectItem>
-                    <SelectItem value="Corporativo">Corporativo</SelectItem>
+                    {tiposCliente.map((tipo) => (
+                      <SelectItem key={tipo.id} value={String(tipo.id)}>
+                        {tipo.nombre}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 {errors.tipoCliente && touched.tipoCliente && (
@@ -1383,79 +1298,46 @@ export default function Clientes() {
                   id="edit-telefono"
                   value={formTelefono}
                   onChange={(e) => handleTelefonoChange(e.target.value)}
-                  placeholder="300 123 4567"
+                  placeholder="3001234567"
                   onBlur={handleTelefonoBlur}
                 />
                 {errors.telefono && touched.telefono && (
                   <p className="text-red-500 text-xs mt-1">{errors.telefono}</p>
                 )}
               </div>
+
               <div>
-                <Label htmlFor="edit-telefono-sec">
-                  Teléfono Secundario (opcional)
-                </Label>
-                <Input
-                  id="edit-telefono-sec"
-                  value={formTelefonoSecundario}
-                  onChange={(e) =>
-                    handleTelefonoSecundarioChange(e.target.value)
-                  }
-                  placeholder="301 987 6543"
-                  onBlur={handleTelefonoSecundarioBlur}
-                />
-                {errors.telefonoSecundario && touched.telefonoSecundario && (
-                  <p className="text-red-500 text-xs mt-1">
-                    {errors.telefonoSecundario}
-                  </p>
+                <Label htmlFor="edit-ciudad">Ciudad / Municipio *</Label>
+                <Select
+                  value={formMunicipioId}
+                  onValueChange={handleMunicipioChange}
+                >
+                  <SelectTrigger id="edit-ciudad">
+                    <SelectValue placeholder="Selecciona un municipio" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {municipios.map((municipio) => (
+                      <SelectItem key={municipio.id} value={String(municipio.id)}>
+                        {municipio.nombre} - {municipio.departamento}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.municipio && touched.municipio && (
+                  <p className="text-red-500 text-xs mt-1">{errors.municipio}</p>
                 )}
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="edit-departamento">Departamento *</Label>
-                <Select
-                  value={formDepartamento}
-                  onValueChange={handleDepartamentoChange}
-                >
-                  <SelectTrigger id="edit-departamento">
-                    <SelectValue placeholder="Selecciona un departamento" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {departamentosColombia.map((dept) => (
-                      <SelectItem key={dept.nombre} value={dept.nombre}>
-                        {dept.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.departamento && touched.departamento && (
-                  <p className="text-red-500 text-xs mt-1">
-                    {errors.departamento}
-                  </p>
-                )}
+                <Label>Departamento</Label>
+                <Input value={departamentoSeleccionado} disabled />
               </div>
+
               <div>
-                <Label htmlFor="edit-ciudad">Ciudad / Municipio *</Label>
-                <Select
-                  value={formCiudad}
-                  onValueChange={handleCiudadChange}
-                  disabled={!formDepartamento}
-                >
-                  <SelectTrigger id="edit-ciudad">
-                    <SelectValue placeholder="Selecciona un municipio" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {municipiosDisponibles.map((municipio) => (
-                      <SelectItem key={municipio} value={municipio}>
-                        {municipio}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.ciudad && touched.ciudad && (
-                  <p className="text-red-500 text-xs mt-1">{errors.ciudad}</p>
-                )}
+                <Label>Ciudad</Label>
+                <Input value={ciudadSeleccionada} disabled />
               </div>
             </div>
 
@@ -1472,22 +1354,8 @@ export default function Clientes() {
                 <p className="text-red-500 text-xs mt-1">{errors.direccion}</p>
               )}
             </div>
-
-            <div>
-              <Label htmlFor="edit-notas">Notas (opcional)</Label>
-              <Textarea
-                id="edit-notas"
-                value={formNotas}
-                onChange={(e) => handleNotasChange(e.target.value)}
-                placeholder="Información adicional sobre el cliente"
-                rows={3}
-                onBlur={handleNotasBlur}
-              />
-              {errors.notas && touched.notas && (
-                <p className="text-red-500 text-xs mt-1">{errors.notas}</p>
-              )}
-            </div>
           </div>
+
           <DialogFooter>
             <Button variant="outline" onClick={closeToList}>
               Cancelar
@@ -1502,7 +1370,7 @@ export default function Clientes() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Eliminar Cliente */}
+      {/* Modal Inactivar */}
       <Dialog
         open={isEliminar}
         onOpenChange={(open) => {
@@ -1511,12 +1379,12 @@ export default function Clientes() {
       >
         <DialogContent aria-describedby="delete-cliente-description">
           <DialogHeader>
-            <DialogTitle>Eliminar Cliente</DialogTitle>
+            <DialogTitle>Inactivar Cliente</DialogTitle>
             <DialogDescription id="delete-cliente-description">
-              ¿Estás seguro de que deseas eliminar este cliente? Esta acción no
-              se puede deshacer.
+              ¿Estás seguro de que deseas inactivar este cliente?
             </DialogDescription>
           </DialogHeader>
+
           {clienteSeleccionado && (
             <div className="py-4">
               <p className="text-gray-700">
@@ -1531,18 +1399,19 @@ export default function Clientes() {
               </p>
             </div>
           )}
+
           <DialogFooter>
             <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
             <Button variant="destructive" onClick={confirmDelete}>
-              Eliminar
+              Inactivar
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Éxito */}
+      {/* Modal Éxito */}
       <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
         <DialogContent
           className="max-w-lg"
@@ -1575,7 +1444,7 @@ export default function Clientes() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Confirmar Cambio de Estado */}
+      {/* Modal Confirmar Estado */}
       <Dialog
         open={showConfirmEstadoModal}
         onOpenChange={setShowConfirmEstadoModal}
@@ -1584,10 +1453,10 @@ export default function Clientes() {
           <DialogHeader>
             <DialogTitle>Cambiar Estado del Cliente</DialogTitle>
             <DialogDescription id="confirm-estado-description">
-              ¿Estás seguro de que deseas cambiar el estado de este cliente? Esta
-              acción no se puede deshacer.
+              ¿Estás seguro de que deseas cambiar el estado de este cliente?
             </DialogDescription>
           </DialogHeader>
+
           {clienteParaCambioEstado && (
             <div className="py-4">
               <p className="text-gray-700">
@@ -1608,6 +1477,7 @@ export default function Clientes() {
               </p>
             </div>
           )}
+
           <DialogFooter>
             <Button
               variant="outline"

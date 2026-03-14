@@ -1,5 +1,5 @@
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import {
   Search,
   Plus,
@@ -48,8 +48,9 @@ import {
 import { PermisosForm } from "../components/PermisosForm";
 import { useAuth } from "../../../shared/context/AuthContext";
 
-
-// Función para obtener el color del rol
+// =========================================================
+// Helper visual
+// =========================================================
 const getRolColor = (nombre: string) => {
   const colors: Record<string, string> = {
     Administrador: "bg-purple-100 text-purple-800",
@@ -58,149 +59,117 @@ const getRolColor = (nombre: string) => {
     "Auxiliar de Bodega": "bg-orange-100 text-orange-800",
     Conductor: "bg-indigo-100 text-indigo-800",
   };
+
   return colors[nombre] || "bg-gray-100 text-gray-800";
 };
 
 export default function Roles() {
+  // =========================================================
+  // Contexto, navegación y permisos
+  // =========================================================
   const { tienePermiso } = useAuth();
 
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams<{ id: string }>();
 
+  // =========================================================
+  // Estados del módulo
+  // =========================================================
   const [searchTerm, setSearchTerm] = useState("");
   const [estadoFilter, setEstadoFilter] = useState<string>("todos");
   const [roles, setRoles] = useState<Rol[]>([]);
-  const [catalogoPermisos, setCatalogoPermisos] = useState<PermisoBackend[]>([]);
   const [loading, setLoading] = useState(true);
+
   const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
   const [rolParaCambioEstado, setRolParaCambioEstado] = useState<Rol | null>(null);
+  const [isCreatingRol, setIsCreatingRol] = useState(false);
+  const [isUpdatingRol, setIsUpdatingRol] = useState(false);
+  const [isDeletingRol, setIsDeletingRol] = useState(false);
+  const [isChangingEstadoRol, setIsChangingEstadoRol] = useState(false);
+
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
+  // =========================================================
+  // Estados del formulario
+  // =========================================================
   const [formNombre, setFormNombre] = useState("");
   const [formDescripcion, setFormDescripcion] = useState("");
   const [formPermisos, setFormPermisos] = useState<Permisos>(createEmptyPermisos());
 
-  const [errors, setErrors] = useState({ nombre: '', descripcion: '' });
-  const [touched, setTouched] = useState({ nombre: false, descripcion: false });
+  // =========================================================
+  // Estados de catálogos
+  // =========================================================
+  const [catalogoPermisos, setCatalogoPermisos] = useState<PermisoBackend[]>([]);
 
-  // ✅ ID desde la URL
-  const id = params.id;
-
-  // ✅ flags por URL (igual que Productos/Usuarios)
-  const isCrear = location.pathname.endsWith("/roles/crear");
-  const isVer = location.pathname.endsWith("/ver");
-  const isEditar = location.pathname.endsWith("/editar");
-  const isEliminar = location.pathname.endsWith("/eliminar");
-
-  const rolSeleccionado = useMemo(() => {
-    if (!id) return null;
-    const numericId = Number(id);
-    if (!Number.isFinite(numericId)) return null;
-    return roles.find((r) => r.id === numericId) ?? null;
-  }, [roles, id]);
-  // ✅ volver al listado
-  const closeToList = () => navigate("/app/roles");
-
-  useEffect(() => {
-    if (!isEditar) return;
-    if (loading) return;
-
-    if (!rolSeleccionado) {
-      closeToList();
-      return;
-    }
-
-    setFormNombre(rolSeleccionado.nombre);
-    setFormDescripcion(rolSeleccionado.descripcion);
-    setFormPermisos(rolSeleccionado.permisos);
-    setErrors({ nombre: "", descripcion: "" });
-    setTouched({ nombre: false, descripcion: false });
-  }, [isEditar, rolSeleccionado, loading]);
-
-  useEffect(() => {
-    if (!isCrear) return;
-
-    setFormNombre("");
-    setFormDescripcion("");
-    setFormPermisos(createEmptyPermisos());
-    setErrors({ nombre: "", descripcion: "" });
-    setTouched({ nombre: false, descripcion: false });
-  }, [isCrear]);
-
-  // Función para validar caracteres inapropiados
-  const hasInvalidCharacters = (value: string) => {
-    // Permitir solo letras, números, espacios y algunos caracteres especiales básicos
-    const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s.,;:()\-_]*$/;
-    return !validPattern.test(value);
-  };
-
-  const validateNombre = (value: string) => {
-    if (!value.trim()) {
-      return 'El nombre del rol es requerido';
-    }
-    if (value.trim().length < 3) {
-      return 'Mínimo 3 caracteres';
-    }
-    if (value.trim().length > 50) {
-      return 'Máximo 50 caracteres';
-    }
-    if (hasInvalidCharacters(value)) {
-      return 'Caracteres no permitidos detectados';
-    }
-    return '';
-  };
-
-  const validateDescripcion = (value: string) => {
-    if (!value.trim()) {
-      return 'La descripción es requerida';
-    }
-    if (value.trim().length < 10) {
-      return 'Mínimo 10 caracteres';
-    }
-    if (value.trim().length > 200) {
-      return 'Máximo 200 caracteres';
-    }
-    if (hasInvalidCharacters(value)) {
-      return 'Caracteres no permitidos detectados';
-    }
-    return '';
-  };
-
-  const handleNombreChange = (value: string) => {
-    setFormNombre(value);
-    if (touched.nombre) {
-      setErrors({ ...errors, nombre: validateNombre(value) });
-    }
-  };
-
-  const handleDescripcionChange = (value: string) => {
-    setFormDescripcion(value);
-    if (touched.descripcion) {
-      setErrors({ ...errors, descripcion: validateDescripcion(value) });
-    }
-  };
-
-  const handleNombreBlur = () => {
-    setTouched({ ...touched, nombre: true });
-    setErrors({ ...errors, nombre: validateNombre(formNombre) });
-  };
-
-  const handleDescripcionBlur = () => {
-    setTouched({ ...touched, descripcion: true });
-    setErrors({ ...errors, descripcion: validateDescripcion(formDescripcion) });
-  };
-
-
-
-  // Verificar permisos del usuario
+  // =========================================================
+  // Permisos
+  // =========================================================
   const puedeCrear = tienePermiso("administracion", "roles", "crear");
   const puedeEditar = tienePermiso("administracion", "roles", "editar");
   const puedeEliminar = tienePermiso("administracion", "roles", "eliminar");
   const puedeCambiarEstado = tienePermiso("administracion", "roles", "cambiarEstado");
 
-  const cargarDatos = async () => {
+  // =========================================================
+  // Estados de errores y touched
+  // =========================================================
+  const [errors, setErrors] = useState({
+    nombre: "",
+    descripcion: "",
+  });
+
+  const [touched, setTouched] = useState({
+    nombre: false,
+    descripcion: false,
+  });
+
+  // =========================================================
+  // Flags de ruta
+  // =========================================================
+  const id = params.id;
+
+  const isCrear = location.pathname.endsWith("/roles/crear");
+  const isVer = location.pathname.endsWith("/ver");
+  const isEditar = location.pathname.endsWith("/editar");
+  const isEliminar = location.pathname.endsWith("/eliminar");
+
+  // =========================================================
+  // Datos derivados / useMemo
+  // =========================================================
+  const rolSeleccionado = useMemo(() => {
+    if (!id) return null;
+
+    const numericId = Number(id);
+    if (!Number.isFinite(numericId)) return null;
+
+    return roles.find((r) => r.id === numericId) ?? null;
+  }, [roles, id]);
+
+  const filteredRoles = useMemo(() => {
+    return roles.filter((rol) => {
+      const searchLower = searchTerm.toLowerCase();
+
+      const matchesSearch =
+        rol.nombre.toLowerCase().includes(searchLower) ||
+        rol.descripcion.toLowerCase().includes(searchLower);
+
+      if (estadoFilter === "todos") return matchesSearch;
+      return estadoFilter === "activo"
+        ? matchesSearch && rol.estado
+        : matchesSearch && !rol.estado;
+    });
+  }, [roles, searchTerm, estadoFilter]);
+
+  const totalPages = Math.ceil(filteredRoles.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentRoles = filteredRoles.slice(startIndex, endIndex);
+
+  // =========================================================
+  // Funciones de carga
+  // =========================================================
+  const cargarDatos = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -212,225 +181,288 @@ export default function Roles() {
       setRoles(rolesResp.map(rolBackendToUI));
       setCatalogoPermisos(permisosResp);
     } catch (error) {
-      console.error(error);
+      console.error("Error cargando roles:", error);
       toast.error("No se pudieron cargar los roles y permisos");
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    cargarDatos();
   }, []);
 
+  const closeToList = () => navigate("/app/roles");
+
+  // =========================================================
+  // Efectos
+  // =========================================================
   useEffect(() => {
-    if (!isVer && !isEliminar) return;
+    cargarDatos();
+  }, [cargarDatos]);
+
+  useEffect(() => {
+    if (!isVer && !isEditar && !isEliminar) return;
     if (loading) return;
 
     if (!rolSeleccionado) {
       closeToList();
     }
-  }, [isVer, isEliminar, rolSeleccionado, loading]);
+  }, [isVer, isEditar, isEliminar, rolSeleccionado, loading]);
 
-  // Filtrar roles
-  const filteredRoles = useMemo(() => {
-    return roles.filter((rol) => {
-      const searchLower = searchTerm.toLowerCase();
-      const matchesSearch =
-        rol.nombre.toLowerCase().includes(searchLower) ||
-        rol.descripcion.toLowerCase().includes(searchLower);
+  useEffect(() => {
+    if (!isEditar) return;
+    if (!rolSeleccionado) return;
 
-      // Filtrar por estado
-      let matchesEstado = true;
-      if (estadoFilter === "activo") {
-        matchesEstado = rol.estado === true;
-      } else if (estadoFilter === "inactivo") {
-        matchesEstado = rol.estado === false;
-      }
-      // Si es "todos", no filtramos por estado
+    setFormNombre(rolSeleccionado.nombre);
+    setFormDescripcion(rolSeleccionado.descripcion);
+    setFormPermisos(rolSeleccionado.permisos);
 
-      return matchesSearch && matchesEstado;
+    setErrors({
+      nombre: "",
+      descripcion: "",
     });
-  }, [roles, searchTerm, estadoFilter]);
 
-  // Paginación
-  const totalPages = Math.ceil(
-    filteredRoles.length / itemsPerPage,
-  );
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentRoles = filteredRoles.slice(
-    startIndex,
-    endIndex,
-  );
+    setTouched({
+      nombre: false,
+      descripcion: false,
+    });
+  }, [isEditar, rolSeleccionado]);
 
-  // Resetear a página 1 cuando cambia el filtro
+  useEffect(() => {
+    if (!isCrear) return;
+
+    setFormNombre("");
+    setFormDescripcion("");
+    setFormPermisos(createEmptyPermisos());
+
+    setErrors({
+      nombre: "",
+      descripcion: "",
+    });
+
+    setTouched({
+      nombre: false,
+      descripcion: false,
+    });
+  }, [isCrear]);
+
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, estadoFilter]);
 
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
+  // =========================================================
+  // Validaciones y helpers
+  // =========================================================
+  const hasInvalidCharacters = (value: string) => {
+    const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s.,;:()\-_]*$/;
+    return !validPattern.test(value);
   };
 
-  const handleView = (rol: Rol) => {
-    navigate(`/app/roles/${rol.id}/ver`);
+  const validateNombre = (value: string) => {
+    if (!value.trim()) {
+      return "El nombre del rol es requerido";
+    }
+    if (value.trim().length < 3) {
+      return "Mínimo 3 caracteres";
+    }
+    if (value.trim().length > 50) {
+      return "Máximo 50 caracteres";
+    }
+    if (hasInvalidCharacters(value)) {
+      return "Caracteres no permitidos detectados";
+    }
+    return "";
   };
 
-  const handleCreate = () => {
-    // limpiar form (igual que antes)
-    setFormNombre("");
-    setFormDescripcion("");
-    setFormPermisos(createEmptyPermisos());
-    setErrors({ nombre: "", descripcion: "" });
-    setTouched({ nombre: false, descripcion: false });
-
-    navigate("/app/roles/crear");
+  const validateDescripcion = (value: string) => {
+    if (!value.trim()) {
+      return "La descripción es requerida";
+    }
+    if (value.trim().length < 10) {
+      return "Mínimo 10 caracteres";
+    }
+    if (value.trim().length > 200) {
+      return "Máximo 200 caracteres";
+    }
+    if (hasInvalidCharacters(value)) {
+      return "Caracteres no permitidos detectados";
+    }
+    return "";
   };
 
-  const handleEdit = (rol: Rol) => {
-    navigate(`/app/roles/${rol.id}/editar`);
-  };
-
-  const handleDelete = (rol: Rol) => {
-    navigate(`/app/roles/${rol.id}/eliminar`);
-  };
-
-  const handleToggleEstado = (rol: Rol) => {
-    setRolParaCambioEstado(rol);
-    setShowConfirmEstadoModal(true);
-  };
-
-  const confirmCreate = async () => {
-    setTouched({ nombre: true, descripcion: true });
+  const validateForm = () => {
+    setTouched({
+      nombre: true,
+      descripcion: true,
+    });
 
     const nombreError = validateNombre(formNombre);
     const descripcionError = validateDescripcion(formDescripcion);
 
-    setErrors({ nombre: nombreError, descripcion: descripcionError });
+    setErrors({
+      nombre: nombreError,
+      descripcion: descripcionError,
+    });
 
     if (nombreError || descripcionError) {
       toast.error("Por favor corrige los errores en el formulario");
-      return;
+      return false;
     }
 
-    try {
-      const ids_permisos = permisosFrontendToIds(formPermisos, catalogoPermisos);
-
-      await createRol({
-        nombre_rol: formNombre.trim(),
-        descripcion: formDescripcion.trim(),
-        estado: true,
-        ids_permisos,
-      });
-
-      await cargarDatos();
-      toast.success("Rol creado exitosamente");
-      closeToList();
-    } catch (error: any) {
-      console.error(error);
-
-      const message =
-        error?.response?.data?.message || "No se pudo crear el rol";
-
-      toast.error(Array.isArray(message) ? message.join(", ") : message);
-    }
+    return true;
   };
 
-  const confirmEdit = async () => {
-    if (!rolSeleccionado) return;
-
-    setTouched({ nombre: true, descripcion: true });
-
-    const nombreError = validateNombre(formNombre);
-    const descripcionError = validateDescripcion(formDescripcion);
-
-    setErrors({ nombre: nombreError, descripcion: descripcionError });
-
-    if (nombreError || descripcionError) {
-      toast.error("Por favor corrige los errores en el formulario");
-      return;
+  const isModuleFullyChecked = (module: string): boolean => {
+    if (module === "dashboard") {
+      return formPermisos.dashboard.acceder;
     }
-    try {
-      const ids_permisos = permisosFrontendToIds(formPermisos, catalogoPermisos);
 
-      await updateRol(rolSeleccionado.id, {
-        nombre_rol: formNombre.trim(),
-        descripcion: formDescripcion.trim(),
-        estado: rolSeleccionado.estado,
-        ids_permisos,
-      });
-
-      await cargarDatos();
-      toast.success("Rol actualizado exitosamente");
-      closeToList();
-    } catch (error: any) {
-      console.error(error);
-
-      const message =
-        error?.response?.data?.message || "No se pudo actualizar el rol";
-
-      toast.error(Array.isArray(message) ? message.join(", ") : message);
-    }
-  };
-
-  const confirmDelete = async () => {
-    if (!rolSeleccionado) return;
-
-    try {
-      await deleteRol(rolSeleccionado.id);
-      await cargarDatos();
-
-      toast.success("Rol eliminado exitosamente");
-      closeToList();
-    } catch (error: any) {
-      console.error(error);
-
-      const message =
-        error?.response?.data?.message || "No se pudo eliminar el rol";
-
-      toast.error(Array.isArray(message) ? message.join(", ") : message);
-    }
-  };
-
-  // Función para cambiar el estado del rol
-  const confirmToggleEstado = async () => {
-    if (!rolParaCambioEstado) return;
-
-    const nuevoEstado = !rolParaCambioEstado.estado;
-
-    try {
-      await updateRol(rolParaCambioEstado.id, {
-        estado: nuevoEstado,
-      });
-
-      await cargarDatos();
-      setShowConfirmEstadoModal(false);
-      setRolParaCambioEstado(null);
-
-      toast.success(
-        `Rol ${nuevoEstado ? "activado" : "desactivado"} exitosamente`
+    if (module === "existencias") {
+      return (
+        formPermisos.existencias.productos.ver &&
+        formPermisos.existencias.productos.crear &&
+        formPermisos.existencias.productos.editar &&
+        formPermisos.existencias.productos.cambiarEstado &&
+        formPermisos.existencias.traslados.ver &&
+        formPermisos.existencias.traslados.crear &&
+        formPermisos.existencias.traslados.editar &&
+        formPermisos.existencias.traslados.cambiarEstado &&
+        formPermisos.existencias.traslados.anular &&
+        formPermisos.existencias.bodegas.ver &&
+        formPermisos.existencias.bodegas.crear &&
+        formPermisos.existencias.bodegas.editar &&
+        formPermisos.existencias.bodegas.cambiarEstado &&
+        formPermisos.existencias.bodegas.eliminar
       );
-    } catch (error: any) {
-      console.error(error);
+    }
 
-      const message =
-        error?.response?.data?.message ||
-        `No se pudo ${nuevoEstado ? "activar" : "desactivar"} el rol`;
+    if (module === "compras") {
+      return (
+        formPermisos.compras.proveedores.ver &&
+        formPermisos.compras.proveedores.crear &&
+        formPermisos.compras.proveedores.editar &&
+        formPermisos.compras.proveedores.cambiarEstado &&
+        formPermisos.compras.proveedores.eliminar &&
+        formPermisos.compras.ordenesCompra.ver &&
+        formPermisos.compras.ordenesCompra.crear &&
+        formPermisos.compras.ordenesCompra.descargar &&
+        formPermisos.compras.ordenesCompra.editar &&
+        formPermisos.compras.ordenesCompra.cambiarEstado &&
+        formPermisos.compras.ordenesCompra.anular &&
+        formPermisos.compras.remisionesCompra.ver &&
+        formPermisos.compras.remisionesCompra.crear &&
+        formPermisos.compras.remisionesCompra.descargar &&
+        formPermisos.compras.remisionesCompra.editar &&
+        formPermisos.compras.remisionesCompra.cambiarEstado &&
+        formPermisos.compras.remisionesCompra.anular
+      );
+    }
 
-      toast.error(Array.isArray(message) ? message.join(", ") : message);
+    if (module === "ventas") {
+      return (
+        formPermisos.ventas.clientes.ver &&
+        formPermisos.ventas.clientes.crear &&
+        formPermisos.ventas.clientes.editar &&
+        formPermisos.ventas.clientes.cambiarEstado &&
+        formPermisos.ventas.clientes.eliminar &&
+        formPermisos.ventas.cotizaciones.ver &&
+        formPermisos.ventas.cotizaciones.crear &&
+        formPermisos.ventas.cotizaciones.descargar &&
+        formPermisos.ventas.cotizaciones.editar &&
+        formPermisos.ventas.cotizaciones.cambiarEstado &&
+        formPermisos.ventas.cotizaciones.anular &&
+        formPermisos.ventas.ordenesVenta.ver &&
+        formPermisos.ventas.ordenesVenta.crear &&
+        formPermisos.ventas.ordenesVenta.descargar &&
+        formPermisos.ventas.ordenesVenta.editar &&
+        formPermisos.ventas.ordenesVenta.cambiarEstado &&
+        formPermisos.ventas.ordenesVenta.anular &&
+        formPermisos.ventas.remisionesVenta.ver &&
+        formPermisos.ventas.remisionesVenta.crear &&
+        formPermisos.ventas.remisionesVenta.descargar &&
+        formPermisos.ventas.remisionesVenta.editar &&
+        formPermisos.ventas.remisionesVenta.cambiarEstado &&
+        formPermisos.ventas.remisionesVenta.anular &&
+        formPermisos.ventas.pagos.ver &&
+        formPermisos.ventas.pagos.crear &&
+        formPermisos.ventas.pagos.agregarAbonos &&
+        formPermisos.ventas.pagos.anular
+      );
+    }
+
+    if (module === "administracion") {
+      return (
+        formPermisos.administracion.roles.ver &&
+        formPermisos.administracion.roles.crear &&
+        formPermisos.administracion.roles.editar &&
+        formPermisos.administracion.roles.cambiarEstado &&
+        formPermisos.administracion.roles.eliminar &&
+        formPermisos.administracion.usuarios.ver &&
+        formPermisos.administracion.usuarios.crear &&
+        formPermisos.administracion.usuarios.editar &&
+        formPermisos.administracion.usuarios.eliminar &&
+        formPermisos.administracion.usuarios.cambiarEstado &&
+        formPermisos.administracion.usuarios.restablecerContrasena
+      );
+    }
+
+    return false;
+  };
+
+  // =========================================================
+  // Handlers de formulario
+  // =========================================================
+  const handleNombreChange = (value: string) => {
+    setFormNombre(value);
+
+    if (touched.nombre) {
+      setErrors({
+        ...errors,
+        nombre: validateNombre(value),
+      });
     }
   };
 
-  // Función para actualizar permisos individuales
+  const handleDescripcionChange = (value: string) => {
+    setFormDescripcion(value);
+
+    if (touched.descripcion) {
+      setErrors({
+        ...errors,
+        descripcion: validateDescripcion(value),
+      });
+    }
+  };
+
+  const handleNombreBlur = () => {
+    setTouched({
+      ...touched,
+      nombre: true,
+    });
+
+    setErrors({
+      ...errors,
+      nombre: validateNombre(formNombre),
+    });
+  };
+
+  const handleDescripcionBlur = () => {
+    setTouched({
+      ...touched,
+      descripcion: true,
+    });
+
+    setErrors({
+      ...errors,
+      descripcion: validateDescripcion(formDescripcion),
+    });
+  };
+
   const updatePermiso = (path: string[], value: boolean) => {
-    const newPermisos = JSON.parse(
-      JSON.stringify(formPermisos),
-    );
+    const newPermisos = JSON.parse(JSON.stringify(formPermisos));
+
     let current: any = newPermisos;
     for (let i = 0; i < path.length - 1; i++) {
       current = current[path[i]];
     }
+
     current[path[path.length - 1]] = value;
     setFormPermisos(newPermisos);
   };
@@ -536,102 +568,215 @@ export default function Roles() {
     setFormPermisos(newPermisos);
   };
 
-  const isModuleFullyChecked = (module: string): boolean => {
-    if (module === "dashboard") {
-      return formPermisos.dashboard.acceder;
-    }
-
-    if (module === "existencias") {
-      return (
-        formPermisos.existencias.productos.ver &&
-        formPermisos.existencias.productos.crear &&
-        formPermisos.existencias.productos.editar &&
-        formPermisos.existencias.productos.cambiarEstado &&
-        formPermisos.existencias.traslados.ver &&
-        formPermisos.existencias.traslados.crear &&
-        formPermisos.existencias.traslados.editar &&
-        formPermisos.existencias.traslados.cambiarEstado &&
-        formPermisos.existencias.traslados.anular &&
-        formPermisos.existencias.bodegas.ver &&
-        formPermisos.existencias.bodegas.crear &&
-        formPermisos.existencias.bodegas.editar &&
-        formPermisos.existencias.bodegas.cambiarEstado &&
-        formPermisos.existencias.bodegas.eliminar
-      );
-    }
-
-    if (module === "compras") {
-      return (
-        formPermisos.compras.proveedores.ver &&
-        formPermisos.compras.proveedores.crear &&
-        formPermisos.compras.proveedores.editar &&
-        formPermisos.compras.proveedores.cambiarEstado &&
-        formPermisos.compras.proveedores.eliminar &&
-        formPermisos.compras.ordenesCompra.ver &&
-        formPermisos.compras.ordenesCompra.crear &&
-        formPermisos.compras.ordenesCompra.descargar &&
-        formPermisos.compras.ordenesCompra.editar &&
-        formPermisos.compras.ordenesCompra.cambiarEstado &&
-        formPermisos.compras.ordenesCompra.anular &&
-        formPermisos.compras.remisionesCompra.ver &&
-        formPermisos.compras.remisionesCompra.crear &&
-        formPermisos.compras.remisionesCompra.descargar &&
-        formPermisos.compras.remisionesCompra.editar &&
-        formPermisos.compras.remisionesCompra.cambiarEstado &&
-        formPermisos.compras.remisionesCompra.anular
-      );
-    }
-
-    if (module === "ventas") {
-      return (
-        formPermisos.ventas.clientes.ver &&
-        formPermisos.ventas.clientes.crear &&
-        formPermisos.ventas.clientes.editar &&
-        formPermisos.ventas.clientes.cambiarEstado &&
-        formPermisos.ventas.clientes.eliminar &&
-        formPermisos.ventas.cotizaciones.ver &&
-        formPermisos.ventas.cotizaciones.crear &&
-        formPermisos.ventas.cotizaciones.descargar &&
-        formPermisos.ventas.cotizaciones.editar &&
-        formPermisos.ventas.cotizaciones.cambiarEstado &&
-        formPermisos.ventas.cotizaciones.anular &&
-        formPermisos.ventas.ordenesVenta.ver &&
-        formPermisos.ventas.ordenesVenta.crear &&
-        formPermisos.ventas.ordenesVenta.descargar &&
-        formPermisos.ventas.ordenesVenta.editar &&
-        formPermisos.ventas.ordenesVenta.cambiarEstado &&
-        formPermisos.ventas.ordenesVenta.anular &&
-        formPermisos.ventas.remisionesVenta.ver &&
-        formPermisos.ventas.remisionesVenta.crear &&
-        formPermisos.ventas.remisionesVenta.descargar &&
-        formPermisos.ventas.remisionesVenta.editar &&
-        formPermisos.ventas.remisionesVenta.cambiarEstado &&
-        formPermisos.ventas.remisionesVenta.anular &&
-        formPermisos.ventas.pagos.ver &&
-        formPermisos.ventas.pagos.crear &&
-        formPermisos.ventas.pagos.agregarAbonos &&
-        formPermisos.ventas.pagos.anular
-      );
-    }
-
-    if (module === "administracion") {
-      return (
-        formPermisos.administracion.roles.ver &&
-        formPermisos.administracion.roles.crear &&
-        formPermisos.administracion.roles.editar &&
-        formPermisos.administracion.roles.cambiarEstado &&
-        formPermisos.administracion.roles.eliminar &&
-        formPermisos.administracion.usuarios.ver &&
-        formPermisos.administracion.usuarios.crear &&
-        formPermisos.administracion.usuarios.editar &&
-        formPermisos.administracion.usuarios.eliminar &&
-        formPermisos.administracion.usuarios.cambiarEstado &&
-        formPermisos.administracion.usuarios.restablecerContrasena
-      );
-    }
-
-    return false;
+  // =========================================================
+  // Handlers de navegación
+  // =========================================================
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
   };
+
+  const handleView = (rol: Rol) => {
+    navigate(`/app/roles/${rol.id}/ver`);
+  };
+
+  const handleCreate = () => {
+    if (!puedeCrear) {
+      toast.error("No tienes permiso para crear roles");
+      return;
+    }
+
+    setFormNombre("");
+    setFormDescripcion("");
+    setFormPermisos(createEmptyPermisos());
+
+    setErrors({
+      nombre: "",
+      descripcion: "",
+    });
+
+    setTouched({
+      nombre: false,
+      descripcion: false,
+    });
+
+    navigate("/app/roles/crear");
+  };
+
+  const handleEdit = (rol: Rol) => {
+    if (!puedeEditar) {
+      toast.error("No tienes permiso para editar roles");
+      return;
+    }
+
+    navigate(`/app/roles/${rol.id}/editar`);
+  };
+
+  const handleDelete = (rol: Rol) => {
+    if (!puedeEliminar) {
+      toast.error("No tienes permiso para eliminar roles");
+      return;
+    }
+
+    navigate(`/app/roles/${rol.id}/eliminar`);
+  };
+
+  // =========================================================
+  // Handlers de acciones / modales
+  // =========================================================
+  const handleToggleEstado = (rol: Rol) => {
+    if (!puedeCambiarEstado) {
+      toast.error("No tienes permiso para cambiar el estado de roles");
+      return;
+    }
+
+    setRolParaCambioEstado(rol);
+    setShowConfirmEstadoModal(true);
+  };
+
+  // =========================================================
+  // Confirmaciones / acciones async
+  // =========================================================
+
+  const confirmCreate = async () => {
+    if (!puedeCrear) {
+      toast.error("No tienes permiso para crear roles");
+      return;
+    }
+
+    if (isCreatingRol) return;
+    if (!validateForm()) return;
+
+    try {
+      setIsCreatingRol(true);
+
+      const ids_permisos = permisosFrontendToIds(formPermisos, catalogoPermisos);
+
+      await createRol({
+        nombre_rol: formNombre.trim(),
+        descripcion: formDescripcion.trim(),
+        estado: true,
+        ids_permisos,
+      });
+
+      await cargarDatos();
+      toast.success("Rol creado exitosamente");
+      closeToList();
+    } catch (error: any) {
+      console.error("Error creando rol:", error);
+
+      const message =
+        error?.response?.data?.message || "No se pudo crear el rol";
+
+      toast.error(Array.isArray(message) ? message.join(", ") : message);
+    } finally {
+      setIsCreatingRol(false);
+    }
+  };
+
+  const confirmEdit = async () => {
+    if (!puedeEditar) {
+      toast.error("No tienes permiso para editar roles");
+      return;
+    }
+
+    if (isUpdatingRol) return;
+    if (!rolSeleccionado) return;
+    if (!validateForm()) return;
+
+    try {
+      setIsUpdatingRol(true);
+
+      const ids_permisos = permisosFrontendToIds(formPermisos, catalogoPermisos);
+
+      await updateRol(rolSeleccionado.id, {
+        nombre_rol: formNombre.trim(),
+        descripcion: formDescripcion.trim(),
+        estado: rolSeleccionado.estado,
+        ids_permisos,
+      });
+
+      await cargarDatos();
+      toast.success("Rol actualizado exitosamente");
+      closeToList();
+    } catch (error: any) {
+      console.error("Error actualizando rol:", error);
+
+      const message =
+        error?.response?.data?.message || "No se pudo actualizar el rol";
+
+      toast.error(Array.isArray(message) ? message.join(", ") : message);
+    } finally {
+      setIsUpdatingRol(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!puedeEliminar) {
+      toast.error("No tienes permiso para eliminar roles");
+      return;
+    }
+
+    if (isDeletingRol) return;
+    if (!rolSeleccionado) return;
+
+    try {
+      setIsDeletingRol(true);
+
+      await deleteRol(rolSeleccionado.id);
+      await cargarDatos();
+
+      toast.success("Rol eliminado exitosamente");
+      closeToList();
+    } catch (error: any) {
+      console.error("Error eliminando rol:", error);
+
+      const message =
+        error?.response?.data?.message || "No se pudo eliminar el rol";
+
+      toast.error(Array.isArray(message) ? message.join(", ") : message);
+    } finally {
+      setIsDeletingRol(false);
+    }
+  };
+
+  const confirmToggleEstado = async () => {
+    if (!puedeCambiarEstado) {
+      toast.error("No tienes permiso para cambiar el estado de roles");
+      return;
+    }
+
+    if (isChangingEstadoRol) return;
+    if (!rolParaCambioEstado) return;
+
+    const nuevoEstado = !rolParaCambioEstado.estado;
+
+    try {
+      setIsChangingEstadoRol(true);
+
+      await updateRol(rolParaCambioEstado.id, {
+        estado: nuevoEstado,
+      });
+
+      await cargarDatos();
+
+      toast.success(
+        `Rol ${rolParaCambioEstado.estado ? "desactivado" : "activado"} exitosamente`
+      );
+    } catch (error: any) {
+      console.error("Error cambiando estado del rol:", error);
+
+      const message =
+        error?.response?.data?.message ||
+        `No se pudo ${nuevoEstado ? "activar" : "desactivar"} el rol`;
+
+      toast.error(Array.isArray(message) ? message.join(", ") : message);
+    } finally {
+      setIsChangingEstadoRol(false);
+      setShowConfirmEstadoModal(false);
+      setRolParaCambioEstado(null);
+    }
+  };
+
 
   return (
     <div className="space-y-6">
@@ -696,14 +841,16 @@ export default function Roles() {
           </Button>
         </div>
 
-        <Button
-          onClick={handleCreate}
-          className="bg-blue-600 hover:bg-blue-700"
-          disabled={!puedeCrear}
-        >
-          <Plus size={18} className="mr-2" />
-          Crear Rol
-        </Button>
+        {puedeCrear && (
+          <Button
+            onClick={handleCreate}
+            className="bg-blue-600 hover:bg-blue-700"
+            disabled={!puedeCrear}
+          >
+            <Plus size={18} className="mr-2" />
+            Crear Rol
+          </Button>
+        )}
       </div>
 
       {/* Table */}
@@ -784,27 +931,29 @@ export default function Roles() {
                           <Eye size={16} />
                         </Button>
 
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleEdit(rol)}
-                          className="h-8 w-8 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
-                          title="Editar"
-                          disabled={!puedeEditar}
-                        >
-                          <Edit size={16} />
-                        </Button>
-
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDelete(rol)}
-                          className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                          title="Eliminar"
-                          disabled={rol.usuariosAsignados > 0 || !puedeEliminar}
-                        >
-                          <Trash2 size={16} />
-                        </Button>
+                        {puedeEditar && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleEdit(rol)}
+                            className="h-8 w-8 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                            title="Editar"
+                          >
+                            <Edit size={16} />
+                          </Button>
+                        )}
+                        {puedeEliminar && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDelete(rol)}
+                            className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            title="Eliminar"
+                            disabled={rol.usuariosAsignados > 0}
+                          >
+                            <Trash2 size={16} />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -1138,8 +1287,10 @@ export default function Roles() {
             <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
-            <Button onClick={confirmCreate} className="bg-blue-600 hover:bg-blue-700">
-              Crear Rol
+            <Button onClick={confirmCreate}
+              disabled={isCreatingRol}
+              className="bg-blue-600 hover:bg-blue-700">
+              {isCreatingRol ? "Creando..." : "Crear Rol"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1260,9 +1411,9 @@ export default function Roles() {
             <Button
               variant="destructive"
               onClick={confirmDelete}
-              disabled={!!rolSeleccionado && (rolSeleccionado.usuariosAsignados > 0 || !puedeEliminar)}
+              disabled={isDeletingRol || !!rolSeleccionado && rolSeleccionado.usuariosAsignados > 0}
             >
-              Eliminar
+              {isDeletingRol ? "Eliminando..." : "Eliminar"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1271,9 +1422,14 @@ export default function Roles() {
       {/* Modal Confirmar Cambio de Estado */}
       <Dialog
         open={showConfirmEstadoModal}
-        onOpenChange={setShowConfirmEstadoModal}
+        onOpenChange={(open) => {
+          setShowConfirmEstadoModal(open);
+          if (!open) setRolParaCambioEstado(null);
+        }}
       >
-        <DialogContent aria-describedby="confirm-estado-description">
+        <DialogContent
+          onInteractOutside={(e) => e.preventDefault()}
+          aria-describedby="confirm-estado-description">
           <DialogHeader>
             <DialogTitle>Cambiar Estado del Rol</DialogTitle>
             <DialogDescription id="confirm-estado-description">
@@ -1299,17 +1455,12 @@ export default function Roles() {
             <Button
               onClick={confirmToggleEstado}
               disabled={
+                isChangingEstadoRol ||
                 !rolParaCambioEstado ||
-                !puedeCambiarEstado ||
                 (rolParaCambioEstado.estado && rolParaCambioEstado.usuariosAsignados > 0)
               }
-              className={
-                rolParaCambioEstado && rolParaCambioEstado.estado
-                  ? "bg-red-600 hover:bg-red-700"
-                  : "bg-green-600 hover:bg-green-700"
-              }
             >
-              {rolParaCambioEstado && rolParaCambioEstado.estado ? "Desactivar" : "Activar"}
+              {isChangingEstadoRol ? "Procesando..." : rolParaCambioEstado?.estado ? "Desactivar" : "Activar"}
             </Button>
           </DialogFooter>
         </DialogContent>
