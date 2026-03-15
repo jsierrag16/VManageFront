@@ -20,6 +20,7 @@ import {
   X,
   Barcode,
   Download,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "../../../shared/components/ui/button";
@@ -49,39 +50,95 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../../shared/components/ui/select";
-
-import { comprasData } from "../../../data/compras";
 import { useProductos } from "../../../shared/context/ProductosContext";
-import {
-  remisionesCompraData,
-  type RemisionCompra,
-  type ItemRemisionCompra,
-} from "../../../data/remisiones-compra";
-
 import type { AppOutletContext } from "../../../layouts/MainLayout";
+import {
+  ESTADO_REMISION_IDS,
+  cambiarEstadoRemisionCompra,
+  createRemisionCompra,
+  getCompraById,
+  getComprasOptions,
+  getRemisionCompraById,
+  getRemisionesCompra,
+  updateRemisionCompra,
+  type CompraDetail,
+  type CompraOption,
+  type RemisionCompraUI,
+} from "../services/remisiones-compra.services";
+
+type ItemForm = {
+  localId: string;
+  id_producto: number;
+  productoNombre: string;
+  cantidad: string;
+  precio_unitario: number;
+  id_iva: number;
+  ivaPorcentaje: number;
+  lote: string;
+  fecha_vencimiento: string;
+  cod_barras: string;
+  nota: string;
+};
+
+const makeLocalId = () => {
+  try {
+    if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  } catch {
+    //
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+};
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  const err = error as any;
+  const message = err?.response?.data?.message;
+
+  if (Array.isArray(message)) return message.join(", ");
+  if (typeof message === "string") return message;
+  if (typeof err?.message === "string") return err.message;
+
+  return fallback;
+};
+
+const formatDate = (value?: string) => {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("es-CO");
+};
+
+const formatMoney = (value: number) =>
+  new Intl.NumberFormat("es-CO", {
+    style: "currency",
+    currency: "COP",
+    maximumFractionDigits: 2,
+  }).format(value || 0);
+
+const normalizeText = (value: unknown) =>
+  String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+
+const buildEmptyForm = () => ({
+  numeroRemision: "Se genera automáticamente",
+  id_compra: "",
+  ordenCompra: "",
+  id_proveedor: "",
+  proveedor: "",
+  id_bodega: "",
+  bodega: "",
+  fechaCreacion: new Date().toISOString().split("T")[0],
+  fechaVencimiento: "",
+  observaciones: "",
+  idFactura: "",
+});
 
 export default function RemisionesCompra() {
   const { productos } = useProductos();
-
   const { selectedBodegaNombre } = useOutletContext<AppOutletContext>();
-  const selectedBodega = selectedBodegaNombre;
 
-  // ✅ estados base
-  const [searchTerm, setSearchTerm] = useState("");
-  const [remisiones, setRemisiones] = useState<RemisionCompra[]>(
-    remisionesCompraData
-  );
-
-  const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [remisionParaCambioEstado, setRemisionParaCambioEstado] =
-    useState<RemisionCompra | null>(null);
-  const [nuevoEstado, setNuevoEstado] = useState<"Pendiente" | "Aprobada" | "Anulada" | null>(null);
-
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
-
-  // ✅ router + bodega + flags URL
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams<{ id: string }>();
@@ -93,26 +150,218 @@ export default function RemisionesCompra() {
 
   const closeToList = () => navigate("/app/remcompras");
 
-  // ✅ remisión seleccionada por URL (:id)
-  const remisionSeleccionada = useMemo(() => {
-    if (!params.id) return null;
-    const id = Number(params.id);
-    if (!Number.isFinite(id)) return null;
-    return remisiones.find((r) => r.id === id) ?? null;
-  }, [remisiones, params.id]);
+  const [loadingPage, setLoadingPage] = useState(true);
+  const [loadingDetalleRemision, setLoadingDetalleRemision] = useState(false);
+  const [loadingCompraDetalle, setLoadingCompraDetalle] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  // ✅ si entran a /ver, /editar o /anular con id inválido → volver
+  const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  const [remisiones, setRemisiones] = useState<RemisionCompraUI[]>([]);
+  const [comprasOptions, setComprasOptions] = useState<CompraOption[]>([]);
+  const [selectedCompra, setSelectedCompra] = useState<CompraDetail | null>(null);
+  const [selectedRemision, setSelectedRemision] = useState<RemisionCompraUI | null>(null);
+
+  const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [remisionParaCambioEstado, setRemisionParaCambioEstado] =
+    useState<RemisionCompraUI | null>(null);
+  const [nuevoEstadoLabel, setNuevoEstadoLabel] = useState<string | null>(null);
+  const [lastCreatedCode, setLastCreatedCode] = useState("");
+
+  const [formData, setFormData] = useState(buildEmptyForm());
+
+  const [items, setItems] = useState<ItemForm[]>([]);
+  const [currentProducto, setCurrentProducto] = useState("");
+  const [currentNumeroLote, setCurrentNumeroLote] = useState("");
+  const [currentCantidad, setCurrentCantidad] = useState("");
+  const [currentFechaVencimiento, setCurrentFechaVencimiento] = useState("");
+  const [currentNota, setCurrentNota] = useState("");
+  const [codigoBarras, setCodigoBarras] = useState("");
+
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
+
+  const loadRemisiones = async () => {
+    const data = await getRemisionesCompra();
+    setRemisiones(data);
+  };
+
+  const loadCompras = async () => {
+    const data = await getComprasOptions();
+    setComprasOptions(data);
+  };
+
+  const loadInitialData = async () => {
+    setLoadingPage(true);
+    try {
+      await Promise.all([loadRemisiones(), loadCompras()]);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "No fue posible cargar las remisiones"));
+    } finally {
+      setLoadingPage(false);
+    }
+  };
+
   useEffect(() => {
-    if (!isVer && !isEditar && !isAnular) return;
+    void loadInitialData();
+  }, []);
 
-    if (!remisionSeleccionada) {
+  const resetItemBuilder = () => {
+    setCurrentProducto("");
+    setCurrentNumeroLote("");
+    setCurrentCantidad("");
+    setCurrentFechaVencimiento("");
+    setCurrentNota("");
+    setCodigoBarras("");
+  };
+
+  const resetForm = () => {
+    setFormData(buildEmptyForm());
+    setItems([]);
+    setSelectedCompra(null);
+    resetItemBuilder();
+  };
+
+  useEffect(() => {
+    if (!isCrear) return;
+    resetForm();
+  }, [isCrear]);
+
+  useEffect(() => {
+    if (!isVer && !isEditar && !isAnular) {
+      setSelectedRemision(null);
+      return;
+    }
+
+    const id = Number(params.id);
+    if (!Number.isFinite(id)) {
       closeToList();
       return;
     }
-  }, [isVer, isEditar, isAnular, remisionSeleccionada]);
 
-  // ✅ navegación (modales por URL)
-  const handleView = (r: RemisionCompra) => {
+    let cancelled = false;
+
+    const run = async () => {
+      setLoadingDetalleRemision(true);
+      try {
+        const remision = await getRemisionCompraById(id);
+        if (cancelled) return;
+
+        setSelectedRemision(remision);
+
+        if (isEditar) {
+          setFormData({
+            numeroRemision: remision.numeroRemision,
+            id_compra: String(remision.ordenCompraId),
+            ordenCompra: remision.ordenCompra,
+            id_proveedor: String(remision.proveedorId),
+            proveedor: remision.proveedor,
+            id_bodega: String(remision.idBodega),
+            bodega: remision.bodega,
+            fechaCreacion: remision.fecha || new Date().toISOString().split("T")[0],
+            fechaVencimiento: remision.fechaVencimiento || "",
+            observaciones: remision.observaciones || "",
+            idFactura: remision.idFactura ? String(remision.idFactura) : "",
+          });
+
+          setItems(
+            remision.items.map((item) => ({
+              localId: makeLocalId(),
+              id_producto: item.id_producto,
+              productoNombre: item.productoNombre,
+              cantidad: String(item.cantidad),
+              precio_unitario: item.precio_unitario,
+              id_iva: item.id_iva,
+              ivaPorcentaje: item.ivaPorcentaje,
+              lote: item.lote || "",
+              fecha_vencimiento: item.fecha_vencimiento || "",
+              cod_barras: item.cod_barras || "",
+              nota: item.nota || "",
+            }))
+          );
+
+          try {
+            const compra = await getCompraById(remision.ordenCompraId);
+            if (!cancelled) setSelectedCompra(compra);
+          } catch {
+            //
+          }
+
+          resetItemBuilder();
+        }
+      } catch (error) {
+        toast.error(getErrorMessage(error, "No fue posible cargar la remisión"));
+        closeToList();
+      } finally {
+        if (!cancelled) setLoadingDetalleRemision(false);
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [params.id, isVer, isEditar, isAnular]);
+
+  const filteredRemisiones = useMemo(() => {
+    const base =
+      selectedBodegaNombre && selectedBodegaNombre !== "Todas las bodegas"
+        ? remisiones.filter((r) => normalizeText(r.bodega) === normalizeText(selectedBodegaNombre))
+        : remisiones;
+
+    return base.filter((remision) => {
+      const q = normalizeText(searchTerm);
+      if (!q) return true;
+
+      return [
+        remision.numeroRemision,
+        remision.ordenCompra,
+        remision.proveedor,
+        remision.estado,
+        remision.bodega,
+        String(remision.itemsCount),
+      ].some((field) => normalizeText(field).includes(q));
+    });
+  }, [remisiones, searchTerm, selectedBodegaNombre]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedBodegaNombre]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRemisiones.length / itemsPerPage));
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentRemisiones = filteredRemisiones.slice(startIndex, endIndex);
+
+  const stats = useMemo(() => {
+    const totalRemisiones = filteredRemisiones.length;
+    const pendientes = filteredRemisiones.filter((r) => r.estadoKey === "PENDIENTE").length;
+    const aplicadas = filteredRemisiones.filter((r) => r.estadoKey === "APLICADA").length;
+    const anuladas = filteredRemisiones.filter((r) => r.estadoKey === "ANULADA").length;
+
+    return { totalRemisiones, pendientes, aplicadas, anuladas };
+  }, [filteredRemisiones]);
+
+  const productosDeCompra = useMemo(() => {
+    return selectedCompra?.items ?? [];
+  }, [selectedCompra]);
+
+  const productosDisponibles = useMemo(() => {
+    if (!selectedCompra) return [];
+
+    return selectedCompra.items.filter((productoCompra) => {
+      const cantidadYaAgregada = items
+        .filter((i) => i.id_producto === productoCompra.idProducto)
+        .reduce((acc, item) => acc + Number(item.cantidad || 0), 0);
+
+      return cantidadYaAgregada < productoCompra.cantidad;
+    });
+  }, [selectedCompra, items]);
+
+  const handleView = (r: RemisionCompraUI) => {
     navigate(`/app/remcompras/${r.id}/ver`);
   };
 
@@ -120,391 +369,388 @@ export default function RemisionesCompra() {
     navigate("/app/remcompras/crear");
   };
 
-  const handleEdit = (r: RemisionCompra) => {
+  const handleEdit = (r: RemisionCompraUI) => {
+    if (r.afectaExistencias || r.estadoKey === "APLICADA") {
+      toast.info("No puedes editar una remisión que ya aplicó existencias");
+      return;
+    }
+    if (r.estadoKey === "ANULADA") {
+      toast.info("No puedes editar una remisión anulada");
+      return;
+    }
     navigate(`/app/remcompras/${r.id}/editar`);
   };
 
-  const handleAnular = (r: RemisionCompra) => {
+  const handleAnular = (r: RemisionCompraUI) => {
+    if (r.estadoKey === "ANULADA") {
+      toast.info("La remisión ya está anulada");
+      return;
+    }
+    if (r.afectaExistencias || r.estadoKey === "APLICADA") {
+      toast.info("No debes anular una remisión que ya aplicó existencias");
+      return;
+    }
     navigate(`/app/remcompras/${r.id}/anular`);
   };
 
-  // Form data
-  const [formData, setFormData] = useState({
-    numeroRemision: "",
-    ordenCompra: "",
-    proveedor: "",
-    fecha: "",
-    observaciones: "",
-  });
+  const handleOrdenCompraChange = async (idCompraValue: string) => {
+    if (!idCompraValue) return;
 
-  // Items de la remisión
-  const [items, setItems] = useState<ItemRemisionCompra[]>([]);
+    const compraBase = comprasOptions.find((c) => String(c.id) === idCompraValue);
+    if (!compraBase) {
+      toast.error("No se encontró la compra seleccionada");
+      return;
+    }
 
-  // Formulario de item actual
-  const [currentProducto, setCurrentProducto] = useState("");
-  const [currentNumeroLote, setCurrentNumeroLote] = useState("");
-  const [currentCantidad, setCurrentCantidad] = useState("");
-  const [currentFechaVencimiento, setCurrentFechaVencimiento] = useState("");
+    setLoadingCompraDetalle(true);
+    try {
+      const compra = await getCompraById(compraBase.id);
 
-  // Estado para el lector de código de barras
-  const [codigoBarras, setCodigoBarras] = useState("");
-  const barcodeInputRef = useRef<HTMLInputElement>(null);
+      setSelectedCompra(compra);
+      setItems([]);
+      resetItemBuilder();
 
-  // ✅ filtrar por bodega + búsqueda
-  const filteredRemisiones = useMemo(() => {
-    const porBodega =
-      selectedBodega === "Todas las bodegas"
-        ? remisiones
-        : remisiones.filter((r) => r.bodega === selectedBodega);
-
-    return porBodega.filter(
-      (remision) =>
-        remision.numeroRemision
-          .toLowerCase()
-          .includes(searchTerm.toLowerCase()) ||
-        remision.ordenCompra
-          .toLowerCase()
-          .includes(searchTerm.toLowerCase()) ||
-        remision.proveedor.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        remision.estado.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        String(remision.items.length).includes(searchTerm)
-    );
-  }, [remisiones, searchTerm, selectedBodega]);
-
-  // ✅ resetear a página 1 cuando cambia filtro
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, selectedBodega]);
-
-  // ✅ paginación
-  const totalPages = Math.ceil(filteredRemisiones.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentRemisiones = filteredRemisiones.slice(startIndex, endIndex);
-
-  // ✅ resetear formulario
-  const resetForm = () => {
-    setFormData({
-      numeroRemision: "",
-      ordenCompra: "",
-      proveedor: "",
-      fecha: "",
-      observaciones: "",
-    });
-    setItems([]);
-    setCurrentProducto("");
-    setCurrentNumeroLote("");
-    setCurrentCantidad("");
-    setCurrentFechaVencimiento("");
-    setCodigoBarras("");
-  };
-
-  // ✅ al entrar a /crear, limpiar el formulario y generar número
-  useEffect(() => {
-    if (!isCrear) return;
-
-    resetForm();
-
-    const ultimaRemision =
-      remisiones.length > 0
-        ? remisiones.reduce((max, r) => {
-          const num = parseInt(r.numeroRemision.split("-")[1]);
-          return num > max ? num : max;
-        }, 0)
-        : 0;
-
-    const siguienteNumero = ultimaRemision + 1;
-    const nuevoNumeroRemision = `RC-${String(siguienteNumero).padStart(3, "0")}`;
-
-    setFormData((prev) => ({
-      ...prev,
-      numeroRemision: nuevoNumeroRemision,
-      fecha: new Date().toISOString().split("T")[0],
-    }));
-  }, [isCrear, remisiones]);
-
-  // ✅ al entrar a /editar, precargar formulario
-  useEffect(() => {
-    if (!isEditar) return;
-    if (!remisionSeleccionada) return;
-
-    setFormData({
-      numeroRemision: remisionSeleccionada.numeroRemision,
-      ordenCompra: remisionSeleccionada.ordenCompra,
-      proveedor: remisionSeleccionada.proveedor,
-      fecha: remisionSeleccionada.fecha,
-      observaciones: remisionSeleccionada.observaciones,
-    });
-
-    setItems(remisionSeleccionada.items);
-    setCurrentProducto("");
-    setCurrentNumeroLote("");
-    setCurrentCantidad("");
-    setCurrentFechaVencimiento("");
-    setCodigoBarras("");
-  }, [isEditar, remisionSeleccionada]);
-
-  const handleOrdenCompraChange = (numeroOrden: string) => {
-    const ordenSeleccionada = comprasData.find(
-      (c) => c.numeroOrden === numeroOrden
-    );
-
-    if (ordenSeleccionada) {
       setFormData((prev) => ({
         ...prev,
-        ordenCompra: numeroOrden,
-        proveedor: ordenSeleccionada.proveedor,
+        id_compra: String(compra.id),
+        ordenCompra: compra.codigo,
+        id_proveedor: String(compra.proveedorId),
+        proveedor: compra.proveedorNombre,
+        id_bodega: String(compra.idBodega),
+        bodega: compra.bodegaNombre,
       }));
+    } catch (error) {
+      toast.error(getErrorMessage(error, "No fue posible cargar el detalle de la compra"));
+    } finally {
+      setLoadingCompraDetalle(false);
     }
   };
 
-  // ✅ calcular estadísticas
-  const stats = useMemo(() => {
-    const totalRemisiones = filteredRemisiones.length;
-    const pendientes = filteredRemisiones.filter(
-      (r) => r.estado === "Pendiente"
-    ).length;
-    const aprobadas = filteredRemisiones.filter(
-      (r) => r.estado === "Aprobada"
-    ).length;
-    const anuladas = filteredRemisiones.filter(
-      (r) => r.estado === "Anulada"
-    ).length;
-
-    return { totalRemisiones, pendientes, aprobadas, anuladas };
-  }, [filteredRemisiones]);
-
   const handleAddItem = () => {
-    if (
-      !currentProducto ||
-      !currentNumeroLote ||
-      !currentCantidad ||
-      !currentFechaVencimiento
-    ) {
-      toast.error("Por favor completa todos los campos del producto");
+    if (!selectedCompra) {
+      toast.error("Primero debes seleccionar una orden de compra");
       return;
     }
 
-    const cantidad = parseInt(currentCantidad);
-    if (isNaN(cantidad) || cantidad <= 0) {
-      toast.error("La cantidad debe ser un número positivo");
+    if (!currentProducto || !currentNumeroLote || !currentCantidad || !currentFechaVencimiento) {
+      toast.error("Completa producto, lote, cantidad y fecha de vencimiento");
       return;
     }
 
-    const producto = productos.find((p: any) => p.id === currentProducto);
-    if (!producto) {
-      toast.error("Producto no encontrado");
+    const compraItem = selectedCompra.items.find(
+      (item) => String(item.idProducto) === currentProducto
+    );
+
+    if (!compraItem) {
+      toast.error("El producto seleccionado no pertenece a la compra");
       return;
     }
 
-    const nuevoItem: ItemRemisionCompra = {
-      producto: currentProducto,
-      productoNombre: producto.nombre,
-      numeroLote: currentNumeroLote,
-      cantidad,
-      fechaVencimiento: currentFechaVencimiento,
+    const cantidad = Number(currentCantidad);
+    if (!Number.isFinite(cantidad) || cantidad <= 0) {
+      toast.error("La cantidad debe ser mayor a 0");
+      return;
+    }
+
+    const cantidadYaAgregada = items
+      .filter((i) => i.id_producto === compraItem.idProducto)
+      .reduce((acc, item) => acc + Number(item.cantidad || 0), 0);
+
+    const cantidadDisponible = compraItem.cantidad - cantidadYaAgregada;
+    if (cantidad > cantidadDisponible) {
+      toast.error(
+        `La cantidad supera lo disponible en la compra. Máximo disponible: ${cantidadDisponible}`
+      );
+      return;
+    }
+
+    const duplicado = items.some(
+      (item) =>
+        item.id_producto === compraItem.idProducto &&
+        normalizeText(item.lote) === normalizeText(currentNumeroLote) &&
+        item.fecha_vencimiento === currentFechaVencimiento
+    );
+
+    if (duplicado) {
+      toast.error("Ya agregaste ese producto con el mismo lote y vencimiento");
+      return;
+    }
+
+    const productoContexto = (productos as any[])?.find(
+      (p) =>
+        Number(p?.id) === compraItem.idProducto ||
+        Number(p?.id_producto) === compraItem.idProducto
+    );
+
+    const nuevoItem: ItemForm = {
+      localId: makeLocalId(),
+      id_producto: compraItem.idProducto,
+      productoNombre: compraItem.productoNombre,
+      cantidad: String(cantidad),
+      precio_unitario: compraItem.precioUnitario,
+      id_iva: compraItem.idIva,
+      ivaPorcentaje: compraItem.ivaPorcentaje,
+      lote: currentNumeroLote.trim(),
+      fecha_vencimiento: currentFechaVencimiento,
+      cod_barras:
+        compraItem.codigoBarras ||
+        String(productoContexto?.codigoBarras ?? productoContexto?.codigo_barras ?? ""),
+      nota: currentNota.trim(),
     };
 
-    setItems([...items, nuevoItem]);
-
-    setCurrentProducto("");
-    setCurrentNumeroLote("");
-    setCurrentCantidad("");
-    setCurrentFechaVencimiento("");
-
+    setItems((prev) => [...prev, nuevoItem]);
+    resetItemBuilder();
     toast.success("Producto agregado a la remisión");
   };
 
-  const handleRemoveItem = (index: number) => {
-    setItems(items.filter((_, i) => i !== index));
+  const handleRemoveItem = (localId: string) => {
+    setItems((prev) => prev.filter((item) => item.localId !== localId));
     toast.success("Producto eliminado de la remisión");
   };
 
-  // ✅ crear remisión
-  const confirmCreate = () => {
-    if (
-      !formData.numeroRemision ||
-      !formData.ordenCompra ||
-      !formData.proveedor ||
-      !formData.fecha
-    ) {
-      toast.error("Por favor completa todos los campos obligatorios");
+  const handleBarcodeKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter") return;
+
+    e.preventDefault();
+
+    if (!codigoBarras.trim()) return;
+    if (!selectedCompra) {
+      toast.error("Primero selecciona una orden de compra");
       return;
     }
 
-    if (items.length === 0) {
-      toast.error("Debe agregar al menos un producto a la remisión");
-      return;
-    }
+    const codigo = normalizeText(codigoBarras);
 
-    const nuevaRemision: RemisionCompra = {
-      id: remisiones.length > 0 ? Math.max(...remisiones.map((r) => r.id)) + 1 : 1,
-      numeroRemision: formData.numeroRemision,
-      ordenCompra: formData.ordenCompra,
-      proveedor: formData.proveedor,
-      fecha: formData.fecha,
-      estado: "Pendiente",
-      items,
-      total: 0,
-      observaciones: formData.observaciones,
-      bodega:
-        selectedBodega === "Todas las bodegas"
-          ? "Bodega Principal"
-          : selectedBodega,
-    };
-
-    setRemisiones([...remisiones, nuevaRemision]);
-    closeToList();
-    setShowSuccessModal(true);
-  };
-
-  // ✅ editar remisión
-  const confirmEdit = () => {
-    if (!remisionSeleccionada) return;
-
-    if (remisionSeleccionada.estado === "Anulada") {
-      toast.error("No puedes editar una remisión anulada");
-      return;
-    }
-
-    if (
-      !formData.numeroRemision ||
-      !formData.ordenCompra ||
-      !formData.proveedor ||
-      !formData.fecha
-    ) {
-      toast.error("Por favor completa todos los campos obligatorios");
-      return;
-    }
-
-    if (items.length === 0) {
-      toast.error("Debe agregar al menos un producto a la remisión");
-      return;
-    }
-
-    setRemisiones(
-      remisiones.map((remision) =>
-        remision.id === remisionSeleccionada.id
-          ? {
-            ...remision,
-            numeroRemision: formData.numeroRemision,
-            ordenCompra: formData.ordenCompra,
-            proveedor: formData.proveedor,
-            fecha: formData.fecha,
-            items,
-            observaciones: formData.observaciones,
-          }
-          : remision
-      )
+    const encontradoEnCompra = selectedCompra.items.find(
+      (item) => normalizeText(item.codigoBarras) === codigo
     );
 
-    toast.success("Remisión de compra actualizada exitosamente");
-    closeToList();
-  };
+    if (encontradoEnCompra) {
+      setCurrentProducto(String(encontradoEnCompra.idProducto));
+      toast.success(`Producto encontrado: ${encontradoEnCompra.productoNombre}`);
+      setCodigoBarras("");
 
-  // ✅ anular remisión
-  const confirmAnular = () => {
-    if (!remisionSeleccionada) return;
-
-    if (remisionSeleccionada.estado === "Anulada") {
-      toast.error("La remisión ya está anulada");
+      setTimeout(() => {
+        const numeroLoteInput = document.getElementById("numeroLote") as HTMLInputElement | null;
+        numeroLoteInput?.focus();
+      }, 100);
       return;
     }
 
-    setRemisiones(
-      remisiones.map((remision) =>
-        remision.id === remisionSeleccionada.id
-          ? { ...remision, estado: "Anulada" }
-          : remision
-      )
-    );
+    const productoContexto = (productos as any[])?.find((p) => {
+      const codigoProducto = p?.codigoBarras ?? p?.codigo_barras ?? p?.cod_barras;
+      return normalizeText(codigoProducto) === codigo;
+    });
 
-    toast.success("Remisión de compra anulada exitosamente");
-    closeToList();
-  };
+    if (productoContexto) {
+      const idProducto = Number(productoContexto?.id ?? productoContexto?.id_producto);
+      const itemCompra = selectedCompra.items.find((i) => i.idProducto === idProducto);
 
-  const handleConfirmEstado = () => {
-    if (!remisionParaCambioEstado || !nuevoEstado) return;
+      if (itemCompra) {
+        setCurrentProducto(String(itemCompra.idProducto));
+        toast.success(`Producto encontrado: ${itemCompra.productoNombre}`);
+        setCodigoBarras("");
 
-    if (remisionParaCambioEstado.estado === "Anulada") {
-      toast.error("No puedes cambiar el estado de una remisión anulada");
-      setShowConfirmEstadoModal(false);
-      setRemisionParaCambioEstado(null);
-      setNuevoEstado(null);
-      return;
-    }
-
-    // ✅ Si pasa a aprobada, aquí ejecutas la lógica de inventario
-    if (nuevoEstado === "Aprobada") {
-      try {
-        remisionParaCambioEstado.items.forEach((item) => {
-          // Aquí debes conectar tu lógica real de existencias.
-          // Ejemplo conceptual:
-          // actualizarExistencia(item.producto, item.cantidad, remisionParaCambioEstado.bodega, item.numeroLote, item.fechaVencimiento);
-
-          console.log("Subir a existencias:", {
-            producto: item.producto,
-            cantidad: item.cantidad,
-            bodega: remisionParaCambioEstado.bodega,
-            lote: item.numeroLote,
-            fechaVencimiento: item.fechaVencimiento,
-          });
-        });
-      } catch (error) {
-        toast.error("No fue posible actualizar existencias");
+        setTimeout(() => {
+          const numeroLoteInput = document.getElementById("numeroLote") as HTMLInputElement | null;
+          numeroLoteInput?.focus();
+        }, 100);
         return;
       }
     }
 
-    setRemisiones(
-      remisiones.map((remision) =>
-        remision.id === remisionParaCambioEstado.id
-          ? { ...remision, estado: nuevoEstado }
-          : remision
-      )
-    );
+    toast.error("El código de barras no corresponde a un producto de la compra");
+    setCodigoBarras("");
+  };
 
-    if (nuevoEstado === "Aprobada") {
-      toast.success("Remisión aprobada y existencias agregadas al inventario");
-    } else {
-      toast.success("Estado de remisión actualizado exitosamente");
+  const validateBeforeSubmit = () => {
+    if (!formData.id_compra || !formData.id_proveedor || !formData.id_bodega) {
+      toast.error("Debes seleccionar una orden de compra válida");
+      return false;
     }
 
-    setShowConfirmEstadoModal(false);
-    setRemisionParaCambioEstado(null);
-    setNuevoEstado(null);
+    if (items.length === 0) {
+      toast.error("Debes agregar al menos un producto a la remisión");
+      return false;
+    }
+
+    return true;
+  };
+
+  const buildDetallePayload = () => {
+    return items.map((item) => ({
+      id_producto: item.id_producto,
+      cantidad: Number(item.cantidad),
+      precio_unitario: Number(item.precio_unitario),
+      id_iva: item.id_iva,
+      lote: item.lote.trim() || "",
+      fecha_vencimiento: item.fecha_vencimiento || undefined,
+      cod_barras: item.cod_barras?.trim() || undefined,
+      nota: item.nota?.trim() || undefined,
+    }));
+  };
+
+  const confirmCreate = async () => {
+    if (!validateBeforeSubmit()) return;
+
+    setSubmitting(true);
+    try {
+      const created = await createRemisionCompra({
+        id_compra: Number(formData.id_compra),
+        id_proveedor: Number(formData.id_proveedor),
+        id_bodega: Number(formData.id_bodega),
+        id_factura: formData.idFactura ? Number(formData.idFactura) : undefined,
+        fecha_vencimiento: formData.fechaVencimiento || undefined,
+        observaciones: formData.observaciones.trim() || undefined,
+        detalle_remision_compra: buildDetallePayload(),
+      });
+
+      setLastCreatedCode(created.numeroRemision);
+      await loadRemisiones();
+      closeToList();
+      setShowSuccessModal(true);
+      resetForm();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "No fue posible crear la remisión"));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const confirmEdit = async () => {
+    if (!selectedRemision) return;
+    if (!validateBeforeSubmit()) return;
+
+    if (selectedRemision.afectaExistencias || selectedRemision.estadoKey === "APLICADA") {
+      toast.error("No puedes editar una remisión que ya aplicó existencias");
+      return;
+    }
+
+    if (selectedRemision.estadoKey === "ANULADA") {
+      toast.error("No puedes editar una remisión anulada");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await updateRemisionCompra(selectedRemision.id, {
+        id_factura: formData.idFactura ? Number(formData.idFactura) : null,
+        fecha_vencimiento: formData.fechaVencimiento || null,
+        observaciones: formData.observaciones.trim() || "",
+        detalle_remision_compra: buildDetallePayload(),
+      });
+
+      await loadRemisiones();
+      toast.success("Remisión de compra actualizada exitosamente");
+      closeToList();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "No fue posible actualizar la remisión"));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const confirmAnular = async () => {
+    if (!selectedRemision) return;
+
+    if (selectedRemision.estadoKey === "ANULADA") {
+      toast.error("La remisión ya está anulada");
+      return;
+    }
+
+    if (selectedRemision.afectaExistencias || selectedRemision.estadoKey === "APLICADA") {
+      toast.error("No debes anular una remisión que ya aplicó existencias");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await cambiarEstadoRemisionCompra(selectedRemision.id, {
+        id_estado_remision_compra: ESTADO_REMISION_IDS.ANULADA,
+      });
+
+      await loadRemisiones();
+      toast.success("Remisión de compra anulada exitosamente");
+      closeToList();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "No fue posible anular la remisión"));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const getEstadoBadge = (estadoKey: string) => {
+    const badges = {
+      PENDIENTE: {
+        class: "bg-yellow-100 text-yellow-800 border-yellow-200",
+        icon: Clock,
+      },
+      APLICADA: {
+        class: "bg-green-100 text-green-800 border-green-200",
+        icon: CheckCircle,
+      },
+      ANULADA: {
+        class: "bg-red-100 text-red-800 border-red-200",
+        icon: Ban,
+      },
+      OTRO: {
+        class: "bg-gray-100 text-gray-800 border-gray-200",
+        icon: Clock,
+      },
+    };
+
+    return badges[estadoKey as keyof typeof badges] || badges.OTRO;
+  };
+
+  const handleEstadoClick = (remision: RemisionCompraUI) => {
+    if (remision.estadoKey === "ANULADA") {
+      toast.info("No puedes cambiar el estado de una remisión anulada");
+      return;
+    }
+
+    if (remision.estadoKey === "APLICADA" || remision.afectaExistencias) {
+      toast.info("Esta remisión ya fue aprobada/confirmada y aplicó existencias");
+      return;
+    }
+
+    if (remision.estadoKey !== "PENDIENTE") {
+      toast.info("Esta remisión no está en un estado válido para aprobar/confirmar");
+      return;
+    }
+
+    setRemisionParaCambioEstado(remision);
+    setNuevoEstadoLabel("Aprobada / Confirmada");
+    setShowConfirmEstadoModal(true);
+  };
+
+  const handleConfirmEstado = async () => {
+    if (!remisionParaCambioEstado) return;
+
+    setSubmitting(true);
+    try {
+      await cambiarEstadoRemisionCompra(remisionParaCambioEstado.id, {
+        id_estado_remision_compra: ESTADO_REMISION_IDS.APLICADA,
+      });
+
+      await loadRemisiones();
+
+      toast.success(
+        "Estado actualizado correctamente y existencias aplicadas desde backend"
+      );
+
+      setShowConfirmEstadoModal(false);
+      setRemisionParaCambioEstado(null);
+      setNuevoEstadoLabel(null);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "No fue posible cambiar el estado"));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleSuccessModalClose = () => {
     setShowSuccessModal(false);
-  };
-
-  const handleBarcodeKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-
-      if (!codigoBarras.trim()) return;
-
-      const productoEncontrado = productos.find(
-        (p: any) => p.codigoBarras === codigoBarras.trim() && p.estado
-      );
-
-      if (productoEncontrado) {
-        setCurrentProducto(productoEncontrado.id);
-        toast.success(`Producto encontrado: ${productoEncontrado.nombre}`);
-        setCodigoBarras("");
-
-        setTimeout(() => {
-          const numeroLoteInput = document.getElementById(
-            "numeroLote"
-          ) as HTMLInputElement;
-          numeroLoteInput?.focus();
-        }, 100);
-      } else {
-        toast.error("Producto no encontrado con ese código de barras");
-        setCodigoBarras("");
-      }
-    }
+    setLastCreatedCode("");
   };
 
   const handleDescargarRemisiones = () => {
@@ -517,7 +763,6 @@ export default function RemisionesCompra() {
         "Estado",
         "Bodega",
         "Items",
-        "Total",
         "Observaciones",
       ];
 
@@ -525,32 +770,27 @@ export default function RemisionesCompra() {
         remision.numeroRemision,
         remision.ordenCompra,
         remision.proveedor,
-        new Date(remision.fecha).toLocaleDateString("es-CO"),
+        formatDate(remision.fecha),
         remision.estado,
         remision.bodega,
-        remision.items.length.toString(),
-        `$${remision.total.toFixed(2)}`,
+        String(remision.itemsCount),
         remision.observaciones || "N/A",
       ]);
 
       const csvContent = [
         headers.join(","),
-        ...rows.map((row) => row.map((cell) => `"${cell}"`).join(",")),
+        ...rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")),
       ].join("\n");
 
       const blob = new Blob(["\ufeff" + csvContent], {
         type: "text/csv;charset=utf-8;",
       });
+
       const link = document.createElement("a");
       const url = URL.createObjectURL(blob);
 
-      link.setAttribute("href", url);
-      link.setAttribute(
-        "download",
-        `remisiones_compra_${new Date().toISOString().split("T")[0]}.csv`
-      );
-      link.style.visibility = "hidden";
-
+      link.href = url;
+      link.download = `remisiones_compra_${new Date().toISOString().split("T")[0]}.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -558,32 +798,38 @@ export default function RemisionesCompra() {
       toast.success("Remisiones descargadas exitosamente");
     } catch (error) {
       toast.error("Error al descargar las remisiones");
-      console.error("Error al descargar:", error);
+      console.error(error);
     }
   };
 
-  const handleDescargarRemision = (remision: RemisionCompra) => {
+  const handleDescargarRemision = async (remision: RemisionCompraUI) => {
     try {
+      const detalle =
+        remision.items.length > 0 ? remision : await getRemisionCompraById(remision.id);
+
       const csvLines = [
         "REMISIÓN DE COMPRA",
         "",
         "INFORMACIÓN GENERAL",
-        `Número de Remisión,${remision.numeroRemision}`,
-        `Orden de Compra,${remision.ordenCompra}`,
-        `Proveedor,${remision.proveedor}`,
-        `Fecha,${new Date(remision.fecha).toLocaleDateString("es-CO")}`,
-        `Estado,${remision.estado}`,
-        `Bodega,${remision.bodega}`,
-        `Total,$${remision.total.toFixed(2)}`,
-        `Observaciones,"${remision.observaciones || "N/A"}"`,
+        `Número de Remisión,${detalle.numeroRemision}`,
+        `Orden de Compra,${detalle.ordenCompra}`,
+        `Proveedor,${detalle.proveedor}`,
+        `Fecha,${formatDate(detalle.fecha)}`,
+        `Estado,${detalle.estado}`,
+        `Bodega,${detalle.bodega}`,
+        `Observaciones,"${(detalle.observaciones || "N/A").replace(/"/g, '""')}"`,
         "",
         "PRODUCTOS",
-        "Producto,Lote,Cantidad,Fecha Vencimiento",
-        ...remision.items.map(
+        "Producto,Lote,Cantidad,Precio Unitario,IVA %,Fecha Vencimiento,Nota",
+        ...detalle.items.map(
           (item) =>
-            `"${item.productoNombre}",${item.numeroLote},${item.cantidad},${new Date(
-              item.fechaVencimiento
-            ).toLocaleDateString("es-CO")}`
+            `"${item.productoNombre.replace(/"/g, '""')}",` +
+            `"${item.lote}",` +
+            `${item.cantidad},` +
+            `${item.precio_unitario},` +
+            `${item.ivaPorcentaje},` +
+            `"${formatDate(item.fecha_vencimiento)}",` +
+            `"${(item.nota || "").replace(/"/g, '""')}"`
         ),
       ];
 
@@ -592,115 +838,122 @@ export default function RemisionesCompra() {
       const blob = new Blob(["\ufeff" + csvContent], {
         type: "text/csv;charset=utf-8;",
       });
+
       const link = document.createElement("a");
       const url = URL.createObjectURL(blob);
 
-      link.setAttribute("href", url);
-      link.setAttribute(
-        "download",
-        `remision_${remision.numeroRemision}_${new Date().toISOString().split("T")[0]}.csv`
-      );
-      link.style.visibility = "hidden";
-
+      link.href = url;
+      link.download = `remision_${detalle.numeroRemision}_${new Date().toISOString().split("T")[0]}.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
 
-      toast.success(
-        `Remisión ${remision.numeroRemision} descargada exitosamente`
-      );
+      toast.success(`Remisión ${detalle.numeroRemision} descargada exitosamente`);
     } catch (error) {
-      toast.error("Error al descargar la remisión");
-      console.error("Error al descargar:", error);
+      toast.error(getErrorMessage(error, "Error al descargar la remisión"));
     }
   };
 
-  const getEstadoBadge = (estado: string) => {
-    const badges = {
-      Pendiente: {
-        class: "bg-yellow-100 text-yellow-800 border-yellow-200",
-        icon: Clock,
-      },
-      Aprobada: {
-        class: "bg-blue-100 text-blue-800 border-blue-200",
-        icon: CheckCircle,
-      },
-      Anulada: {
-        class: "bg-red-100 text-red-800 border-red-200",
-        icon: Ban,
-      },
-    };
+  const totalFormulario = useMemo(() => {
+    return items.reduce((acc, item) => {
+      const cantidad = Number(item.cantidad || 0);
+      const subtotal = cantidad * item.precio_unitario;
+      const iva = subtotal * (item.ivaPorcentaje / 100);
+      return acc + subtotal + iva;
+    }, 0);
+  }, [items]);
 
-    return badges[estado as keyof typeof badges] || badges.Pendiente;
-  };
-
-  const getSiguienteEstado = (
-    estadoActual: RemisionCompra["estado"]
-  ): RemisionCompra["estado"] | null => {
-    const flujoEstados: Record<
-      RemisionCompra["estado"],
-      RemisionCompra["estado"] | null
-    > = {
-      Pendiente: "Aprobada",
-      Aprobada: null,
-      Anulada: null,
-    };
-
-    return flujoEstados[estadoActual];
-  };
-
-  const handleEstadoClick = (remision: RemisionCompra) => {
-    if (remision.estado === "Anulada") {
-      toast.info("No puedes cambiar el estado de una remisión anulada");
-      return;
-    }
-
-    const siguienteEstado = getSiguienteEstado(remision.estado);
-
-    if (!siguienteEstado) {
-      toast.info("Esta remisión ya está en un estado final");
-      return;
-    }
-
-    setRemisionParaCambioEstado(remision);
-    setNuevoEstado(siguienteEstado);
-    setShowConfirmEstadoModal(true);
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* Estadísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-100 text-sm">Total Remisiones</p>
-              <p className="text-3xl mt-2">{stats.totalRemisiones}</p>
-            </div>
-            <FileText className="text-blue-200" size={40} />
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl shadow-lg p-6 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-yellow-100 text-sm">Pendientes</p>
-              <p className="text-3xl mt-2">{stats.pendientes}</p>
-            </div>
-            <Clock className="text-yellow-200" size={40} />
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-6 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-green-100 text-sm">Aprobadas</p>
-              <p className="text-3xl mt-2">{stats.aprobadas}</p>
-            </div>
-            <CheckCircle className="text-green-200" size={40} />
-          </div>
+  if (loadingPage) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="flex items-center gap-3 text-gray-600">
+          <Loader2 className="animate-spin" size={20} />
+          <span>Cargando remisiones de compra...</span>
         </div>
       </div>
+    );
+  }
+
+  return (
+    
+  <div className="space-y-6">
+        <div>
+        <h2 className="text-gray-900">Gestión de Remisiones de Compra</h2>
+        <p className="text-gray-600 mt-1">
+          Crea, consulta, edita y administra las remisiones de compra asociadas a órdenes de compra.
+        </p>
+      </div>
+    
+      {/* Estadísticas */}
+  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-blue-100 text-sm">Total Remisiones</p>
+          <p className="text-3xl mt-2">{stats.totalRemisiones}</p>
+        </div>
+        <FileText className="text-blue-200" size={40} />
+      </div>
+    </div>
+
+    <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl shadow-lg p-6 text-white">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-yellow-100 text-sm">Pendientes</p>
+          <p className="text-3xl mt-2">{stats.pendientes}</p>
+        </div>
+        <Clock className="text-yellow-200" size={40} />
+      </div>
+    </div>
+
+    <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-6 text-white">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-green-100 text-sm">Aprobadas / Confirmadas</p>
+          <p className="text-3xl mt-2">{stats.aplicadas}</p>
+        </div>
+        <CheckCircle className="text-green-200" size={40} />
+      </div>
+    </div>
+
+    <div
+      className="rounded-xl shadow-lg p-6"
+      style={{
+        background: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)",
+        color: "#ffffff",
+      }}
+    >
+      <div className="flex items-center justify-between">
+        <div>
+          <p
+            style={{
+              color: "#fecaca",
+              fontSize: "0.875rem",
+            }}
+          >
+            Anuladas
+          </p>
+          <p
+            style={{
+              color: "#ffffff",
+              fontSize: "1.875rem",
+              marginTop: "0.5rem",
+              fontWeight: 700,
+              lineHeight: 1,
+            }}
+          >
+            {stats.anuladas}
+          </p>
+        </div>
+
+        <div style={{ color: "#fecaca" }}>
+          <Ban size={40} />
+        </div>
+      </div>
+    </div>
+
+  </div>
+
 
       {/* Barra de búsqueda y acciones */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
@@ -709,7 +962,7 @@ export default function RemisionesCompra() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
             <Input
               type="text"
-              placeholder="Buscar por remisión, orden, proveedor, estado o número de items..."
+              placeholder="Buscar por remisión, orden, proveedor, estado, bodega o número de items..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 w-full"
@@ -733,7 +986,7 @@ export default function RemisionesCompra() {
         </div>
       </div>
 
-      {/* Tabla de remisiones */}
+      {/* Tabla */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <Table>
@@ -765,20 +1018,21 @@ export default function RemisionesCompra() {
                     <TableCell className="font-medium">{remision.numeroRemision}</TableCell>
                     <TableCell>{remision.ordenCompra}</TableCell>
                     <TableCell>{remision.proveedor}</TableCell>
-                    <TableCell>{new Date(remision.fecha).toLocaleDateString("es-CO")}</TableCell>
-                    <TableCell>{remision.items.length}</TableCell>
+                    <TableCell>{formatDate(remision.fecha)}</TableCell>
+                    <TableCell>{remision.itemsCount}</TableCell>
                     <TableCell className="text-center">
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleEstadoClick(remision)}
-                        disabled={remision.estado === "Anulada"}
-                        className={`h-7 ${remision.estado === "Aprobada"
-                            ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
-                            : remision.estado === "Pendiente"
+                        disabled={remision.estadoKey !== "PENDIENTE"}
+                        className={`h-7 ${
+                          remision.estadoKey === "APLICADA"
+                            ? "bg-green-100 text-green-800 hover:bg-green-200"
+                            : remision.estadoKey === "PENDIENTE"
                               ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
                               : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
-                          }`}
+                        }`}
                       >
                         {remision.estado}
                       </Button>
@@ -809,6 +1063,7 @@ export default function RemisionesCompra() {
                           onClick={() => handleEdit(remision)}
                           className="hover:bg-yellow-50"
                           title="Editar"
+                          disabled={remision.estadoKey !== "PENDIENTE" || remision.afectaExistencias}
                         >
                           <Edit size={16} className="text-yellow-600" />
                         </Button>
@@ -818,6 +1073,7 @@ export default function RemisionesCompra() {
                           onClick={() => handleAnular(remision)}
                           className="hover:bg-red-50"
                           title="Anular"
+                          disabled={remision.estadoKey !== "PENDIENTE" || remision.afectaExistencias}
                         >
                           <Ban size={16} className="text-red-600" />
                         </Button>
@@ -830,18 +1086,18 @@ export default function RemisionesCompra() {
           </Table>
         </div>
 
-        {/* Paginación */}
         {filteredRemisiones.length > 0 && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
             <div className="text-sm text-gray-600">
               Mostrando {startIndex + 1} - {Math.min(endIndex, filteredRemisiones.length)} de{" "}
               {filteredRemisiones.length} remisiones
             </div>
+
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentPage(currentPage - 1)}
+                onClick={() => setCurrentPage((prev) => prev - 1)}
                 disabled={currentPage === 1}
                 className="h-8"
               >
@@ -866,7 +1122,7 @@ export default function RemisionesCompra() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentPage(currentPage + 1)}
+                onClick={() => setCurrentPage((prev) => prev + 1)}
                 disabled={currentPage === totalPages}
                 className="h-8"
               >
@@ -901,9 +1157,9 @@ export default function RemisionesCompra() {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="numeroRemision">Número de Remisión *</Label>
+                <Label htmlFor="numeroRemision">Número de Remisión</Label>
                 <Input
                   id="numeroRemision"
                   value={formData.numeroRemision}
@@ -915,19 +1171,16 @@ export default function RemisionesCompra() {
               <div className="space-y-2">
                 <Label htmlFor="ordenCompra">Orden de Compra *</Label>
                 <Select
-                  value={formData.ordenCompra}
+                  value={formData.id_compra}
                   onValueChange={handleOrdenCompraChange}
                 >
                   <SelectTrigger id="ordenCompra">
                     <SelectValue placeholder="Seleccionar orden de compra" />
                   </SelectTrigger>
                   <SelectContent>
-                    {comprasData.map((compra) => (
-                      <SelectItem
-                        key={compra.numeroOrden}
-                        value={compra.numeroOrden}
-                      >
-                        {compra.numeroOrden} - {compra.proveedor}
+                    {comprasOptions.map((compra) => (
+                      <SelectItem key={compra.id} value={String(compra.id)}>
+                        {compra.codigo} - {compra.proveedorNombre}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -935,7 +1188,7 @@ export default function RemisionesCompra() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="proveedor">Proveedor *</Label>
+                <Label htmlFor="proveedor">Proveedor</Label>
                 <Input
                   id="proveedor"
                   value={formData.proveedor}
@@ -945,38 +1198,115 @@ export default function RemisionesCompra() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="fecha">Fecha *</Label>
+                <Label htmlFor="bodega">Bodega</Label>
                 <Input
-                  id="fecha"
+                  id="bodega"
+                  value={formData.bodega}
+                  readOnly
+                  className="bg-gray-100 cursor-not-allowed"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="fechaCreacion">Fecha de Creación</Label>
+                <Input
+                  id="fechaCreacion"
                   type="date"
-                  value={formData.fecha}
+                  value={formData.fechaCreacion}
+                  readOnly
+                  className="bg-gray-100 cursor-not-allowed"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="fechaVencimiento">Fecha de Vencimiento</Label>
+                <Input
+                  id="fechaVencimiento"
+                  type="date"
+                  value={formData.fechaVencimiento}
                   onChange={(e) =>
-                    setFormData({ ...formData, fecha: e.target.value })
+                    setFormData((prev) => ({ ...prev, fechaVencimiento: e.target.value }))
                   }
                 />
               </div>
 
-              <div className="col-span-2 space-y-2">
+              <div className="space-y-2">
+                <Label htmlFor="idFactura">ID Factura</Label>
+                <Input
+                  id="idFactura"
+                  type="number"
+                  min="1"
+                  value={formData.idFactura}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, idFactura: e.target.value }))
+                  }
+                  placeholder="Opcional"
+                />
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="observaciones">Observaciones</Label>
                 <Input
                   id="observaciones"
                   value={formData.observaciones}
                   onChange={(e) =>
-                    setFormData({ ...formData, observaciones: e.target.value })
+                    setFormData((prev) => ({ ...prev, observaciones: e.target.value }))
                   }
                   placeholder="Notas adicionales..."
                 />
               </div>
             </div>
 
-            {/* Productos */}
+            {selectedCompra && (
+              <div className="border rounded-lg p-4 bg-blue-50 border-blue-200">
+                <div className="flex items-center justify-between gap-4 mb-3">
+                  <div>
+                    <p className="font-semibold text-blue-900">
+                      Compra seleccionada: {selectedCompra.codigo}
+                    </p>
+                    <p className="text-sm text-blue-800">
+                      Proveedor: {selectedCompra.proveedorNombre} | Bodega: {selectedCompra.bodegaNombre}
+                    </p>
+                  </div>
+                  {loadingCompraDetalle && (
+                    <div className="flex items-center gap-2 text-blue-700 text-sm">
+                      <Loader2 size={16} className="animate-spin" />
+                      Cargando detalle...
+                    </div>
+                  )}
+                </div>
+
+                <div className="border rounded-lg overflow-hidden bg-white">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-gray-50">
+                        <TableHead>Producto</TableHead>
+                        <TableHead>Cantidad Compra</TableHead>
+                        <TableHead>Precio Unitario</TableHead>
+                        <TableHead>IVA %</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {productosDeCompra.map((item) => (
+                        <TableRow key={item.idProducto}>
+                          <TableCell>{item.productoNombre}</TableCell>
+                          <TableCell>{item.cantidad}</TableCell>
+                          <TableCell>{formatMoney(item.precioUnitario)}</TableCell>
+                          <TableCell>{item.ivaPorcentaje}%</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+
             <div className="border-t pt-4 mt-4">
               <div className="flex items-center gap-2 mb-4">
                 <Package size={20} className="text-blue-600" />
                 <h3 className="font-semibold">Productos de la Remisión</h3>
               </div>
 
-              {/* Barcode */}
               <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 mb-4">
                 <div className="flex items-center gap-2 mb-2">
                   <Barcode size={20} className="text-blue-600" />
@@ -1000,13 +1330,12 @@ export default function RemisionesCompra() {
                   />
                 </div>
                 <p className="text-xs text-blue-700 mt-2">
-                  Escanee el código de barras para seleccionar el producto
-                  automáticamente
+                  Solo reconoce productos que pertenezcan a la compra seleccionada
                 </p>
               </div>
 
               <div className="bg-gray-50 p-4 rounded-lg space-y-4 mb-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="producto">Producto *</Label>
                     <Select
@@ -1014,16 +1343,14 @@ export default function RemisionesCompra() {
                       onValueChange={(value: string) => setCurrentProducto(value)}
                     >
                       <SelectTrigger id="producto">
-                        <SelectValue placeholder="Seleccionar producto" />
+                        <SelectValue placeholder="Seleccionar producto de la compra" />
                       </SelectTrigger>
                       <SelectContent>
-                        {productos
-                          .filter((p: any) => p.estado)
-                          .map((producto: any) => (
-                            <SelectItem key={producto.id} value={producto.id}>
-                              {producto.nombre}
-                            </SelectItem>
-                          ))}
+                        {productosDisponibles.map((producto) => (
+                          <SelectItem key={producto.idProducto} value={String(producto.idProducto)}>
+                            {producto.productoNombre}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1034,7 +1361,7 @@ export default function RemisionesCompra() {
                       id="numeroLote"
                       value={currentNumeroLote}
                       onChange={(e) => setCurrentNumeroLote(e.target.value)}
-                      placeholder="Ej: AL-2024-001"
+                      placeholder="Ej: AL-2026-001"
                     />
                   </div>
 
@@ -1046,19 +1373,28 @@ export default function RemisionesCompra() {
                       value={currentCantidad}
                       onChange={(e) => setCurrentCantidad(e.target.value)}
                       placeholder="0"
-                      min="1"
+                      min="0.01"
+                      step="0.01"
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="fechaVencimiento">
-                      Fecha de Vencimiento *
-                    </Label>
+                    <Label htmlFor="fechaVencimientoItem">Fecha de Vencimiento *</Label>
                     <Input
-                      id="fechaVencimiento"
+                      id="fechaVencimientoItem"
                       type="date"
                       value={currentFechaVencimiento}
                       onChange={(e) => setCurrentFechaVencimiento(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="md:col-span-2 space-y-2">
+                    <Label htmlFor="notaItem">Nota del Ítem</Label>
+                    <Input
+                      id="notaItem"
+                      value={currentNota}
+                      onChange={(e) => setCurrentNota(e.target.value)}
+                      placeholder="Opcional"
                     />
                   </div>
                 </div>
@@ -1067,6 +1403,7 @@ export default function RemisionesCompra() {
                   type="button"
                   onClick={handleAddItem}
                   className="bg-green-600 hover:bg-green-700 w-full"
+                  disabled={!selectedCompra}
                 >
                   <Plus size={16} className="mr-2" />
                   Agregar Producto
@@ -1081,26 +1418,28 @@ export default function RemisionesCompra() {
                         <TableHead>Producto</TableHead>
                         <TableHead>Lote</TableHead>
                         <TableHead>Cantidad</TableHead>
+                        <TableHead>Precio</TableHead>
+                        <TableHead>IVA</TableHead>
                         <TableHead>Vencimiento</TableHead>
+                        <TableHead>Nota</TableHead>
                         <TableHead className="w-16"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {items.map((item, index) => (
-                        <TableRow key={index}>
+                      {items.map((item) => (
+                        <TableRow key={item.localId}>
                           <TableCell>{item.productoNombre}</TableCell>
-                          <TableCell>{item.numeroLote}</TableCell>
+                          <TableCell>{item.lote}</TableCell>
                           <TableCell>{item.cantidad}</TableCell>
-                          <TableCell>
-                            {new Date(item.fechaVencimiento).toLocaleDateString(
-                              "es-CO"
-                            )}
-                          </TableCell>
+                          <TableCell>{formatMoney(item.precio_unitario)}</TableCell>
+                          <TableCell>{item.ivaPorcentaje}%</TableCell>
+                          <TableCell>{formatDate(item.fecha_vencimiento)}</TableCell>
+                          <TableCell>{item.nota || "—"}</TableCell>
                           <TableCell>
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleRemoveItem(index)}
+                              onClick={() => handleRemoveItem(item.localId)}
                               className="hover:bg-red-50"
                             >
                               <X size={16} className="text-red-600" />
@@ -1108,6 +1447,14 @@ export default function RemisionesCompra() {
                           </TableCell>
                         </TableRow>
                       ))}
+                      <TableRow className="bg-gray-50">
+                        <TableCell colSpan={7} className="text-right font-semibold">
+                          Total aproximado
+                        </TableCell>
+                        <TableCell className="font-semibold">
+                          {formatMoney(totalFormulario)}
+                        </TableCell>
+                      </TableRow>
                     </TableBody>
                   </Table>
                 </div>
@@ -1116,7 +1463,7 @@ export default function RemisionesCompra() {
                   <Package size={48} className="mx-auto mb-2 text-gray-300" />
                   <p>No hay productos agregados</p>
                   <p className="text-sm">
-                    Agrega productos usando el formulario anterior
+                    Selecciona la compra y agrega productos desde su detalle
                   </p>
                 </div>
               )}
@@ -1130,13 +1477,16 @@ export default function RemisionesCompra() {
                 closeToList();
                 resetForm();
               }}
+              disabled={submitting}
             >
               Cancelar
             </Button>
             <Button
               onClick={confirmCreate}
               className="bg-blue-600 hover:bg-blue-700"
+              disabled={submitting}
             >
+              {submitting && <Loader2 size={16} className="mr-2 animate-spin" />}
               Crear Remisión
             </Button>
           </DialogFooter>
@@ -1165,188 +1515,273 @@ export default function RemisionesCompra() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-numeroRemision">Número de Remisión *</Label>
-                <Input
-                  id="edit-numeroRemision"
-                  value={formData.numeroRemision}
-                  onChange={(e) =>
-                    setFormData({ ...formData, numeroRemision: e.target.value })
-                  }
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-ordenCompra">Orden de Compra *</Label>
-                <Input
-                  id="edit-ordenCompra"
-                  value={formData.ordenCompra}
-                  onChange={(e) =>
-                    setFormData({ ...formData, ordenCompra: e.target.value })
-                  }
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-proveedor">Proveedor *</Label>
-                <Input
-                  id="edit-proveedor"
-                  value={formData.proveedor}
-                  onChange={(e) =>
-                    setFormData({ ...formData, proveedor: e.target.value })
-                  }
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-fecha">Fecha *</Label>
-                <Input
-                  id="edit-fecha"
-                  type="date"
-                  value={formData.fecha}
-                  onChange={(e) =>
-                    setFormData({ ...formData, fecha: e.target.value })
-                  }
-                />
-              </div>
-
-              <div className="col-span-2 space-y-2">
-                <Label htmlFor="edit-observaciones">Observaciones</Label>
-                <Input
-                  id="edit-observaciones"
-                  value={formData.observaciones}
-                  onChange={(e) =>
-                    setFormData({ ...formData, observaciones: e.target.value })
-                  }
-                />
-              </div>
+          {loadingDetalleRemision ? (
+            <div className="flex items-center justify-center py-16 text-gray-600 gap-2">
+              <Loader2 className="animate-spin" size={18} />
+              Cargando remisión...
             </div>
-
-            <div className="border-t pt-4 mt-4">
-              <div className="flex items-center gap-2 mb-4">
-                <Package size={20} className="text-blue-600" />
-                <h3 className="font-semibold">Productos de la Remisión</h3>
-              </div>
-
-              <div className="bg-gray-50 p-4 rounded-lg space-y-4 mb-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-producto">Producto *</Label>
-                    <Select
-                      value={currentProducto}
-                      onValueChange={(value: string) => setCurrentProducto(value)}
-                    >
-                      <SelectTrigger id="edit-producto">
-                        <SelectValue placeholder="Seleccionar producto" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {productos
-                          .filter((p: any) => p.estado)
-                          .map((producto: any) => (
-                            <SelectItem key={producto.id} value={producto.id}>
-                              {producto.nombre}
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-numeroLote">Número de Lote *</Label>
-                    <Input
-                      id="edit-numeroLote"
-                      value={currentNumeroLote}
-                      onChange={(e) => setCurrentNumeroLote(e.target.value)}
-                      placeholder="Ej: AL-2024-001"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-cantidad">Cantidad *</Label>
-                    <Input
-                      id="edit-cantidad"
-                      type="number"
-                      value={currentCantidad}
-                      onChange={(e) => setCurrentCantidad(e.target.value)}
-                      placeholder="0"
-                      min="1"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-fechaVencimiento">
-                      Fecha de Vencimiento *
-                    </Label>
-                    <Input
-                      id="edit-fechaVencimiento"
-                      type="date"
-                      value={currentFechaVencimiento}
-                      onChange={(e) => setCurrentFechaVencimiento(e.target.value)}
-                    />
-                  </div>
+          ) : (
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-numeroRemision">Número de Remisión</Label>
+                  <Input
+                    id="edit-numeroRemision"
+                    value={formData.numeroRemision}
+                    readOnly
+                    className="bg-gray-100 cursor-not-allowed"
+                  />
                 </div>
 
-                <Button
-                  type="button"
-                  onClick={handleAddItem}
-                  className="bg-green-600 hover:bg-green-700 w-full"
-                >
-                  <Plus size={16} className="mr-2" />
-                  Agregar Producto
-                </Button>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-ordenCompra">Orden de Compra</Label>
+                  <Input
+                    id="edit-ordenCompra"
+                    value={formData.ordenCompra}
+                    readOnly
+                    className="bg-gray-100 cursor-not-allowed"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-proveedor">Proveedor</Label>
+                  <Input
+                    id="edit-proveedor"
+                    value={formData.proveedor}
+                    readOnly
+                    className="bg-gray-100 cursor-not-allowed"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-bodega">Bodega</Label>
+                  <Input
+                    id="edit-bodega"
+                    value={formData.bodega}
+                    readOnly
+                    className="bg-gray-100 cursor-not-allowed"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-fechaCreacion">Fecha de Creación</Label>
+                  <Input
+                    id="edit-fechaCreacion"
+                    type="date"
+                    value={formData.fechaCreacion}
+                    readOnly
+                    className="bg-gray-100 cursor-not-allowed"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-fechaVencimiento">Fecha de Vencimiento</Label>
+                  <Input
+                    id="edit-fechaVencimiento"
+                    type="date"
+                    value={formData.fechaVencimiento}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, fechaVencimiento: e.target.value }))
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-idFactura">ID Factura</Label>
+                  <Input
+                    id="edit-idFactura"
+                    type="number"
+                    min="1"
+                    value={formData.idFactura}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, idFactura: e.target.value }))
+                    }
+                    placeholder="Opcional"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-observaciones">Observaciones</Label>
+                  <Input
+                    id="edit-observaciones"
+                    value={formData.observaciones}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, observaciones: e.target.value }))
+                    }
+                  />
+                </div>
               </div>
 
-              {items.length > 0 ? (
-                <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-gray-50">
-                        <TableHead>Producto</TableHead>
-                        <TableHead>Lote</TableHead>
-                        <TableHead>Cantidad</TableHead>
-                        <TableHead>Vencimiento</TableHead>
-                        <TableHead className="w-16"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {items.map((item, index) => (
-                        <TableRow key={index}>
-                          <TableCell>{item.productoNombre}</TableCell>
-                          <TableCell>{item.numeroLote}</TableCell>
-                          <TableCell>{item.cantidad}</TableCell>
-                          <TableCell>
-                            {new Date(item.fechaVencimiento).toLocaleDateString(
-                              "es-CO"
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveItem(index)}
-                              className="hover:bg-red-50"
-                            >
-                              <X size={16} className="text-red-600" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500 border rounded-lg border-dashed">
-                  <Package size={48} className="mx-auto mb-2 text-gray-300" />
-                  <p>No hay productos agregados</p>
-                  <p className="text-sm">
-                    Agrega productos usando el formulario anterior
+              {selectedCompra && (
+                <div className="border rounded-lg p-4 bg-blue-50 border-blue-200">
+                  <p className="font-semibold text-blue-900 mb-3">
+                    Productos disponibles de la compra {selectedCompra.codigo}
                   </p>
+
+                  <div className="border rounded-lg overflow-hidden bg-white">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-gray-50">
+                          <TableHead>Producto</TableHead>
+                          <TableHead>Cantidad Compra</TableHead>
+                          <TableHead>Precio Unitario</TableHead>
+                          <TableHead>IVA %</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {selectedCompra.items.map((item) => (
+                          <TableRow key={item.idProducto}>
+                            <TableCell>{item.productoNombre}</TableCell>
+                            <TableCell>{item.cantidad}</TableCell>
+                            <TableCell>{formatMoney(item.precioUnitario)}</TableCell>
+                            <TableCell>{item.ivaPorcentaje}%</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
               )}
+
+              <div className="border-t pt-4 mt-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <Package size={20} className="text-blue-600" />
+                  <h3 className="font-semibold">Productos de la Remisión</h3>
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-lg space-y-4 mb-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-producto">Producto *</Label>
+                      <Select
+                        value={currentProducto}
+                        onValueChange={(value: string) => setCurrentProducto(value)}
+                      >
+                        <SelectTrigger id="edit-producto">
+                          <SelectValue placeholder="Seleccionar producto de la compra" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {productosDisponibles.map((producto) => (
+                            <SelectItem key={producto.idProducto} value={String(producto.idProducto)}>
+                              {producto.productoNombre}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-numeroLote">Número de Lote *</Label>
+                      <Input
+                        id="edit-numeroLote"
+                        value={currentNumeroLote}
+                        onChange={(e) => setCurrentNumeroLote(e.target.value)}
+                        placeholder="Ej: AL-2026-001"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-cantidad">Cantidad *</Label>
+                      <Input
+                        id="edit-cantidad"
+                        type="number"
+                        value={currentCantidad}
+                        onChange={(e) => setCurrentCantidad(e.target.value)}
+                        placeholder="0"
+                        min="0.01"
+                        step="0.01"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-fechaVencimientoItem">Fecha de Vencimiento *</Label>
+                      <Input
+                        id="edit-fechaVencimientoItem"
+                        type="date"
+                        value={currentFechaVencimiento}
+                        onChange={(e) => setCurrentFechaVencimiento(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="md:col-span-2 space-y-2">
+                      <Label htmlFor="edit-notaItem">Nota del Ítem</Label>
+                      <Input
+                        id="edit-notaItem"
+                        value={currentNota}
+                        onChange={(e) => setCurrentNota(e.target.value)}
+                        placeholder="Opcional"
+                      />
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    onClick={handleAddItem}
+                    className="bg-green-600 hover:bg-green-700 w-full"
+                    disabled={!selectedCompra}
+                  >
+                    <Plus size={16} className="mr-2" />
+                    Agregar Producto
+                  </Button>
+                </div>
+
+                {items.length > 0 ? (
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-gray-50">
+                          <TableHead>Producto</TableHead>
+                          <TableHead>Lote</TableHead>
+                          <TableHead>Cantidad</TableHead>
+                          <TableHead>Precio</TableHead>
+                          <TableHead>IVA</TableHead>
+                          <TableHead>Vencimiento</TableHead>
+                          <TableHead>Nota</TableHead>
+                          <TableHead className="w-16"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {items.map((item) => (
+                          <TableRow key={item.localId}>
+                            <TableCell>{item.productoNombre}</TableCell>
+                            <TableCell>{item.lote}</TableCell>
+                            <TableCell>{item.cantidad}</TableCell>
+                            <TableCell>{formatMoney(item.precio_unitario)}</TableCell>
+                            <TableCell>{item.ivaPorcentaje}%</TableCell>
+                            <TableCell>{formatDate(item.fecha_vencimiento)}</TableCell>
+                            <TableCell>{item.nota || "—"}</TableCell>
+                            <TableCell>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRemoveItem(item.localId)}
+                                className="hover:bg-red-50"
+                              >
+                                <X size={16} className="text-red-600" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        <TableRow className="bg-gray-50">
+                          <TableCell colSpan={7} className="text-right font-semibold">
+                            Total aproximado
+                          </TableCell>
+                          <TableCell className="font-semibold">
+                            {formatMoney(totalFormulario)}
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500 border rounded-lg border-dashed">
+                    <Package size={48} className="mx-auto mb-2 text-gray-300" />
+                    <p>No hay productos agregados</p>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           <DialogFooter>
             <Button
@@ -1355,13 +1790,16 @@ export default function RemisionesCompra() {
                 closeToList();
                 resetForm();
               }}
+              disabled={submitting}
             >
               Cancelar
             </Button>
             <Button
               onClick={confirmEdit}
               className="bg-blue-600 hover:bg-blue-700"
+              disabled={submitting || loadingDetalleRemision}
             >
+              {submitting && <Loader2 size={16} className="mr-2 animate-spin" />}
               Guardar Cambios
             </Button>
           </DialogFooter>
@@ -1376,7 +1814,7 @@ export default function RemisionesCompra() {
         }}
       >
         <DialogContent
-          className="max-w-3xl"
+          className="max-w-4xl"
           aria-describedby="view-remision-compra-description"
           onInteractOutside={(e) => e.preventDefault()}
         >
@@ -1390,52 +1828,54 @@ export default function RemisionesCompra() {
             </DialogDescription>
           </DialogHeader>
 
-          {remisionSeleccionada && (
+          {loadingDetalleRemision ? (
+            <div className="flex items-center justify-center py-16 text-gray-600 gap-2">
+              <Loader2 className="animate-spin" size={18} />
+              Cargando detalle...
+            </div>
+          ) : selectedRemision ? (
             <div className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-gray-600">Número de Remisión</p>
-                  <p className="font-semibold">
-                    {remisionSeleccionada.numeroRemision}
-                  </p>
+                  <p className="font-semibold">{selectedRemision.numeroRemision}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Orden de Compra</p>
-                  <p className="font-semibold">
-                    {remisionSeleccionada.ordenCompra}
-                  </p>
+                  <p className="font-semibold">{selectedRemision.ordenCompra}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Proveedor</p>
-                  <p className="font-semibold">
-                    {remisionSeleccionada.proveedor}
-                  </p>
+                  <p className="font-semibold">{selectedRemision.proveedor}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Fecha</p>
-                  <p className="font-semibold">
-                    {new Date(remisionSeleccionada.fecha).toLocaleDateString("es-CO")}
-                  </p>
+                  <p className="text-sm text-gray-600">Fecha de Creación</p>
+                  <p className="font-semibold">{formatDate(selectedRemision.fecha)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Fecha de Vencimiento</p>
+                  <p className="font-semibold">{formatDate(selectedRemision.fechaVencimiento)}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Bodega</p>
-                  <p className="font-semibold">{remisionSeleccionada.bodega}</p>
+                  <p className="font-semibold">{selectedRemision.bodega || selectedBodegaNombre}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Estado</p>
                   <div className="mt-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleEstadoClick(remisionSeleccionada)}
-                      className={`h-7 px-3 ${remisionSeleccionada.estado === "Aprobada"
-                        ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
-                        : "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                        }`}
+                    <Badge
+                      variant="outline"
+                      className={getEstadoBadge(selectedRemision.estadoKey).class}
                     >
-                      {remisionSeleccionada.estado}
-                    </Button>
+                      {selectedRemision.estado}
+                    </Badge>
                   </div>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Afecta Existencias</p>
+                  <p className="font-semibold">
+                    {selectedRemision.afectaExistencias ? "Sí" : "No"}
+                  </p>
                 </div>
               </div>
 
@@ -1444,6 +1884,7 @@ export default function RemisionesCompra() {
                   <Package size={20} className="text-blue-600" />
                   <h3 className="font-semibold">Productos</h3>
                 </div>
+
                 <div className="border rounded-lg overflow-hidden">
                   <Table>
                     <TableHeader>
@@ -1451,35 +1892,45 @@ export default function RemisionesCompra() {
                         <TableHead>Producto</TableHead>
                         <TableHead>Lote</TableHead>
                         <TableHead>Cantidad</TableHead>
+                        <TableHead>Precio</TableHead>
+                        <TableHead>IVA</TableHead>
                         <TableHead>Vencimiento</TableHead>
+                        <TableHead>Nota</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {remisionSeleccionada.items.map((item, index) => (
-                        <TableRow key={index}>
+                      {selectedRemision.items.map((item, index) => (
+                        <TableRow key={`${item.id_producto}-${index}`}>
                           <TableCell>{item.productoNombre}</TableCell>
-                          <TableCell>{item.numeroLote}</TableCell>
+                          <TableCell>{item.lote || "—"}</TableCell>
                           <TableCell>{item.cantidad}</TableCell>
-                          <TableCell>
-                            {new Date(item.fechaVencimiento).toLocaleDateString(
-                              "es-CO"
-                            )}
-                          </TableCell>
+                          <TableCell>{formatMoney(item.precio_unitario)}</TableCell>
+                          <TableCell>{item.ivaPorcentaje}%</TableCell>
+                          <TableCell>{formatDate(item.fecha_vencimiento)}</TableCell>
+                          <TableCell>{item.nota || "—"}</TableCell>
                         </TableRow>
                       ))}
+                      <TableRow className="bg-gray-50">
+                        <TableCell colSpan={6} className="text-right font-semibold">
+                          Total
+                        </TableCell>
+                        <TableCell className="font-semibold">
+                          {formatMoney(selectedRemision.total)}
+                        </TableCell>
+                      </TableRow>
                     </TableBody>
                   </Table>
                 </div>
               </div>
 
-              {remisionSeleccionada.observaciones && (
+              {selectedRemision.observaciones && (
                 <div className="border-t pt-4">
                   <p className="text-sm text-gray-600">Observaciones</p>
-                  <p className="mt-1">{remisionSeleccionada.observaciones}</p>
+                  <p className="mt-1">{selectedRemision.observaciones}</p>
                 </div>
               )}
             </div>
-          )}
+          ) : null}
 
           <DialogFooter>
             <Button variant="outline" onClick={closeToList}>
@@ -1498,7 +1949,8 @@ export default function RemisionesCompra() {
       >
         <DialogContent
           onInteractOutside={(e) => e.preventDefault()}
-          aria-describedby="delete-remision-compra-description">
+          aria-describedby="delete-remision-compra-description"
+        >
           <DialogHeader>
             <DialogTitle>Anular Remisión de Compra</DialogTitle>
             <DialogDescription id="delete-remision-compra-description">
@@ -1506,55 +1958,56 @@ export default function RemisionesCompra() {
             </DialogDescription>
           </DialogHeader>
 
-          {remisionSeleccionada && (
+          {selectedRemision && (
             <div className="py-4">
               <p className="text-sm text-gray-600">
                 Remisión:{" "}
-                <span className="font-semibold">
-                  {remisionSeleccionada.numeroRemision}
-                </span>
+                <span className="font-semibold">{selectedRemision.numeroRemision}</span>
               </p>
               <p className="text-sm text-gray-600">
                 Proveedor:{" "}
-                <span className="font-semibold">
-                  {remisionSeleccionada.proveedor}
-                </span>
+                <span className="font-semibold">{selectedRemision.proveedor}</span>
+              </p>
+              <p className="text-sm text-gray-600">
+                Estado actual:{" "}
+                <span className="font-semibold">{selectedRemision.estado}</span>
               </p>
             </div>
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={closeToList}>
+            <Button variant="outline" onClick={closeToList} disabled={submitting}>
               Cancelar
             </Button>
             <Button
               onClick={confirmAnular}
               className="bg-red-600 hover:bg-red-700"
+              disabled={submitting}
             >
+              {submitting && <Loader2 size={16} className="mr-2 animate-spin" />}
               Anular
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal Confirm Estado */}
+      {/* Modal Confirmar Estado */}
       <Dialog
         open={showConfirmEstadoModal}
         onOpenChange={setShowConfirmEstadoModal}
       >
         <DialogContent
           onInteractOutside={(e) => e.preventDefault()}
-          aria-describedby="confirm-estado-description">
+          aria-describedby="confirm-estado-description"
+        >
           <DialogHeader>
             <DialogTitle>Cambiar Estado de Remisión</DialogTitle>
             <DialogDescription id="confirm-estado-description">
-              {nuevoEstado === "Aprobada"
-                ? "¿Deseas aprobar esta remisión? Al aprobarla, se agregarán automáticamente las existencias al inventario."
-                : "Confirmar cambio de estado."}
+              ¿Deseas aprobar/confirmar esta remisión? Solo al confirmar/aprobar se deben aplicar existencias desde el backend.
             </DialogDescription>
           </DialogHeader>
 
-          {remisionParaCambioEstado && nuevoEstado && (
+          {remisionParaCambioEstado && (
             <div className="py-4">
               <p className="text-sm text-gray-600">
                 Remisión:{" "}
@@ -1566,7 +2019,7 @@ export default function RemisionesCompra() {
                 Estado actual:{" "}
                 <Badge
                   variant="outline"
-                  className={getEstadoBadge(remisionParaCambioEstado.estado).class}
+                  className={getEstadoBadge(remisionParaCambioEstado.estadoKey).class}
                 >
                   {remisionParaCambioEstado.estado}
                 </Badge>
@@ -1575,9 +2028,9 @@ export default function RemisionesCompra() {
                 Nuevo estado:{" "}
                 <Badge
                   variant="outline"
-                  className={getEstadoBadge(nuevoEstado).class}
+                  className="bg-green-100 text-green-800 border-green-200"
                 >
-                  {nuevoEstado}
+                  {nuevoEstadoLabel || "Aprobada / Confirmada"}
                 </Badge>
               </p>
             </div>
@@ -1589,15 +2042,18 @@ export default function RemisionesCompra() {
               onClick={() => {
                 setShowConfirmEstadoModal(false);
                 setRemisionParaCambioEstado(null);
-                setNuevoEstado(null);
+                setNuevoEstadoLabel(null);
               }}
+              disabled={submitting}
             >
               Cancelar
             </Button>
             <Button
               onClick={handleConfirmEstado}
               className="bg-blue-600 hover:bg-blue-700"
+              disabled={submitting}
             >
+              {submitting && <Loader2 size={16} className="mr-2 animate-spin" />}
               Confirmar
             </Button>
           </DialogFooter>
@@ -1617,29 +2073,40 @@ export default function RemisionesCompra() {
         >
           <button
             onClick={handleSuccessModalClose}
-            className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground"
+            className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
           >
             <X className="h-4 w-4" />
             <span className="sr-only">Cerrar</span>
           </button>
+
           <DialogHeader className="sr-only">
             <DialogTitle>Registro Exitoso</DialogTitle>
             <DialogDescription id="success-remision-description">
               La remisión de compra se ha creado correctamente
             </DialogDescription>
           </DialogHeader>
+
           <div className="flex flex-col items-center justify-center py-6">
             <div className="rounded-full bg-green-100 p-3 mb-4">
               <CheckCircle className="h-12 w-12 text-green-600" />
             </div>
+
             <h3 className="text-lg font-semibold text-gray-900 mb-2">
               ¡Remisión Creada!
             </h3>
-            <p className="text-sm text-gray-600 text-center mb-6">
+
+            <p className="text-sm text-gray-600 text-center mb-2">
               La remisión de compra se ha registrado correctamente en el sistema
             </p>
+
+            {lastCreatedCode && (
+              <p className="text-sm font-semibold text-blue-700 text-center mb-6">
+                Código generado: {lastCreatedCode}
+              </p>
+            )}
+
             <Button
-              onClick={() => setShowSuccessModal(false)}
+              onClick={handleSuccessModalClose}
               className="w-full bg-green-600 hover:bg-green-700"
             >
               Aceptar
@@ -1650,3 +2117,4 @@ export default function RemisionesCompra() {
     </div>
   );
 }
+
