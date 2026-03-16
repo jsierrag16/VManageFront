@@ -167,10 +167,14 @@ export type ProductoVistaBackend = {
 };
 
 export const getProductosVista = async (
-    scope: "active" | "all" = "all"
+    scope: "active" | "all" = "all",
+    idBodega?: number
 ): Promise<ProductoVistaBackend[]> => {
     const { data } = await api.get("/existencias/productos-vista", {
-        params: { scope },
+        params: {
+            scope,
+            ...(idBodega ? { id_bodega: idBodega } : {}),
+        },
     });
     return data;
 };

@@ -79,6 +79,7 @@ export default function Productos({
   triggerCreate,
   onNavigateToTraslados,
 }: ProductosProps) {
+  
   // =========================================================
   // Contexto, navegación y permisos
   // =========================================================
@@ -88,7 +89,8 @@ export default function Productos({
   const params = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const { selectedBodegaNombre } = useOutletContext<AppOutletContext>();
+  const { selectedBodegaNombre, selectedBodegaId } =
+    useOutletContext<AppOutletContext>();
   const selectedBodega = selectedBodegaNombre;
 
   // =========================================================
@@ -175,6 +177,7 @@ export default function Productos({
   // =========================================================
   // Datos derivados / useMemo
   // =========================================================
+
   const productoSeleccionado = useMemo(() => {
     if (!id || Number.isNaN(id)) return null;
     return productos.find((p) => p.id === id) ?? null;
@@ -259,9 +262,12 @@ export default function Productos({
     try {
       setIsLoadingProductos(true);
 
-      const response = await getProductosVista("all");
-      const mapped = productosVistaBackendToUI(response);
+      const response =
+        selectedBodegaNombre !== "Todas las bodegas" && selectedBodegaId
+          ? await getProductosVista("active", selectedBodegaId)
+          : await getProductosVista("all");
 
+      const mapped = productosVistaBackendToUI(response);
       setProductos(mapped);
     } catch (error) {
       console.error("Error cargando productos:", error);
@@ -269,7 +275,7 @@ export default function Productos({
     } finally {
       setIsLoadingProductos(false);
     }
-  }, []);
+  }, [selectedBodegaNombre, selectedBodegaId]);
 
   const loadCatalogos = useCallback(async () => {
     try {
@@ -1182,8 +1188,10 @@ export default function Productos({
             </TableBody>
           </Table>
         </div>
+      </div>
 
-        {/* Paginación principal */}
+      {/* Paginación principal */}
+      <div>
         {!isLoadingProductos && filteredProductos.length > 0 && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
             <div className="text-sm text-gray-600">
