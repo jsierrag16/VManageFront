@@ -18,7 +18,7 @@ export type AppOutletContext = {
   gvmLogo?: string;
   traslados?: Traslado[];
   productos?: Producto[];
-  selectedBodegaId: number;
+  selectedBodegaId: number | null;
   selectedBodegaNombre: string;
   bodegasDisponibles: { id: number; nombre: string }[];
   isBodegaFijada: boolean;
@@ -93,7 +93,6 @@ export default function MainLayout({
         <Sidebar
           isOpen={isSidebarOpen}
           isMobileOpen={isMobileMenuOpen}
-          currentUser={currentUser}
           activeSection={activeSection}
           onNavigate={(path) => navigate(path)}
           onCloseMobile={() => setIsMobileMenuOpen(false)}
@@ -127,7 +126,7 @@ export default function MainLayout({
                 gvmLogo,
                 traslados,
                 productos,
-                selectedBodegaId,
+                selectedBodegaId: selectedBodegaId === 0 ? null : selectedBodegaId,
                 selectedBodegaNombre,
                 bodegasDisponibles,
                 isBodegaFijada,

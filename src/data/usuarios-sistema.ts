@@ -9,6 +9,12 @@ export interface UsuarioSistema {
   rol: string;
   estado: boolean;
 
+  avatarUrl?: string;
+
+  telefono?: string;
+  documento?: string;
+  tipoDocumento?: string;
+
   permisos: Permisos | null;
 
   bodegasIds: number[];

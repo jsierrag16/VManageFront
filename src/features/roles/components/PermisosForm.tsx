@@ -546,6 +546,11 @@ export function PermisosForm({
                 value={formPermisos.administracion.usuarios.editar}
               />
               <PermisoCheckbox
+                label="Eliminar"
+                path={["administracion", "usuarios", "eliminar"]}
+                value={formPermisos.administracion.usuarios.eliminar}
+              />
+              <PermisoCheckbox
                 label="Cambiar estado"
                 path={["administracion", "usuarios", "cambiarEstado"]}
                 value={formPermisos.administracion.usuarios.cambiarEstado}

@@ -1,15 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  matchPath,
-  useLocation,
-  useNavigate,
-  useParams,
-} from "react-router-dom";
-import { useAuth } from "@/shared/context/AuthContext";
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   Search,
   Plus,
-  Eye,
   Edit,
   Trash2,
   CheckCircle,
@@ -18,6 +11,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/shared/context/AuthContext";
 
 import { Button } from "../../../shared/components/ui/button";
 import { Input } from "../../../shared/components/ui/input";
@@ -33,9 +27,9 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "../../../shared/components/ui/dialog";
 import { Label } from "../../../shared/components/ui/label";
 import {
@@ -45,17 +39,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../../shared/components/ui/select";
-
-import { departamentosColombia } from "../../../data/colombia";
-import type { Bodega } from "../../../data/bodegas";
 import {
   getBodegas,
-  getBodegaById,
+  getDepartamentos,
+  getMunicipios,
   createBodega,
   updateBodega,
   deleteBodega,
   toggleEstadoBodega,
-  type SaveBodegaPayload,
+  type Bodega,
+  type CreateBodegaPayload,
+  type UpdateBodegaPayload,
+  type DepartamentoOption,
+  type MunicipioOption,
 } from "../services/bodegas.services";
 
 interface BodegasProps {
@@ -63,46 +59,59 @@ interface BodegasProps {
 }
 
 export default function Bodegas({ triggerCreate }: BodegasProps) {
+  // =========================================================
+  // Contexto, navegación y permisos
+  // =========================================================
+  const { tienePermiso } = useAuth();
+
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams<{ id: string }>();
-  const { selectedBodegaId } = useAuth();
 
-  const routeId = params.id ? Number(params.id) : null;
-
-  const isCrear = Boolean(
-    matchPath("/app/bodegas/crear", location.pathname)
-  );
-  const isDetalle = Boolean(
-    matchPath("/app/bodegas/:id/detalle", location.pathname)
-  );
-  const isEditar = Boolean(
-    matchPath("/app/bodegas/:id/editar", location.pathname)
-  );
-  const isEliminar = Boolean(
-    matchPath("/app/bodegas/:id/eliminar", location.pathname)
-  );
-
-  const [bodegas, setBodegas] = useState<Bodega[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const [selectedBodega, setSelectedBodega] = useState<Bodega | null>(null);
-
+  // =========================================================
+  // Estados del módulo
+  // =========================================================
   const [searchTerm, setSearchTerm] = useState("");
   const [estadoFilter, setEstadoFilter] = useState<string>("todos");
+  const [bodegas, setBodegas] = useState<Bodega[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
   const [bodegaParaCambioEstado, setBodegaParaCambioEstado] =
     useState<Bodega | null>(null);
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  // =========================================================
+  // Estados del formulario
+  // =========================================================
   const [formNombre, setFormNombre] = useState("");
+  const [formDepartamentoId, setFormDepartamentoId] = useState<number | "">("");
+  const [formMunicipioId, setFormMunicipioId] = useState<number | "">("");
   const [formDepartamento, setFormDepartamento] = useState("");
   const [formMunicipio, setFormMunicipio] = useState("");
   const [formDireccion, setFormDireccion] = useState("");
 
+  // =========================================================
+  // Estados de catálogos
+  // =========================================================
+  const [departamentosCatalogo, setDepartamentosCatalogo] = useState<DepartamentoOption[]>([]);
+  const [municipiosCatalogo, setMunicipiosCatalogo] = useState<MunicipioOption[]>([]);
+  const [isLoadingCatalogos, setIsLoadingCatalogos] = useState(false);
+
+  // =========================================================
+  // Permisos
+  // =========================================================
+  const canCreateBodegas = tienePermiso("existencias", "bodegas", "crear");
+  const canEditBodegas = tienePermiso("existencias", "bodegas", "editar");
+  const canDeleteBodegas = tienePermiso("existencias", "bodegas", "eliminar");
+  const canChangeEstadoBodegas = tienePermiso("existencias", "bodegas", "cambiarEstado");
+
+  // =========================================================
+  // Estados de errores y touched
+  // =========================================================
   const [errors, setErrors] = useState({
     nombre: "",
     departamento: "",
@@ -117,82 +126,110 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
     direccion: false,
   });
 
-  const goList = () => navigate("/app/bodegas");
-  const goCreate = () => navigate("/app/bodegas/crear");
-  const goDetail = (id: number) => navigate(`/app/bodegas/${id}/detalle`);
-  const goEdit = (id: number) => navigate(`/app/bodegas/${id}/editar`);
-  const goDelete = (id: number) => navigate(`/app/bodegas/${id}/eliminar`);
+  // =========================================================
+  // Estados de proceso async
+  // =========================================================
+  const [isCreatingBodega, setIsCreatingBodega] = useState(false);
+  const [isUpdatingBodega, setIsUpdatingBodega] = useState(false);
+  const [isDeletingBodega, setIsDeletingBodega] = useState(false);
+  const [isChangingEstadoBodega, setIsChangingEstadoBodega] = useState(false);
 
-  const bodegaEnLista = useMemo(() => {
-    if (!routeId) return null;
-    return bodegas.find((b) => b.id === routeId) ?? null;
-  }, [bodegas, routeId]);
+  // =========================================================
+  // Flags de ruta
+  // =========================================================
+  const isCrear = location.pathname.endsWith("/bodegas/crear");
+  const isEditar = location.pathname.endsWith("/editar");
+  const isEliminar = location.pathname.endsWith("/eliminar");
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        setIsLoading(true);
-        const data = await getBodegas();
-        setBodegas(data);
-      } catch {
-        toast.error("No se pudieron cargar las bodegas");
-      } finally {
-        setIsLoading(false);
+  const editId = params.id ? Number(params.id) : null;
+
+  // =========================================================
+  // Datos derivados / useMemo
+  // =========================================================
+  const bodegaActual = useMemo(() => {
+    if (!editId) return null;
+    return bodegas.find((b) => b.id === editId) ?? null;
+  }, [bodegas, editId]);
+
+  const filteredBodegas = useMemo(() => {
+    return bodegas.filter((bodega) => {
+      const searchLower = searchTerm.toLowerCase();
+
+      const matchesSearch =
+        bodega.nombre.toLowerCase().includes(searchLower) ||
+        bodega.departamento.toLowerCase().includes(searchLower) ||
+        bodega.municipio.toLowerCase().includes(searchLower) ||
+        bodega.direccion.toLowerCase().includes(searchLower);
+
+      let matchesEstado = true;
+
+      if (estadoFilter === "activas") {
+        matchesEstado = bodega.estado === true;
+      } else if (estadoFilter === "inactivas") {
+        matchesEstado = bodega.estado === false;
       }
-    };
 
-    load();
+      return matchesSearch && matchesEstado;
+    });
+  }, [bodegas, searchTerm, estadoFilter]);
+
+  const totalPages = Math.ceil(filteredBodegas.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentBodegas = filteredBodegas.slice(startIndex, endIndex);
+
+  const municipiosDisponibles = municipiosCatalogo;
+
+  // =========================================================
+  // Funciones de carga
+  // =========================================================
+  const loadBodegas = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const response = await getBodegas();
+      setBodegas(response.data);
+    } catch (error) {
+      console.error("Error cargando bodegas:", error);
+      toast.error("No se pudieron cargar las bodegas");
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  useEffect(() => {
-    const needsDetail = Boolean(routeId && (isDetalle || isEditar || isEliminar));
-
-    if (!needsDetail || !routeId) {
-      setSelectedBodega(null);
-      return;
+  const loadDepartamentos = useCallback(async () => {
+    try {
+      setIsLoadingCatalogos(true);
+      const data = await getDepartamentos();
+      setDepartamentosCatalogo(data);
+    } catch (error) {
+      console.error("Error cargando departamentos:", error);
+      toast.error("No se pudieron cargar los departamentos");
+    } finally {
+      setIsLoadingCatalogos(false);
     }
+  }, []);
 
-    if (bodegaEnLista) {
-      setSelectedBodega(bodegaEnLista);
-      return;
+  const loadMunicipios = useCallback(async (idDepartamento: number) => {
+    try {
+      setIsLoadingCatalogos(true);
+      const data = await getMunicipios(idDepartamento);
+      setMunicipiosCatalogo(data);
+    } catch (error) {
+      console.error("Error cargando municipios:", error);
+      toast.error("No se pudieron cargar los municipios");
+    } finally {
+      setIsLoadingCatalogos(false);
     }
+  }, []);
 
-    let isMounted = true;
-
-    const loadDetail = async () => {
-      try {
-        setIsLoadingDetail(true);
-        const data = await getBodegaById(routeId);
-
-        if (!isMounted) return;
-        setSelectedBodega(data);
-      } catch {
-        if (!isMounted) return;
-
-        if (isDetalle || isEditar || isEliminar) {
-          toast.error("Bodega no encontrada");
-        }
-
-        navigate("/app/bodegas");
-      } finally {
-        if (isMounted) {
-          setIsLoadingDetail(false);
-        }
-      }
-    };
-
-    loadDetail();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [routeId, isDetalle, isEditar, isEliminar, bodegaEnLista, navigate]);
-
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setFormNombre("");
     setFormDepartamento("");
     setFormMunicipio("");
+    setFormDepartamentoId("");
+    setFormMunicipioId("");
     setFormDireccion("");
+    setMunicipiosCatalogo([]);
 
     setErrors({
       nombre: "",
@@ -207,27 +244,53 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
       municipio: false,
       direccion: false,
     });
-  };
+  }, []);
+
+  // =========================================================
+  // Handlers de navegación base
+  // =========================================================
+  const goList = useCallback(() => navigate("/app/bodegas"), [navigate]);
+  const goCreate = useCallback(() => navigate("/app/bodegas/crear"), [navigate]);
+  const goEdit = useCallback((id: number) => navigate(`/app/bodegas/${id}/editar`), [navigate]);
+  const goDelete = useCallback((id: number) => navigate(`/app/bodegas/${id}/eliminar`), [navigate]);
+
+  // =========================================================
+  // Efectos
+  // =========================================================
+  useEffect(() => {
+    void Promise.all([loadBodegas(), loadDepartamentos()]);
+  }, [loadBodegas, loadDepartamentos]);
 
   useEffect(() => {
     if (!triggerCreate) return;
+
     resetForm();
     goCreate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [triggerCreate]);
+  }, [triggerCreate, resetForm, goCreate]);
 
   useEffect(() => {
     if (!isCrear) return;
     resetForm();
-  }, [isCrear]);
+  }, [isCrear, resetForm]);
 
   useEffect(() => {
-    if (!isEditar || !selectedBodega) return;
+    if (!isEditar) return;
+    if (isLoading) return;
 
-    setFormNombre(selectedBodega.nombre);
-    setFormDepartamento(selectedBodega.departamento);
-    setFormMunicipio(selectedBodega.municipio);
-    setFormDireccion(selectedBodega.direccion);
+    if (!bodegaActual) {
+      toast.error("Bodega no encontrada");
+      goList();
+      return;
+    }
+
+    const idDepartamento = bodegaActual.raw.municipios?.id_departamento ?? "";
+
+    setFormNombre(bodegaActual.nombre);
+    setFormDepartamento(bodegaActual.departamento);
+    setFormMunicipio(bodegaActual.municipio);
+    setFormDepartamentoId(idDepartamento);
+    setFormMunicipioId(bodegaActual.idMunicipio);
+    setFormDireccion(bodegaActual.direccion);
 
     setErrors({
       nombre: "",
@@ -242,8 +305,33 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
       municipio: false,
       direccion: false,
     });
-  }, [isEditar, selectedBodega]);
+  }, [isEditar, isLoading, bodegaActual, goList]);
 
+  useEffect(() => {
+    if (!isEliminar) return;
+    if (isLoading) return;
+
+    if (!bodegaActual) {
+      goList();
+    }
+  }, [isEliminar, isLoading, bodegaActual, goList]);
+
+  useEffect(() => {
+    if (!formDepartamentoId) {
+      setMunicipiosCatalogo([]);
+      return;
+    }
+
+    void loadMunicipios(Number(formDepartamentoId));
+  }, [formDepartamentoId, loadMunicipios]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, estadoFilter]);
+
+  // =========================================================
+  // Validaciones y helpers
+  // =========================================================
   const validateNombre = (value: string) => {
     if (!value.trim()) return "El nombre de la bodega es requerido";
 
@@ -258,11 +346,13 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
     return "";
   };
 
-  const validateDepartamento = (value: string) =>
-    !value ? "El departamento es requerido" : "";
+  const validateDepartamento = (value: string) => {
+    return !value ? "El departamento es requerido" : "";
+  };
 
-  const validateMunicipio = (value: string) =>
-    !value ? "El municipio es requerido" : "";
+  const validateMunicipio = (value: string) => {
+    return !value ? "El municipio es requerido" : "";
+  };
 
   const validateDireccion = (value: string) => {
     if (!value.trim()) return "La dirección es requerida";
@@ -276,128 +366,6 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
     if (value.trim().length > 200) return "Máximo 200 caracteres";
 
     return "";
-  };
-
-  const municipiosDisponibles = useMemo(() => {
-    const dept = departamentosColombia.find(
-      (d) => d.nombre === formDepartamento
-    );
-    return dept ? dept.municipios : [];
-  }, [formDepartamento]);
-
-  const filteredBodegas = useMemo(() => {
-    return bodegas.filter((bodega) => {
-      const searchLower = searchTerm.toLowerCase();
-
-      const matchesSearch =
-        bodega.nombre.toLowerCase().includes(searchLower) ||
-        bodega.departamento.toLowerCase().includes(searchLower) ||
-        bodega.municipio.toLowerCase().includes(searchLower) ||
-        bodega.direccion.toLowerCase().includes(searchLower);
-
-      let matchesEstado = true;
-      if (estadoFilter === "activas") matchesEstado = bodega.estado === true;
-      else if (estadoFilter === "inactivas")
-        matchesEstado = bodega.estado === false;
-
-      return matchesSearch && matchesEstado;
-    });
-  }, [bodegas, searchTerm, estadoFilter]);
-
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
-
-  const totalPages = Math.ceil(filteredBodegas.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentBodegas = filteredBodegas.slice(startIndex, endIndex);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, estadoFilter]);
-
-  const handleNombreChange = (value: string) => {
-    setFormNombre(value);
-
-    if (touched.nombre) {
-      setErrors((prev) => ({
-        ...prev,
-        nombre: validateNombre(value),
-      }));
-    }
-  };
-
-  const handleDepartamentoChange = (value: string) => {
-    const changed = value !== formDepartamento;
-
-    setFormDepartamento(value);
-
-    if (changed) {
-      setFormMunicipio("");
-      setTouched((prev) => ({ ...prev, municipio: false }));
-      setErrors((prev) => ({ ...prev, municipio: "" }));
-    }
-
-    if (touched.departamento) {
-      setErrors((prev) => ({
-        ...prev,
-        departamento: validateDepartamento(value),
-      }));
-    }
-  };
-
-  const handleMunicipioChange = (value: string) => {
-    setFormMunicipio(value);
-
-    if (touched.municipio) {
-      setErrors((prev) => ({
-        ...prev,
-        municipio: validateMunicipio(value),
-      }));
-    }
-  };
-
-  const handleDireccionChange = (value: string) => {
-    setFormDireccion(value);
-
-    if (touched.direccion) {
-      setErrors((prev) => ({
-        ...prev,
-        direccion: validateDireccion(value),
-      }));
-    }
-  };
-
-  const handleNombreBlur = () => {
-    setTouched((prev) => ({ ...prev, nombre: true }));
-    setErrors((prev) => ({
-      ...prev,
-      nombre: validateNombre(formNombre),
-    }));
-  };
-
-  const handleDepartamentoBlur = () => {
-    setTouched((prev) => ({ ...prev, departamento: true }));
-    setErrors((prev) => ({
-      ...prev,
-      departamento: validateDepartamento(formDepartamento),
-    }));
-  };
-
-  const handleMunicipioBlur = () => {
-    setTouched((prev) => ({ ...prev, municipio: true }));
-    setErrors((prev) => ({
-      ...prev,
-      municipio: validateMunicipio(formMunicipio),
-    }));
-  };
-
-  const handleDireccionBlur = () => {
-    setTouched((prev) => ({ ...prev, direccion: true }));
-    setErrors((prev) => ({
-      ...prev,
-      direccion: validateDireccion(formDireccion),
-    }));
   };
 
   const validateForm = () => {
@@ -428,157 +396,336 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
     return true;
   };
 
+  // =========================================================
+  // Handlers de formulario
+  // =========================================================
+  const handleNombreChange = (value: string) => {
+    setFormNombre(value);
+
+    if (touched.nombre) {
+      setErrors((prev) => ({
+        ...prev,
+        nombre: validateNombre(value),
+      }));
+    }
+  };
+
+  const handleDepartamentoChange = (value: string) => {
+    const parsed = value ? Number(value) : "";
+
+    const departamentoSeleccionado =
+      departamentosCatalogo.find((d) => d.id === parsed) ?? null;
+
+    setFormDepartamentoId(parsed);
+    setFormDepartamento(departamentoSeleccionado?.nombre ?? "");
+    setFormMunicipioId("");
+    setFormMunicipio("");
+    setMunicipiosCatalogo([]);
+
+    if (touched.departamento) {
+      setErrors((prev) => ({
+        ...prev,
+        departamento: validateDepartamento(departamentoSeleccionado?.nombre ?? ""),
+      }));
+    }
+
+    if (touched.municipio) {
+      setErrors((prev) => ({
+        ...prev,
+        municipio: validateMunicipio(""),
+      }));
+    }
+  };
+
+  const handleMunicipioChange = (value: string) => {
+    const parsed = value ? Number(value) : "";
+
+    const municipioSeleccionado =
+      municipiosCatalogo.find((m) => m.id === parsed) ?? null;
+
+    setFormMunicipioId(parsed);
+    setFormMunicipio(municipioSeleccionado?.nombre ?? "");
+
+    if (touched.municipio) {
+      setErrors((prev) => ({
+        ...prev,
+        municipio: validateMunicipio(municipioSeleccionado?.nombre ?? ""),
+      }));
+    }
+  };
+
+  const handleDireccionChange = (value: string) => {
+    setFormDireccion(value);
+
+    if (touched.direccion) {
+      setErrors((prev) => ({
+        ...prev,
+        direccion: validateDireccion(value),
+      }));
+    }
+  };
+
+  const handleNombreBlur = () => {
+    setTouched((prev) => ({ ...prev, nombre: true }));
+    setErrors((prev) => ({ ...prev, nombre: validateNombre(formNombre) }));
+  };
+
+  const handleDepartamentoBlur = () => {
+    setTouched((prev) => ({ ...prev, departamento: true }));
+    setErrors((prev) => ({
+      ...prev,
+      departamento: validateDepartamento(formDepartamento),
+    }));
+  };
+
+  const handleMunicipioBlur = () => {
+    setTouched((prev) => ({ ...prev, municipio: true }));
+    setErrors((prev) => ({
+      ...prev,
+      municipio: validateMunicipio(formMunicipio),
+    }));
+  };
+
+  const handleDireccionBlur = () => {
+    setTouched((prev) => ({ ...prev, direccion: true }));
+    setErrors((prev) => ({
+      ...prev,
+      direccion: validateDireccion(formDireccion),
+    }));
+  };
+
+  // =========================================================
+  // Handlers de navegación
+  // =========================================================
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handleSuccessModalClose = () => {
+    setShowSuccessModal(false);
+  };
+
   const onClickCreate = () => {
+    if (!canCreateBodegas) {
+      toast.error("No tienes permiso para crear bodegas");
+      return;
+    }
+
     resetForm();
     goCreate();
   };
 
-  const onClickDetail = (bodega: Bodega) => goDetail(bodega.id);
-  const onClickEdit = (bodega: Bodega) => goEdit(bodega.id);
-  const onClickDelete = (bodega: Bodega) => goDelete(bodega.id);
+  const onClickEdit = (bodega: Bodega) => {
+    if (!canEditBodegas) {
+      toast.error("No tienes permiso para editar bodegas");
+      return;
+    }
 
+    goEdit(bodega.id);
+  };
+
+  const onClickDelete = (bodega: Bodega) => {
+    if (!canDeleteBodegas) {
+      toast.error("No tienes permiso para eliminar bodegas");
+      return;
+    }
+
+    if (bodega.tieneUsuariosAsignados) {
+      toast.error("No se puede eliminar una bodega con usuarios asignados");
+      return;
+    }
+
+    goDelete(bodega.id);
+  };
+
+  // =========================================================
+  // Handlers de acciones / modales
+  // =========================================================
   const onClickToggleEstado = (bodega: Bodega) => {
+    if (!canChangeEstadoBodegas) {
+      toast.error("No tienes permiso para cambiar el estado de bodegas");
+      return;
+    }
+
+    if (bodega.tieneUsuariosAsignados && bodega.estado) {
+      toast.error("No se puede inactivar una bodega con usuarios asignados");
+      return;
+    }
+
     setBodegaParaCambioEstado(bodega);
     setShowConfirmEstadoModal(true);
   };
 
-  const closeConfirmEstadoModal = () => {
-    setShowConfirmEstadoModal(false);
-    setBodegaParaCambioEstado(null);
-  };
-
+  // =========================================================
+  // Confirmaciones / acciones async
+  // =========================================================
   const confirmCreate = async () => {
+    if (!canCreateBodegas) {
+      toast.error("No tienes permiso para crear bodegas");
+      return;
+    }
+
+    if (isCreatingBodega) return;
     if (!validateForm()) return;
 
-    try {
-      setIsSubmitting(true);
+    if (!formMunicipioId) {
+      toast.error("Debes seleccionar un municipio válido");
+      return;
+    }
 
-      const payload: SaveBodegaPayload = {
-        nombre: formNombre.trim(),
-        departamento: formDepartamento,
-        municipio: formMunicipio,
+    try {
+      setIsCreatingBodega(true);
+
+      const payload: CreateBodegaPayload = {
+        nombre_bodega: formNombre.trim(),
         direccion: formDireccion.trim(),
+        id_municipio: Number(formMunicipioId),
         estado: true,
       };
 
-      const created = await createBodega(payload);
+      await createBodega(payload);
+      await loadBodegas();
 
-      setBodegas((prev) => [created, ...prev]);
-      setSelectedBodega(created);
-
-      goList();
       setShowSuccessModal(true);
+      goList();
     } catch (error: any) {
-      console.error("Error al crear bodega:", error);
-      console.error("Respuesta backend:", error?.response?.data);
-
-      const responseData = error?.response?.data;
-
-      const backendMessage =
-        responseData?.error?.message ??
-        responseData?.message ??
-        responseData?.error ??
-        "No se pudo crear la bodega";
-
-      const finalMessage = Array.isArray(backendMessage)
-        ? backendMessage.join(", ")
-        : typeof backendMessage === "string"
-        ? backendMessage
-        : "No se pudo crear la bodega";
-
-      toast.error(finalMessage);
+      console.error("Error creando bodega:", error);
+      toast.error(
+        error?.response?.data?.error?.message ||
+        error?.response?.data?.message ||
+        "No se pudo crear la bodega"
+      );
     } finally {
-      setIsSubmitting(false);
+      setIsCreatingBodega(false);
     }
   };
 
   const confirmEdit = async () => {
-    if (!selectedBodega) {
+    if (!canEditBodegas) {
+      toast.error("No tienes permiso para editar bodegas");
+      return;
+    }
+
+    if (isUpdatingBodega) return;
+    if (!bodegaActual) {
       toast.error("No hay bodega seleccionada para editar");
       return;
     }
 
     if (!validateForm()) return;
 
-    try {
-      setIsSubmitting(true);
+    if (!formMunicipioId) {
+      toast.error("Debes seleccionar un municipio válido");
+      return;
+    }
 
-      const payload: SaveBodegaPayload = {
-        nombre: formNombre.trim(),
-        departamento: formDepartamento,
-        municipio: formMunicipio,
+    try {
+      setIsUpdatingBodega(true);
+
+      const payload: UpdateBodegaPayload = {
+        nombre_bodega: formNombre.trim(),
         direccion: formDireccion.trim(),
-        estado: selectedBodega.estado,
+        id_municipio: Number(formMunicipioId),
+        estado: bodegaActual.estado,
       };
 
-      const updated = await updateBodega(selectedBodega.id, payload);
-
-      setBodegas((prev) =>
-        prev.map((b) => (b.id === updated.id ? updated : b))
-      );
-      setSelectedBodega(updated);
+      await updateBodega(bodegaActual.id, payload);
+      await loadBodegas();
 
       toast.success("Bodega actualizada exitosamente");
       goList();
-    } catch {
-      toast.error("No se pudo actualizar la bodega");
+    } catch (error: any) {
+      console.error("Error actualizando bodega:", error);
+      toast.error(
+        error?.response?.data?.error?.message ||
+        error?.response?.data?.message ||
+        "No se pudo actualizar la bodega"
+      );
     } finally {
-      setIsSubmitting(false);
+      setIsUpdatingBodega(false);
     }
   };
 
   const confirmDelete = async () => {
-    if (!selectedBodega) return;
+    if (!canDeleteBodegas) {
+      toast.error("No tienes permiso para eliminar bodegas");
+      return;
+    }
+
+    if (isDeletingBodega) return;
+    if (!bodegaActual) return;
+
+    if (bodegaActual.tieneUsuariosAsignados) {
+      toast.error("No se puede eliminar una bodega con usuarios asignados");
+      return;
+    }
 
     try {
-      setIsSubmitting(true);
+      setIsDeletingBodega(true);
 
-      const updated = await deleteBodega(selectedBodega.id);
-
-      setBodegas((prev) =>
-        prev.map((b) => (b.id === updated.id ? updated : b))
-      );
-      setSelectedBodega(updated);
+      await deleteBodega(bodegaActual.id);
+      await loadBodegas();
 
       toast.success("Bodega eliminada exitosamente");
       goList();
-    } catch {
-      toast.error("No se pudo eliminar la bodega");
+    } catch (error: any) {
+      console.error("Error eliminando bodega:", error);
+      toast.error(
+        error?.response?.data?.error?.message ||
+        error?.response?.data?.message ||
+        "No se pudo eliminar la bodega"
+      );
     } finally {
-      setIsSubmitting(false);
+      setIsDeletingBodega(false);
     }
   };
 
   const confirmToggleEstado = async () => {
+    if (!canChangeEstadoBodegas) {
+      toast.error("No tienes permiso para cambiar el estado de bodegas");
+      return;
+    }
+
+    if (isChangingEstadoBodega) return;
     if (!bodegaParaCambioEstado) return;
 
+    if (bodegaParaCambioEstado.tieneUsuariosAsignados && bodegaParaCambioEstado.estado) {
+      toast.error("No se puede inactivar una bodega con usuarios asignados");
+      setShowConfirmEstadoModal(false);
+      setBodegaParaCambioEstado(null);
+      return;
+    }
+
     try {
-      setIsSubmitting(true);
+      setIsChangingEstadoBodega(true);
 
-      const updated = await toggleEstadoBodega(bodegaParaCambioEstado.id);
-
-      setBodegas((prev) =>
-        prev.map((b) => (b.id === updated.id ? updated : b))
+      const updated = await toggleEstadoBodega(
+        bodegaParaCambioEstado.id,
+        bodegaParaCambioEstado.estado
       );
 
-      if (selectedBodega?.id === updated.id) {
-        setSelectedBodega(updated);
-      }
+      await loadBodegas();
 
       toast.success(
         `Bodega ${updated.estado ? "activada" : "desactivada"} exitosamente`
       );
-
-      closeConfirmEstadoModal();
-    } catch {
-      toast.error("No se pudo cambiar el estado");
+    } catch (error: any) {
+      console.error("Error cambiando estado de bodega:", error);
+      toast.error(
+        error?.response?.data?.error?.message ||
+        error?.response?.data?.message ||
+        "No se pudo cambiar el estado"
+      );
     } finally {
-      setIsSubmitting(false);
+      setIsChangingEstadoBodega(false);
+      setShowConfirmEstadoModal(false);
+      setBodegaParaCambioEstado(null);
     }
   };
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div>
         <h2 className="text-gray-900">Gestión de Bodegas</h2>
         <p className="text-gray-600 mt-1">
@@ -586,10 +733,11 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
         </p>
       </div>
 
+      {/* Search + filtros + botón */}
       <div className="flex items-center gap-4">
         <div className="relative flex-1">
           <Search
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+            className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
             size={20}
           />
           <Input
@@ -600,59 +748,57 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
           />
         </div>
 
+        {/* Filtro Estado */}
         <div className="flex items-center gap-2 border border-gray-300 rounded-lg p-1 bg-gray-50">
           <Filter size={16} className="text-gray-500 ml-2" />
-
           <Button
             size="sm"
             variant={estadoFilter === "todos" ? "default" : "ghost"}
             onClick={() => setEstadoFilter("todos")}
-            className={`h-8 ${
-              estadoFilter === "todos"
+            className={`h-8 ${estadoFilter === "todos"
                 ? "bg-blue-600 text-white hover:bg-blue-700"
                 : "hover:bg-gray-200"
-            }`}
+              }`}
           >
             Todas
           </Button>
-
           <Button
             size="sm"
             variant={estadoFilter === "activas" ? "default" : "ghost"}
             onClick={() => setEstadoFilter("activas")}
-            className={`h-8 ${
-              estadoFilter === "activas"
+            className={`h-8 ${estadoFilter === "activas"
                 ? "bg-green-600 text-white hover:bg-green-700"
                 : "hover:bg-gray-200"
-            }`}
+              }`}
           >
             Activas
           </Button>
-
           <Button
             size="sm"
             variant={estadoFilter === "inactivas" ? "default" : "ghost"}
             onClick={() => setEstadoFilter("inactivas")}
-            className={`h-8 ${
-              estadoFilter === "inactivas"
+            className={`h-8 ${estadoFilter === "inactivas"
                 ? "bg-red-600 text-white hover:bg-red-700"
                 : "hover:bg-gray-200"
-            }`}
+              }`}
           >
             Inactivas
           </Button>
         </div>
 
-        <Button
-          onClick={onClickCreate}
-          className="bg-blue-600 hover:bg-blue-700"
-          disabled={isLoading || isSubmitting}
-        >
-          <Plus size={18} className="mr-2" />
-          Nueva Bodega
-        </Button>
+        {canCreateBodegas && (
+          <Button
+            onClick={onClickCreate}
+            className="bg-blue-600 hover:bg-blue-700"
+            disabled={isLoading}
+          >
+            <Plus size={18} className="mr-2" />
+            Nueva Bodega
+          </Button>
+        )}
       </div>
 
+      {/* Tabla */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <Table>
@@ -663,7 +809,7 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                 <TableHead>Municipio</TableHead>
                 <TableHead>Dirección</TableHead>
                 <TableHead className="text-center">Estado</TableHead>
-                <TableHead className="text-right w-40">Acciones</TableHead>
+                <TableHead className="text-right w-32">Acciones</TableHead>
               </TableRow>
             </TableHeader>
 
@@ -693,60 +839,71 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                       {bodega.municipio}, {bodega.departamento}
                     </TableCell>
 
-                    <TableCell className="text-gray-700">
-                      {bodega.direccion}
-                    </TableCell>
+                    <TableCell className="text-gray-700">{bodega.direccion}</TableCell>
 
                     <TableCell className="text-center">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => onClickToggleEstado(bodega)}
-                        disabled={isSubmitting}
-                        className={
-                          bodega.estado
-                            ? "bg-green-100 text-green-800 hover:bg-green-200"
-                            : "bg-red-100 text-red-800 hover:bg-red-200"
-                        }
-                      >
-                        {bodega.estado ? "Activa" : "Inactiva"}
-                      </Button>
+                      {canChangeEstadoBodegas && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => onClickToggleEstado(bodega)}
+                          disabled={
+                            isChangingEstadoBodega ||
+                            (bodega.tieneUsuariosAsignados && bodega.estado)
+                          }
+                          className={
+                            bodega.tieneUsuariosAsignados && bodega.estado
+                              ? "bg-green-100 text-gray-400 cursor-not-allowed"
+                              : bodega.estado
+                                ? "bg-green-100 text-green-800 hover:bg-green-200"
+                                : "bg-red-100 text-red-800 hover:bg-red-200"
+                          }
+                          title={
+                            bodega.tieneUsuariosAsignados && bodega.estado
+                              ? "No se puede inactivar porque tiene usuarios asignados"
+                              : bodega.estado
+                                ? "Inactivar"
+                                : "Activar"
+                          }
+                        >
+                          {bodega.estado ? "Activa" : "Inactiva"}
+                        </Button>
+                      )}
                     </TableCell>
 
                     <TableCell>
                       <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => onClickDetail(bodega)}
-                          className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                          title="Ver detalle"
-                          disabled={isSubmitting}
-                        >
-                          <Eye size={16} />
-                        </Button>
+                        {canEditBodegas && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => onClickEdit(bodega)}
+                            className="h-8 w-8 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                            title="Editar"
+                          >
+                            <Edit size={16} />
+                          </Button>
+                        )}
 
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => onClickEdit(bodega)}
-                          className="h-8 w-8 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
-                          title="Editar"
-                          disabled={isSubmitting}
-                        >
-                          <Edit size={16} />
-                        </Button>
-
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => onClickDelete(bodega)}
-                          className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                          title="Eliminar"
-                          disabled={isSubmitting}
-                        >
-                          <Trash2 size={16} />
-                        </Button>
+                        {canDeleteBodegas && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => onClickDelete(bodega)}
+                            disabled={bodega.tieneUsuariosAsignados}
+                            className={`h-8 w-8 ${bodega.tieneUsuariosAsignados
+                                ? "text-gray-400 cursor-not-allowed"
+                                : "text-red-600 hover:text-red-700 hover:bg-red-50"
+                              }`}
+                            title={
+                              bodega.tieneUsuariosAsignados
+                                ? "No se puede eliminar porque tiene usuarios asignados"
+                                : "Eliminar"
+                            }
+                          >
+                            <Trash2 size={16} />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -755,56 +912,58 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
             </TableBody>
           </Table>
         </div>
-
-        {!isLoading && filteredBodegas.length > 0 && (
-          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
-            <div className="text-sm text-gray-600">
-              Mostrando {startIndex + 1} -{" "}
-              {Math.min(endIndex, filteredBodegas.length)} de{" "}
-              {filteredBodegas.length} bodegas
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="h-8"
-              >
-                <ChevronLeft size={16} />
-                Anterior
-              </Button>
-
-              <div className="flex items-center gap-1">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                  <Button
-                    key={page}
-                    variant={currentPage === page ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setCurrentPage(page)}
-                    className="h-8 w-8 p-0"
-                  >
-                    {page}
-                  </Button>
-                ))}
-              </div>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="h-8"
-              >
-                Siguiente
-                <ChevronRight size={16} />
-              </Button>
-            </div>
-          </div>
-        )}
       </div>
 
+      {/* Paginación */}
+      {!isLoading && filteredBodegas.length > 0 && (
+        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
+          <div className="text-sm text-gray-600">
+            Mostrando {startIndex + 1} -{" "}
+            {Math.min(endIndex, filteredBodegas.length)} de{" "}
+            {filteredBodegas.length} bodegas
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
+              disabled={currentPage === 1}
+              className="h-8"
+            >
+              <ChevronLeft size={16} />
+              Anterior
+            </Button>
+
+            <div className="flex items-center gap-1">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <Button
+                  key={page}
+                  variant={currentPage === page ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => handlePageChange(page)}
+                  className="h-8 w-8 p-0"
+                >
+                  {page}
+                </Button>
+              ))}
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
+              disabled={currentPage === totalPages}
+              className="h-8"
+            >
+              Siguiente
+              <ChevronRight size={16} />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CREAR */}
       <Dialog
         open={isCrear}
         modal
@@ -844,9 +1003,10 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
               <div>
                 <Label htmlFor="create-departamento">Departamento *</Label>
                 <Select
-                  value={formDepartamento}
+                  value={formDepartamentoId === "" ? "" : String(formDepartamentoId)}
                   onValueChange={handleDepartamentoChange}
                   onOpenChange={(open: boolean) => !open && handleDepartamentoBlur()}
+                  disabled={isLoadingCatalogos}
                 >
                   <SelectTrigger
                     id="create-departamento"
@@ -859,8 +1019,8 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                     <SelectValue placeholder="Selecciona un departamento" />
                   </SelectTrigger>
                   <SelectContent>
-                    {departamentosColombia.map((dept) => (
-                      <SelectItem key={dept.nombre} value={dept.nombre}>
+                    {departamentosCatalogo.map((dept) => (
+                      <SelectItem key={dept.id} value={String(dept.id)}>
                         {dept.nombre}
                       </SelectItem>
                     ))}
@@ -874,25 +1034,23 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
               <div>
                 <Label htmlFor="create-municipio">Municipio *</Label>
                 <Select
-                  value={formMunicipio}
+                  value={formMunicipioId === "" ? "" : String(formMunicipioId)}
                   onValueChange={handleMunicipioChange}
                   onOpenChange={(open: boolean) => !open && handleMunicipioBlur()}
-                  disabled={!formDepartamento}
+                  disabled={!formDepartamentoId || isLoadingCatalogos}
                 >
                   <SelectTrigger
                     id="create-municipio"
                     className={
-                      errors.municipio && touched.municipio
-                        ? "border-red-500"
-                        : ""
+                      errors.municipio && touched.municipio ? "border-red-500" : ""
                     }
                   >
                     <SelectValue placeholder="Selecciona un municipio" />
                   </SelectTrigger>
                   <SelectContent>
                     {municipiosDisponibles.map((municipio) => (
-                      <SelectItem key={municipio} value={municipio}>
-                        {municipio}
+                      <SelectItem key={municipio.id} value={String(municipio.id)}>
+                        {municipio.nombre}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -920,102 +1078,21 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={goList} disabled={isSubmitting}>
+            <Button variant="outline" onClick={goList} disabled={isCreatingBodega}>
               Cancelar
             </Button>
             <Button
               onClick={confirmCreate}
               className="bg-blue-600 hover:bg-blue-700"
-              disabled={isSubmitting}
+              disabled={isCreatingBodega}
             >
-              Crear Bodega
+              {isCreatingBodega ? "Creando..." : "Crear Bodega"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={isDetalle}
-        modal
-        onOpenChange={(open: boolean) => {
-          if (!open) goList();
-        }}
-      >
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Detalle de la Bodega</DialogTitle>
-            <DialogDescription>
-              Consulta la información completa de la bodega
-            </DialogDescription>
-          </DialogHeader>
-
-          {isLoadingDetail ? (
-            <div className="py-8 text-center text-gray-500">
-              Cargando detalle...
-            </div>
-          ) : selectedBodega ? (
-            <div className="space-y-4 py-2">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-500">Nombre</p>
-                  <p className="font-medium text-gray-900">{selectedBodega.nombre}</p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-500">Estado</p>
-                  <p
-                    className={`font-medium ${
-                      selectedBodega.estado ? "text-green-700" : "text-red-700"
-                    }`}
-                  >
-                    {selectedBodega.estado ? "Activa" : "Inactiva"}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-500">Departamento</p>
-                  <p className="font-medium text-gray-900">
-                    {selectedBodega.departamento || "Sin dato"}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-500">Municipio</p>
-                  <p className="font-medium text-gray-900">
-                    {selectedBodega.municipio || "Sin dato"}
-                  </p>
-                </div>
-              </div>
-
-              <div>
-                <p className="text-sm text-gray-500">Dirección</p>
-                <p className="font-medium text-gray-900">
-                  {selectedBodega.direccion}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="py-8 text-center text-gray-500">
-              No se encontró información de la bodega
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={goList}>
-              Cerrar
-            </Button>
-            {selectedBodega && (
-              <Button
-                onClick={() => goEdit(selectedBodega.id)}
-                className="bg-orange-600 hover:bg-orange-700"
-              >
-                Editar
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
+      {/* MODAL EDITAR */}
       <Dialog
         open={isEditar}
         modal
@@ -1030,9 +1107,7 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
         >
           <DialogHeader>
             <DialogTitle>Editar Bodega</DialogTitle>
-            <DialogDescription>
-              Modifica la información de la bodega
-            </DialogDescription>
+            <DialogDescription>Modifica la información de la bodega</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
@@ -1055,9 +1130,10 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
               <div>
                 <Label htmlFor="edit-departamento">Departamento *</Label>
                 <Select
-                  value={formDepartamento}
+                  value={formDepartamentoId === "" ? "" : String(formDepartamentoId)}
                   onValueChange={handleDepartamentoChange}
                   onOpenChange={(open: boolean) => !open && handleDepartamentoBlur()}
+                  disabled={isLoadingCatalogos}
                 >
                   <SelectTrigger
                     id="edit-departamento"
@@ -1070,8 +1146,8 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                     <SelectValue placeholder="Selecciona un departamento" />
                   </SelectTrigger>
                   <SelectContent>
-                    {departamentosColombia.map((dept) => (
-                      <SelectItem key={dept.nombre} value={dept.nombre}>
+                    {departamentosCatalogo.map((dept) => (
+                      <SelectItem key={dept.id} value={String(dept.id)}>
                         {dept.nombre}
                       </SelectItem>
                     ))}
@@ -1085,25 +1161,23 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
               <div>
                 <Label htmlFor="edit-municipio">Municipio *</Label>
                 <Select
-                  value={formMunicipio}
+                  value={formMunicipioId === "" ? "" : String(formMunicipioId)}
                   onValueChange={handleMunicipioChange}
                   onOpenChange={(open: boolean) => !open && handleMunicipioBlur()}
-                  disabled={!formDepartamento}
+                  disabled={!formDepartamentoId || isLoadingCatalogos}
                 >
                   <SelectTrigger
                     id="edit-municipio"
                     className={
-                      errors.municipio && touched.municipio
-                        ? "border-red-500"
-                        : ""
+                      errors.municipio && touched.municipio ? "border-red-500" : ""
                     }
                   >
                     <SelectValue placeholder="Selecciona un municipio" />
                   </SelectTrigger>
                   <SelectContent>
                     {municipiosDisponibles.map((municipio) => (
-                      <SelectItem key={municipio} value={municipio}>
-                        {municipio}
+                      <SelectItem key={municipio.id} value={String(municipio.id)}>
+                        {municipio.nombre}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1131,20 +1205,21 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={goList} disabled={isSubmitting}>
+            <Button variant="outline" onClick={goList} disabled={isUpdatingBodega}>
               Cancelar
             </Button>
             <Button
               onClick={confirmEdit}
               className="bg-orange-600 hover:bg-orange-700"
-              disabled={isSubmitting}
+              disabled={isUpdatingBodega}
             >
-              Guardar Cambios
+              {isUpdatingBodega ? "Guardando..." : "Guardar Cambios"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* MODAL ELIMINAR */}
       <Dialog
         open={isEliminar}
         modal
@@ -1160,48 +1235,50 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
           <DialogHeader>
             <DialogTitle>Eliminar Bodega</DialogTitle>
             <DialogDescription>
-              ¿Estás seguro de que deseas eliminar esta bodega? Esta acción la
-              desactivará en el sistema.
+              ¿Estás seguro de que deseas eliminar esta bodega? Esta acción no se puede
+              deshacer.
             </DialogDescription>
           </DialogHeader>
 
-          {selectedBodega && (
+          {bodegaActual && (
             <div className="py-4">
               <p className="text-gray-700">
-                Bodega: <span className="font-semibold">{selectedBodega.nombre}</span>
+                Bodega: <span className="font-semibold">{bodegaActual.nombre}</span>
               </p>
               <p className="text-gray-600 text-sm mt-1">
-                Ubicación: {selectedBodega.municipio}, {selectedBodega.departamento}
+                Ubicación: {bodegaActual.municipio}, {bodegaActual.departamento}
               </p>
             </div>
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={goList} disabled={isSubmitting}>
+            <Button variant="outline" onClick={goList} disabled={isDeletingBodega}>
               Cancelar
             </Button>
             <Button
               variant="destructive"
               onClick={confirmDelete}
-              disabled={isSubmitting}
+              disabled={isDeletingBodega || !!bodegaActual?.tieneUsuariosAsignados}
             >
-              Eliminar
+              {isDeletingBodega ? "Eliminando..." : "Eliminar"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* MODAL CONFIRMAR ESTADO */}
       <Dialog
         open={showConfirmEstadoModal}
         onOpenChange={(open) => {
-          if (!open) {
-            closeConfirmEstadoModal();
-          } else {
-            setShowConfirmEstadoModal(true);
-          }
+          setShowConfirmEstadoModal(open);
+          if (!open) setBodegaParaCambioEstado(null);
         }}
       >
-        <DialogContent className="max-w-lg">
+        <DialogContent
+          className="max-w-lg"
+          onInteractOutside={(e: any) => e.preventDefault()}
+          onEscapeKeyDown={(e: any) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>Confirmar Cambio de Estado</DialogTitle>
             <DialogDescription>
@@ -1214,24 +1291,20 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
               <span className="text-gray-600">Bodega:</span>
               <span className="font-medium">{bodegaParaCambioEstado?.nombre}</span>
             </div>
-
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Estado Actual:</span>
               <span
-                className={`font-medium ${
-                  bodegaParaCambioEstado?.estado ? "text-green-700" : "text-red-700"
-                }`}
+                className={`font-medium ${bodegaParaCambioEstado?.estado ? "text-green-700" : "text-red-700"
+                  }`}
               >
                 {bodegaParaCambioEstado?.estado ? "Activa" : "Inactiva"}
               </span>
             </div>
-
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Nuevo Estado:</span>
               <span
-                className={`font-medium ${
-                  !bodegaParaCambioEstado?.estado ? "text-green-700" : "text-red-700"
-                }`}
+                className={`font-medium ${!bodegaParaCambioEstado?.estado ? "text-green-700" : "text-red-700"
+                  }`}
               >
                 {!bodegaParaCambioEstado?.estado ? "Activa" : "Inactiva"}
               </span>
@@ -1239,20 +1312,33 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={closeConfirmEstadoModal} disabled={isSubmitting}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowConfirmEstadoModal(false);
+                setBodegaParaCambioEstado(null);
+              }}
+              disabled={isChangingEstadoBodega}
+            >
               Cancelar
             </Button>
             <Button
               onClick={confirmToggleEstado}
               className="bg-blue-600 hover:bg-blue-700"
-              disabled={isSubmitting}
+              disabled={
+                isChangingEstadoBodega ||
+                !bodegaParaCambioEstado ||
+                (bodegaParaCambioEstado.estado &&
+                  bodegaParaCambioEstado.tieneUsuariosAsignados)
+              }
             >
-              Confirmar
+              {isChangingEstadoBodega ? "Procesando..." : "Confirmar"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* MODAL ÉXITO */}
       <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -1275,11 +1361,7 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
 
           <DialogFooter className="flex justify-center">
             <Button
-              onClick={() => {
-                setShowSuccessModal(false);
-                resetForm();
-                setSelectedBodega(null);
-              }}
+              onClick={handleSuccessModalClose}
               className="bg-green-600 hover:bg-green-700"
             >
               Aceptar

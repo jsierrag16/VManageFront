@@ -1,198 +1,224 @@
 import api from "@/shared/services/api";
-import { departamentosColombia } from "../../../data/colombia";
-import type { Bodega } from "../../../data/bodegas";
 
-type ApiMunicipio = {
-  id_municipio: number;
-  nombre_municipio?: string;
-  municipio?: string;
-  nombre?: string;
-  nombre_departamento?: string;
-  departamento?: { nombre_departamento?: string; nombre?: string } | string;
-  departamentos?: { nombre_departamento?: string; nombre?: string } | string;
+export type DepartamentoBackend = {
+  id_departamento: number;
+  nombre_departamento: string;
+  id_pais: number;
 };
 
-type ApiBodega = {
+export type MunicipioBackend = {
+  id_municipio: number;
+  nombre_municipio: string;
+  id_departamento: number;
+  departamentos?: {
+    id_departamento: number;
+    nombre_departamento: string;
+    id_pais: number;
+    paises?: {
+      id_pais: number;
+      nombre_pais: string;
+    } | null;
+  } | null;
+};
+
+export type DepartamentoOption = {
+  id: number;
+  nombre: string;
+  raw: DepartamentoBackend;
+};
+
+export type MunicipioOption = {
+  id: number;
+  nombre: string;
+  idDepartamento: number;
+  departamento: string;
+  raw: MunicipioBackend;
+};
+
+export type BodegaBackend = {
   id_bodega: number;
   nombre_bodega: string;
   direccion: string;
   id_municipio: number;
   estado: boolean;
-  municipios?: ApiMunicipio | null;
+  municipios?: {
+    id_municipio: number;
+    nombre_municipio: string;
+    id_departamento: number;
+    departamentos?: {
+      id_departamento: number;
+      nombre_departamento: string;
+    } | null;
+  } | null;
+  _count?: {
+    bodegas_por_usuario: number;
+  };
 };
 
-type ApiBodegasResponse =
-  | ApiBodega[]
-  | {
-      page: number;
-      limit: number;
-      total: number;
-      pages: number;
-      data: ApiBodega[];
-    };
-
-export type SaveBodegaPayload = {
+export type Bodega = {
+  id: number;
   nombre: string;
-  departamento: string;
-  municipio: string;
   direccion: string;
+  idMunicipio: number;
+  municipio: string;
+  departamento: string;
   estado: boolean;
+  tieneUsuariosAsignados: boolean;
+  usuariosAsignados: number;
+  raw: BodegaBackend;
 };
 
-const isApiBodega = (value: unknown): value is ApiBodega => {
-  if (!value || typeof value !== "object") return false;
-
-  const item = value as Partial<ApiBodega>;
-  return typeof item.id_bodega === "number";
+export type CreateBodegaPayload = {
+  nombre_bodega: string;
+  direccion: string;
+  id_municipio: number;
+  estado?: boolean;
 };
 
-const getMunicipioName = (municipio?: ApiMunicipio | null): string => {
-  if (!municipio) return "";
+export type UpdateBodegaPayload = Partial<CreateBodegaPayload>;
 
-  return (
-    municipio.nombre_municipio ||
-    municipio.municipio ||
-    municipio.nombre ||
-    ""
-  );
+type BodegasListRawResponse =
+  | BodegaBackend[]
+  | {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+    data: BodegaBackend[];
+  };
+
+export type BodegasListResponse = {
+  page: number;
+  limit: number;
+  total: number;
+  pages: number;
+  data: Bodega[];
 };
 
-const getDepartamentoFromStatic = (municipioNombre: string): string => {
-  if (!municipioNombre) return "";
-
-  const dept = departamentosColombia.find((item) =>
-    item.municipios.includes(municipioNombre)
-  );
-
-  return dept?.nombre ?? "";
-};
-
-const getDepartamentoName = (
-  municipio?: ApiMunicipio | null,
-  municipioNombre = ""
-): string => {
-  if (!municipio) {
-    return getDepartamentoFromStatic(municipioNombre);
-  }
-
-  if (municipio.nombre_departamento) {
-    return municipio.nombre_departamento;
-  }
-
-  if (typeof municipio.departamento === "string") {
-    return municipio.departamento;
-  }
-
-  if (municipio.departamento && typeof municipio.departamento === "object") {
-    return (
-      municipio.departamento.nombre_departamento ||
-      municipio.departamento.nombre ||
-      getDepartamentoFromStatic(municipioNombre)
-    );
-  }
-
-  if (typeof municipio.departamentos === "string") {
-    return municipio.departamentos;
-  }
-
-  if (municipio.departamentos && typeof municipio.departamentos === "object") {
-    return (
-      municipio.departamentos.nombre_departamento ||
-      municipio.departamentos.nombre ||
-      getDepartamentoFromStatic(municipioNombre)
-    );
-  }
-
-  return getDepartamentoFromStatic(municipioNombre);
-};
-
-const normalizeBodega = (item: ApiBodega): Bodega => {
-  const municipio = getMunicipioName(item.municipios);
+function mapBodegaBackendToFrontend(item: BodegaBackend): Bodega {
+  const usuariosAsignados = item._count?.bodegas_por_usuario ?? 0;
 
   return {
     id: item.id_bodega,
-    nombre: item.nombre_bodega ?? "",
-    municipio,
-    departamento: getDepartamentoName(item.municipios, municipio),
-    direccion: item.direccion ?? "",
-    estado: Boolean(item.estado),
+    nombre: item.nombre_bodega,
+    direccion: item.direccion,
+    idMunicipio: item.id_municipio,
+    municipio: item.municipios?.nombre_municipio ?? "",
+    departamento: item.municipios?.departamentos?.nombre_departamento ?? "",
+    estado: item.estado,
+    tieneUsuariosAsignados: usuariosAsignados > 0,
+    usuariosAsignados,
+    raw: item,
   };
-};
+}
 
-const extractBodegasArray = (data: ApiBodegasResponse): ApiBodega[] => {
-  return Array.isArray(data) ? data : data.data;
-};
+function normalizeBodegasResponse(raw: BodegasListRawResponse): BodegasListResponse {
+  if (Array.isArray(raw)) {
+    const mapped = raw.map(mapBodegaBackendToFrontend);
+    return {
+      page: 1,
+      limit: mapped.length || 1,
+      total: mapped.length,
+      pages: 1,
+      data: mapped,
+    };
+  }
 
-/**
- * OJO:
- * No enviamos "departamento" al backend porque tu servicio de Nest
- * resuelve con municipio o id_municipio.
- * Si tienes whitelist/forbidNonWhitelisted, mandar departamento rompe.
- */
-const mapSavePayload = (payload: SaveBodegaPayload) => {
   return {
-    nombre_bodega: payload.nombre.trim(),
-    direccion: payload.direccion.trim(),
-    municipio: payload.municipio,
-    estado: payload.estado,
+    page: raw.page,
+    limit: raw.limit,
+    total: raw.total,
+    pages: raw.pages,
+    data: raw.data.map(mapBodegaBackendToFrontend),
   };
-};
+}
 
-export async function getBodegas(): Promise<Bodega[]> {
-  const { data } = await api.get<ApiBodegasResponse>("/bodega", {
-    params: { includeMunicipio: true },
+function mapDepartamento(item: DepartamentoBackend): DepartamentoOption {
+  return {
+    id: item.id_departamento,
+    nombre: item.nombre_departamento,
+    raw: item,
+  };
+}
+
+function mapMunicipio(item: MunicipioBackend): MunicipioOption {
+  return {
+    id: item.id_municipio,
+    nombre: item.nombre_municipio,
+    idDepartamento: item.id_departamento,
+    departamento: item.departamentos?.nombre_departamento ?? "",
+    raw: item,
+  };
+}
+
+export async function getBodegas(): Promise<BodegasListResponse> {
+  const { data } = await api.get<BodegasListRawResponse>("/bodega", {
+    params: { includeMunicipio: "true" },
   });
 
-  return extractBodegasArray(data).map(normalizeBodega);
+  return normalizeBodegasResponse(data);
 }
 
 export async function getBodegaById(id: number): Promise<Bodega> {
-  const { data } = await api.get<ApiBodega>(`/bodega/${id}`, {
-    params: { includeMunicipio: true },
+  const { data } = await api.get<BodegaBackend>(`/bodega/${id}`, {
+    params: { includeMunicipio: "true" },
   });
 
-  return normalizeBodega(data);
+  return mapBodegaBackendToFrontend(data);
 }
 
-export async function createBodega(
-  payload: SaveBodegaPayload
-): Promise<Bodega> {
-  const body = mapSavePayload(payload);
-
-  const { data } = await api.post<ApiBodega>("/bodega", body);
-
-  if (!isApiBodega(data)) {
-    throw new Error("Respuesta inválida al crear bodega");
-  }
-
-  return getBodegaById(data.id_bodega);
+export async function createBodega(payload: CreateBodegaPayload): Promise<Bodega> {
+  const { data } = await api.post<BodegaBackend>("/bodega", payload);
+  return mapBodegaBackendToFrontend(data);
 }
 
 export async function updateBodega(
   id: number,
-  payload: SaveBodegaPayload
+  payload: UpdateBodegaPayload
 ): Promise<Bodega> {
-  const body = mapSavePayload(payload);
-
-  await api.patch(`/bodega/${id}`, body);
-
-  return getBodegaById(id);
+  const { data } = await api.patch<BodegaBackend>(`/bodega/${id}`, payload);
+  return mapBodegaBackendToFrontend(data);
 }
 
 export async function deleteBodega(id: number): Promise<Bodega> {
-  await api.delete(`/bodega/${id}`);
-
-  return getBodegaById(id);
+  const { data } = await api.delete<BodegaBackend>(`/bodega/${id}`);
+  return mapBodegaBackendToFrontend(data);
 }
 
-export async function toggleEstadoBodega(id: number): Promise<Bodega> {
-  const actual = await getBodegaById(id);
+export async function disableBodega(id: number): Promise<Bodega> {
+  const { data } = await api.patch<BodegaBackend>(`/bodega/${id}/disable`);
+  return mapBodegaBackendToFrontend(data);
+}
 
-  if (actual.estado) {
-    await api.delete(`/bodega/${id}`);
-    return getBodegaById(id);
+export async function enableBodega(id: number): Promise<Bodega> {
+  const { data } = await api.patch<BodegaBackend>(`/bodega/${id}/enable`);
+  return mapBodegaBackendToFrontend(data);
+}
+
+export async function toggleEstadoBodega(
+  id: number,
+  estadoActual: boolean
+): Promise<Bodega> {
+  if (estadoActual) {
+    return disableBodega(id);
   }
+  return enableBodega(id);
+}
 
-  await api.patch(`/bodega/${id}/enable`);
-  return getBodegaById(id);
+export async function getDepartamentos(): Promise<DepartamentoOption[]> {
+  const { data } = await api.get<DepartamentoBackend[]>("/departamentos", {
+    params: { id_pais: 1 },
+  });
+
+  return data.map(mapDepartamento);
+}
+
+export async function getMunicipios(
+  idDepartamento: number
+): Promise<MunicipioOption[]> {
+  const { data } = await api.get<MunicipioBackend[]>("/municipios", {
+    params: { id_departamento: idDepartamento },
+  });
+
+  return data.map(mapMunicipio);
 }

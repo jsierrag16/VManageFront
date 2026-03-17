@@ -83,6 +83,7 @@ const permisoPathMap: Record<string, string[]> = {
   "administracion.usuarios.ver": ["administracion", "usuarios", "ver"],
   "administracion.usuarios.crear": ["administracion", "usuarios", "crear"],
   "administracion.usuarios.editar": ["administracion", "usuarios", "editar"],
+  "administracion.usuarios.eliminar": ["administracion", "usuarios", "eliminar"],
   "administracion.usuarios.cambiar_estado": ["administracion", "usuarios", "cambiarEstado"],
   "administracion.usuarios.restablecer_contrasena": ["administracion", "usuarios", "restablecerContrasena"],
 };
@@ -113,16 +114,16 @@ export function authUserToUsuarioSistema(user: any): UsuarioSistema {
     ? user.permisos
     : Array.isArray(user?.roles?.roles_permisos)
       ? user.roles.roles_permisos
-          .map((rp: any) => rp?.permisos)
-          .filter(Boolean)
+        .map((rp: any) => rp?.permisos)
+        .filter(Boolean)
       : [];
 
   const bodegasFuente = Array.isArray(user?.bodegas)
     ? user.bodegas
     : Array.isArray(user?.bodegas_por_usuario)
       ? user.bodegas_por_usuario
-          .map((item: any) => item?.bodega)
-          .filter(Boolean)
+        .map((item: any) => item?.bodega)
+        .filter(Boolean)
       : [];
 
   return {
@@ -130,6 +131,10 @@ export function authUserToUsuarioSistema(user: any): UsuarioSistema {
     nombre: user.nombre,
     apellido: user.apellido,
     email: user.email,
+    avatarUrl: user.img_url ?? "",
+    telefono: user.telefono ?? "",
+    documento: user.num_documento ?? "",
+    tipoDocumento: user.tipo_documento?.nombre_doc ?? "",
     rol: user.roles?.nombre_rol ?? "",
     estado: user.estado,
     permisos: permisosBackendToFrontend(permisosFuente),
