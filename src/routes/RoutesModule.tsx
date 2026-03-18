@@ -7,7 +7,7 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { PublicRoute } from "./components/PublicRoute";
 
 // Páginas
-import Login from "@/features/auth/pages/Login";
+import Login from "@/features/auth/pages/login";
 import RestablecerContrasena from "@/features/auth/pages/RestablecerContrasena";
 import Dashboard from "@/features/dashboard/pages/Dashboard";
 import Bodegas from "@/features/bodegas/pages/Bodegas";

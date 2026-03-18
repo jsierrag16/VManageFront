@@ -1,80 +1,65 @@
-export type CompraEstado = "Pendiente" | "Aprobada" | "Anulada";
-
-export const ESTADO_COMPRA_IDS = {
-  Pendiente: 1,
-  Aprobada: 2,
-  Anulada: 3,
-} as const;
-// Ajusta estos ids si tu tabla estado_compra usa otros valores.
-
-export type ProductoOrdenUI = {
-  producto: {
+  export type BasicOption = {
     id: number;
     nombre: string;
+    estado?: boolean;
   };
-  cantidad: number;
-  precio: number;
-  subtotal: number;
-  idIva: number;
-  ivaPorcentaje: number;
-  ivaNombre: string;
-};
 
-export type CompraUI = {
-  id: number;
-  numeroOrden: string;
-  proveedor: string;
-  proveedorId: number;
-  terminoPago: string;
-  terminoPagoId: number;
-  fecha: string;
-  fechaEntrega: string;
-  estado: CompraEstado;
-  estadoId: number;
-  items: number;
-  subtotal: number;
-  impuestos: number;
-  total: number;
-  observaciones: string;
-  bodega: string;
-  bodegaId: number;
-  productos: ProductoOrdenUI[];
-};
+  export type IvaOption = {
+    id: number;
+    nombre: string;
+    porcentaje: number;
+    estado?: boolean;
+  };
 
-export type CompraDetallePayload = {
-  id_producto: number;
-  cantidad: number;
-  precio_unitario: number;
-  id_iva: number;
-};
+  export type CompraEstado = "Pendiente" | "Aprobada" | "Anulada";
 
-export type CreateCompraPayload = {
-  id_proveedor: number;
-  id_termino_pago: number;
-  descripcion?: string;
-  fecha_entrega?: string;
-  detalle: CompraDetallePayload[];
-};
+  export type ProductoOrden = {
+    producto: {
+      id: number;
+      nombre: string;
+    };
+    cantidad: number;
+    precio: number;
+    subtotal: number;
+    idIva: number;
+    ivaNombre: string;
+    ivaPorcentaje: number;
+  };
 
-export type UpdateCompraPayload = Partial<CreateCompraPayload> & {
-  id_estado_compra?: number;
-};
+  export type Compra = {
+    id: number;
+    numeroOrden: string;
+    fecha: string;
+    fechaEntrega: string;
+    proveedor: string;
+    proveedorId?: number;
+    terminoPago?: string;
+    terminoPagoId?: number;
+    bodega?: string;
+    bodegaId?: number;
+    estado: CompraEstado;
+    observaciones: string;
+    subtotal: number;
+    impuestos: number;
+    total: number;
+    items: number;
+    productos?: ProductoOrden[];
+  };
 
-export type BasicOption = {
-  id: number;
-  nombre: string;
-  estado?: boolean;
-};
+  export type CompraCreatePayload = {
+    id_bodega: number;
+    id_proveedor: number;
+    id_termino_pago: number;
+    descripcion?: string;
+    fecha_entrega?: string;
+    detalle: {
+      id_producto: number;
+      cantidad: number;
+      precio_unitario: number;
+      id_iva: number;
+    }[];
+  };
 
-export type IvaOption = {
-  id: number;
-  nombre: string;
-  porcentaje: number;
-  estado?: boolean;
-};
-
-export type ProductoOption = {
-  id: number;
-  nombre: string;
-  estado?: boolean;
-};
+  export type CompraUpdatePayload = Partial<CompraCreatePayload> & {
+    id_estado_compra?: number;
+  };

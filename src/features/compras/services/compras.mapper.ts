@@ -1,144 +1,92 @@
-import type { CompraEstado, CompraUI } from "./compras.types";
+import type { Compra, ProductoOrden, CompraEstado } from "./compras.types";
 
-type AnyRecord = Record<string, any>;
+const normalizarEstado = (estado?: string) =>
+  (estado ?? "").trim().toLowerCase();
 
-const toNumber = (value: unknown, fallback = 0): number => {
-  if (value === null || value === undefined || value === "") return fallback;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-};
+const estadoNombreMap = (estado?: string): CompraEstado => {
+  const value = normalizarEstado(estado);
 
-const pickText = (...values: unknown[]): string => {
-  for (const value of values) {
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return "";
-};
-
-const onlyDate = (value?: string | null): string => {
-  if (!value) return "";
-  return value.includes("T") ? value.split("T")[0] : value;
-};
-
-const normalizeEstado = (raw?: string | null, id?: number): CompraEstado => {
-  const value = (raw || "").toLowerCase().trim();
-
-  if (value.includes("anul")) return "Anulada";
-  if (value.includes("aprob")) return "Aprobada";
-  if (value.includes("pend")) return "Pendiente";
-
-  if (id === 3) return "Anulada";
-  if (id === 2) return "Aprobada";
+  if (value === "aprobada") return "Aprobada";
+  if (value === "anulada") return "Anulada";
   return "Pendiente";
 };
 
-const getProveedorRel = (row: AnyRecord) =>
-  row.proveedor || row.proveedores || {};
+export const ESTADO_COMPRA_IDS: Record<CompraEstado, number> = {
+  Pendiente: 1,
+  Aprobada: 2,
+  Anulada: 3,
+};
 
-const getBodegaRel = (row: AnyRecord) =>
-  row.bodega || row.bodegas || {};
+export const getFechaActual = () => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
 
-const getEstadoRel = (row: AnyRecord) =>
-  row.estado_compra || row.estadoCompra || {};
+const getItemsCount = (row: any): number => {
+  if (typeof row?._count?.detalle_compra === "number") {
+    return row._count.detalle_compra;
+  }
 
-const getTerminoPagoRel = (row: AnyRecord) =>
-  row.termino_pago || row.terminos_pago || row.terminoPago || {};
+  if (Array.isArray(row?.detalle_compra)) {
+    return row.detalle_compra.length;
+  }
 
-const getProductoRel = (row: AnyRecord) =>
-  row.producto || row.productos || {};
+  return 0;
+};
 
-const getIvaRel = (row: AnyRecord) =>
-  row.iva || row.ivas || {};
+const formatIvaNombre = (iva: any) => {
+  const porcentaje = Number(iva?.porcentaje ?? 0);
 
-export const mapApiCompraToUI = (row: AnyRecord): CompraUI => {
-  const proveedorRel = getProveedorRel(row);
-  const bodegaRel = getBodegaRel(row);
-  const estadoRel = getEstadoRel(row);
-  const terminoPagoRel = getTerminoPagoRel(row);
+  if (porcentaje > 0) {
+    return `IVA ${porcentaje}%`;
+  }
 
-  const detalle = Array.isArray(row.detalle_compra) ? row.detalle_compra : [];
+  return "IVA";
+};
 
-  const productos = detalle.map((item: AnyRecord) => {
-    const productoRel = getProductoRel(item);
-    const ivaRel = getIvaRel(item);
+export const mapCompraList = (row: any): Compra => {
+  return {
+    id: row.id_compra,
+    numeroOrden: row.codigo_compra,
+    fecha: row.fecha_solicitud?.slice(0, 10) ?? "",
+    fechaEntrega: row.fecha_entrega?.slice(0, 10) ?? "",
+    proveedor: row.proveedor?.nombre_empresa ?? "-",
+    proveedorId: row.id_proveedor,
+    terminoPago: row.termino_pago?.nombre_termino ?? "-",
+    terminoPagoId: row.id_termino_pago,
+    bodega: row.bodega?.nombre_bodega ?? "-",
+    bodegaId: row.id_bodega,
+    estado: estadoNombreMap(row.estado_compra?.nombre_estado),
+    observaciones: row.descripcion ?? "",
+    subtotal: Number(row.subtotal ?? 0),
+    impuestos: Number(row.total_iva ?? 0),
+    total: Number(row.total ?? 0),
+    items: getItemsCount(row),
+  };
+};
 
-    const cantidad = toNumber(item.cantidad);
-    const precio = toNumber(item.precio_unitario);
-    const subtotal = Number((cantidad * precio).toFixed(2));
-    const ivaPorcentaje = toNumber(
-      ivaRel?.porcentaje ?? item?.porcentaje ?? 0
-    );
-
-    return {
-      producto: {
-        id: toNumber(item.id_producto ?? productoRel?.id_producto ?? productoRel?.id),
-        nombre: pickText(
-          productoRel?.nombre_producto,
-          productoRel?.nombre,
-          item?.nombre_producto
-        ),
-      },
-      cantidad,
-      precio,
-      subtotal,
-      idIva: toNumber(item.id_iva ?? ivaRel?.id_iva ?? ivaRel?.id),
-      ivaPorcentaje,
-      ivaNombre: pickText(
-        ivaRel?.nombre_iva,
-        ivaRel?.nombre,
-        `${ivaPorcentaje}%`
-      ),
-    };
-  });
-
-  const estadoId = toNumber(
-    row.id_estado_compra ?? estadoRel?.id_estado_compra ?? estadoRel?.id
-  );
+export const mapCompraDetail = (row: any): Compra => {
+  const productos: ProductoOrden[] = Array.isArray(row.detalle_compra)
+    ? row.detalle_compra.map((d: any) => ({
+        producto: {
+          id: d.producto?.id_producto ?? d.id_producto,
+          nombre: d.producto?.nombre_producto ?? "-",
+        },
+        cantidad: Number(d.cantidad ?? 0),
+        precio: Number(d.precio_unitario ?? 0),
+        subtotal: Number(d.cantidad ?? 0) * Number(d.precio_unitario ?? 0),
+        idIva: d.id_iva,
+        ivaNombre: formatIvaNombre(d.iva),
+        ivaPorcentaje: Number(d.iva?.porcentaje ?? 0),
+      }))
+    : [];
 
   return {
-    id: toNumber(row.id_compra ?? row.id),
-    numeroOrden: pickText(row.codigo_compra, row.numeroOrden, row.numero_orden),
-    proveedor: pickText(
-      proveedorRel?.nombre_proveedor,
-      proveedorRel?.nombre,
-      row?.proveedor
-    ),
-    proveedorId: toNumber(
-      row.id_proveedor ?? proveedorRel?.id_proveedor ?? proveedorRel?.id
-    ),
-    terminoPago: pickText(
-      terminoPagoRel?.nombre_termino_pago,
-      terminoPagoRel?.nombre,
-      row?.termino_pago_nombre
-    ),
-    terminoPagoId: toNumber(
-      row.id_termino_pago ?? terminoPagoRel?.id_termino_pago ?? terminoPagoRel?.id
-    ),
-    fecha: onlyDate(row.fecha_solicitud ?? row.fecha),
-    fechaEntrega: onlyDate(row.fecha_entrega),
-    estado: normalizeEstado(
-      pickText(
-        estadoRel?.nombre_estado_compra,
-        estadoRel?.estado_compra,
-        estadoRel?.nombre,
-        row?.estado
-      ),
-      estadoId
-    ),
-    estadoId,
-    items: detalle.length || toNumber(row.items),
-    subtotal: toNumber(row.subtotal),
-    impuestos: toNumber(row.total_iva ?? row.impuestos),
-    total: toNumber(row.total),
-    observaciones: pickText(row.descripcion, row.observaciones),
-    bodega: pickText(
-      bodegaRel?.nombre_bodega,
-      bodegaRel?.nombre,
-      row?.bodega
-    ),
-    bodegaId: toNumber(
-      row.id_bodega ?? bodegaRel?.id_bodega ?? bodegaRel?.id
-    ),
+    ...mapCompraList(row),
+    items: productos.length,
     productos,
   };
 };

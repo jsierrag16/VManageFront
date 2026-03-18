@@ -26,7 +26,6 @@ import {
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-import api from "../../../shared/services/api";
 import { Button } from "../../../shared/components/ui/button";
 import { Input } from "../../../shared/components/ui/input";
 import {
@@ -57,312 +56,21 @@ import {
 
 import { toast } from "sonner";
 import type { AppOutletContext } from "../../../layouts/MainLayout";
-import { getProveedores } from "@/features/proveedores/services/proveedores.services";
-import { productosService } from "@/features/productos/services/productos.service";
+import type {
+  BasicOption,
+  Compra,
+  CompraEstado,
+  IvaOption,
+  ProductoOrden,
+  CompraCreatePayload,
+} from "../services/compras.types";
 
-type CompraEstado = "Pendiente" | "Aprobada" | "Anulada";
+import {
+  ESTADO_COMPRA_IDS,
+  getFechaActual,
+} from "../services/compras.mapper";
 
-type BasicOption = {
-  id: number;
-  nombre: string;
-  estado?: boolean;
-};
-
-type IvaOption = {
-  id: number;
-  nombre: string;
-  porcentaje: number;
-  estado?: boolean;
-};
-
-type ProductoOrden = {
-  producto: {
-    id: number;
-    nombre: string;
-  };
-  cantidad: number;
-  precio: number;
-  subtotal: number;
-  idIva: number;
-  ivaNombre: string;
-  ivaPorcentaje: number;
-};
-
-type Compra = {
-  id: number;
-  numeroOrden: string;
-  proveedor: string;
-  proveedorId: number;
-  terminoPago: string;
-  terminoPagoId: number;
-  fecha: string;
-  fechaEntrega: string;
-  estado: CompraEstado;
-  estadoId: number;
-  items: number;
-  subtotal: number;
-  impuestos: number;
-  total: number;
-  observaciones: string;
-  bodega: string;
-  bodegaId: number;
-  productos: ProductoOrden[];
-};
-
-const ESTADO_COMPRA_IDS = {
-  Pendiente: 1,
-  Aprobada: 2,
-  Anulada: 3,
-} as const;
-
-const toNumber = (value: unknown, fallback = 0): number => {
-  if (value === null || value === undefined || value === "") return fallback;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-};
-
-const pickText = (...values: unknown[]): string => {
-  for (const value of values) {
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return "";
-};
-
-const onlyDate = (value?: string | null): string => {
-  if (!value) return "";
-  return value.includes("T") ? value.split("T")[0] : value;
-};
-
-const extractArray = (payload: any): any[] => {
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.data)) return payload.data;
-  if (Array.isArray(payload?.rows)) return payload.rows;
-  if (Array.isArray(payload?.items)) return payload.items;
-  return [];
-};
-
-const isActiveValue = (value: unknown): boolean => {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "number") return value === 1;
-  if (typeof value === "string") {
-    const v = value.toLowerCase().trim();
-    return v === "activo" || v === "activa" || v === "true" || v === "1";
-  }
-  return true;
-};
-
-const normalizeEstado = (raw?: string | null, id?: number): CompraEstado => {
-  const value = (raw || "").toLowerCase().trim();
-
-  if (value.includes("anul")) return "Anulada";
-  if (value.includes("aprob")) return "Aprobada";
-  if (value.includes("pend")) return "Pendiente";
-
-  if (id === ESTADO_COMPRA_IDS.Anulada) return "Anulada";
-  if (id === ESTADO_COMPRA_IDS.Aprobada) return "Aprobada";
-  return "Pendiente";
-};
-
-const mapTerminoPagoOption = (row: any): BasicOption => ({
-  id: toNumber(row?.id_termino_pago ?? row?.id),
-  nombre: pickText(
-    row?.nombre_termino,
-    row?.nombre,
-    row?.nombre_termino_pago
-  ),
-  estado: true,
-});
-
-const mapIvaOption = (row: any): IvaOption => {
-  const porcentaje = toNumber(row?.porcentaje ?? row?.porcentaje_iva ?? row?.valor_iva ?? row?.valor);
-
-  return {
-    id: toNumber(row?.id_iva ?? row?.id),
-    nombre:
-      pickText(row?.nombre_iva, row?.nombre) ||
-      `IVA ${porcentaje.toFixed(2)}%`,
-    porcentaje,
-    estado: true,
-  };
-};
-
-const mapCompraFromApi = (row: any): Compra => {
-  const proveedorRel = row?.proveedor || row?.proveedores || {};
-  const terminoPagoRel =
-    row?.termino_pago || row?.terminos_pago || row?.terminoPago || {};
-  const estadoRel = row?.estado_compra || row?.estadoCompra || {};
-  const bodegaRel = row?.bodega || row?.bodegas || {};
-
-  const detalle = Array.isArray(row?.detalle_compra) ? row.detalle_compra : [];
-
-  const productos: ProductoOrden[] = detalle.map((item: any) => {
-    const productoRel = item?.producto || item?.productos || {};
-    const ivaRel = item?.iva || item?.ivas || {};
-
-    const cantidad = toNumber(item?.cantidad);
-    const precio = toNumber(item?.precio_unitario);
-    const subtotal = Number((cantidad * precio).toFixed(2));
-    const ivaPorcentaje = toNumber(ivaRel?.porcentaje ?? item?.porcentaje);
-
-    return {
-      producto: {
-        id: toNumber(item?.id_producto ?? productoRel?.id_producto ?? productoRel?.id),
-        nombre: pickText(
-          productoRel?.nombre_producto,
-          productoRel?.nombre,
-          item?.nombre_producto
-        ),
-      },
-      cantidad,
-      precio,
-      subtotal,
-      idIva: toNumber(item?.id_iva ?? ivaRel?.id_iva ?? ivaRel?.id),
-      ivaNombre:
-        pickText(ivaRel?.nombre_iva, ivaRel?.nombre) ||
-        `IVA ${ivaPorcentaje.toFixed(2)}%`,
-      ivaPorcentaje,
-    };
-  });
-
-  const estadoId = toNumber(
-    row?.id_estado_compra ?? estadoRel?.id_estado_compra ?? estadoRel?.id
-  );
-
-  const items =
-    detalle.length ||
-    toNumber(row?.items) ||
-    toNumber(row?._count?.detalle_compra) ||
-    toNumber(row?._count?.detalle);
-
-  return {
-    id: toNumber(row?.id_compra ?? row?.id),
-    numeroOrden: pickText(row?.codigo_compra, row?.numeroOrden, row?.numero_orden),
-    proveedor: pickText(
-      proveedorRel?.nombre_empresa,
-      proveedorRel?.nombre_proveedor,
-      proveedorRel?.nombre,
-      row?.proveedor
-    ),
-    proveedorId: toNumber(
-      row?.id_proveedor ?? proveedorRel?.id_proveedor ?? proveedorRel?.id
-    ),
-    terminoPago: pickText(
-      terminoPagoRel?.nombre_termino,
-      terminoPagoRel?.nombre_termino_pago,
-      terminoPagoRel?.nombre,
-      row?.termino_pago_nombre
-    ),
-    terminoPagoId: toNumber(
-      row?.id_termino_pago ??
-        terminoPagoRel?.id_termino_pago ??
-        terminoPagoRel?.id
-    ),
-    fecha: onlyDate(row?.fecha_solicitud ?? row?.fecha),
-    fechaEntrega: onlyDate(row?.fecha_entrega),
-    estado: normalizeEstado(
-      pickText(
-        estadoRel?.nombre_estado,
-        estadoRel?.nombre_estado_compra,
-        estadoRel?.estado_compra,
-        estadoRel?.nombre,
-        row?.estado
-      ),
-      estadoId
-    ),
-    estadoId,
-    items,
-    subtotal: toNumber(row?.subtotal),
-    impuestos: toNumber(row?.total_iva ?? row?.impuestos),
-    total: toNumber(row?.total),
-    observaciones: pickText(row?.descripcion, row?.observaciones),
-    bodega: pickText(
-      bodegaRel?.nombre_bodega,
-      bodegaRel?.nombre,
-      row?.bodega
-    ),
-    bodegaId: toNumber(row?.id_bodega ?? bodegaRel?.id_bodega ?? bodegaRel?.id),
-    productos,
-  };
-};
-
-const getRequestFirstSuccess = async (endpoints: string[]) => {
-  let lastError: unknown = null;
-
-  for (const endpoint of endpoints) {
-    try {
-      const response = await api.get(endpoint);
-      return response;
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  throw lastError;
-};
-
-const loadAllProveedoresOptions = async (): Promise<BasicOption[]> => {
-  const limit = 50;
-  let page = 1;
-  let totalPages = 1;
-  const acumulado: BasicOption[] = [];
-
-  do {
-    const resp = await getProveedores({ page, limit });
-
-    acumulado.push(
-      ...resp.data.map((item) => ({
-        id: item.id,
-        nombre: item.nombre,
-        estado: item.estado === "Activo",
-      }))
-    );
-
-    totalPages = resp.pages || 1;
-    page += 1;
-  } while (page <= totalPages);
-
-  const map = new Map<number, BasicOption>();
-  for (const item of acumulado) {
-    map.set(item.id, item);
-  }
-
-  return Array.from(map.values());
-};
-
-const loadAllProductosOptions = async (): Promise<BasicOption[]> => {
-  const limit = 50;
-  let page = 1;
-  let totalPages = 1;
-  const acumulado: BasicOption[] = [];
-
-  do {
-    const resp = await productosService.findAll({
-      page,
-      limit,
-      includeRefs: true,
-    });
-
-    acumulado.push(
-      ...resp.data.map((item) => ({
-        id: item.id,
-        nombre: item.nombre,
-        estado: item.estado,
-      }))
-    );
-
-    totalPages = resp.pages || 1;
-    page += 1;
-  } while (page <= totalPages);
-
-  const map = new Map<number, BasicOption>();
-  for (const item of acumulado) {
-    map.set(item.id, item);
-  }
-
-  return Array.from(map.values());
-};
-
-const getFechaActual = () => new Date().toISOString().split("T")[0];
+import { comprasService } from "../services/compras.services";
 
 export default function Compras() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -373,6 +81,7 @@ export default function Compras() {
   const [productosCatalogo, setProductosCatalogo] = useState<BasicOption[]>([]);
   const [terminosPago, setTerminosPago] = useState<BasicOption[]>([]);
   const [ivas, setIvas] = useState<IvaOption[]>([]);
+  const [bodegas, setBodegas] = useState<BasicOption[]>([]);
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
@@ -420,6 +129,16 @@ export default function Compras() {
   };
 
   const handleAnular = (c: Compra) => {
+    if (c.estado === "Aprobada") {
+      toast.error("No puedes anular una orden aprobada");
+      return;
+    }
+
+    if (c.estado === "Anulada") {
+      toast.error("La orden ya está anulada");
+      return;
+    }
+
     navigate(`/app/compras/${c.id}/anular`);
   };
 
@@ -432,6 +151,7 @@ export default function Compras() {
     estado: "Pendiente" as CompraEstado,
     observaciones: "",
     bodega: "",
+    bodegaId: "",
   });
 
   const [selectedProductoId, setSelectedProductoId] = useState("");
@@ -443,6 +163,10 @@ export default function Compras() {
   const productosActivos = useMemo(() => {
     return productosCatalogo.filter((p) => p.estado !== false);
   }, [productosCatalogo]);
+
+  const bodegasActivas = useMemo(() => {
+    return bodegas.filter((b) => b.estado !== false);
+  }, [bodegas]);
 
   const proveedoresActivos = useMemo(() => {
     return proveedores.filter((p) => p.estado !== false);
@@ -478,12 +202,7 @@ export default function Compras() {
   const loadCompras = useCallback(async () => {
     try {
       setIsLoading(true);
-
-      const { data } = await api.get("/compras", {
-        params: selectedBodegaId ? { id_bodega: selectedBodegaId } : undefined,
-      });
-
-      const rows = extractArray(data).map(mapCompraFromApi);
+      const rows = await comprasService.getAll(selectedBodegaId);
       setCompras(rows);
     } catch (error) {
       console.error("Error cargando compras:", error);
@@ -497,8 +216,8 @@ export default function Compras() {
     async (id: number) => {
       try {
         setIsLoadingDetail(true);
-        const { data } = await api.get(`/compras/${id}`);
-        setCompraDetalle(mapCompraFromApi(data));
+        const compra = await comprasService.getById(id);
+        setCompraDetalle(compra);
       } catch (error) {
         console.error("Error cargando detalle de compra:", error);
         toast.error("No se pudo cargar el detalle de la orden");
@@ -512,68 +231,20 @@ export default function Compras() {
 
   const loadCatalogos = useCallback(async () => {
     try {
-      const proveedoresPromise = loadAllProveedoresOptions();
-      const productosPromise = loadAllProductosOptions();
+      const result = await comprasService.getCatalogos();
 
-      const terminosPromise = api.get("/termino-pago");
+      setProveedores(result.proveedores);
+      setProductosCatalogo(result.productos);
+      setTerminosPago(result.terminosPago);
+      setIvas(result.ivas);
+      setBodegas(result.bodegas ?? []);
 
-      const ivasPromise = getRequestFirstSuccess([
-        "/iva",
-        "/ivas",
-      ]);
+      console.log("CATALOGOS COMPRAS =>", result);
 
-      const [proveedoresRes, productosRes, terminosRes, ivasRes] =
-        await Promise.allSettled([
-          proveedoresPromise,
-          productosPromise,
-          terminosPromise,
-          ivasPromise,
-        ]);
-
-      if (proveedoresRes.status === "fulfilled") {
-        setProveedores(
-          proveedoresRes.value.filter((x) => x.id > 0 && x.nombre)
+      if (result.huboError) {
+        toast.error(
+          "Uno o más catálogos no se pudieron cargar. Revisa la consola."
         );
-      } else {
-        console.error("Error cargando proveedores:", proveedoresRes.reason);
-      }
-
-      if (productosRes.status === "fulfilled") {
-        setProductosCatalogo(
-          productosRes.value.filter((x) => x.id > 0 && x.nombre)
-        );
-      } else {
-        console.error("Error cargando productos:", productosRes.reason);
-      }
-
-      if (terminosRes.status === "fulfilled") {
-        setTerminosPago(
-          extractArray(terminosRes.value.data)
-            .map(mapTerminoPagoOption)
-            .filter((x) => x.id > 0 && x.nombre)
-        );
-      } else {
-        console.error("Error cargando términos de pago:", terminosRes.reason);
-      }
-
-      if (ivasRes.status === "fulfilled") {
-        setIvas(
-          extractArray(ivasRes.value.data)
-            .map(mapIvaOption)
-            .filter((x) => x.id > 0)
-        );
-      } else {
-        console.error("Error cargando IVA:", ivasRes.reason);
-      }
-
-      const huboError =
-        proveedoresRes.status === "rejected" ||
-        productosRes.status === "rejected" ||
-        terminosRes.status === "rejected" ||
-        ivasRes.status === "rejected";
-
-      if (huboError) {
-        toast.error("Uno o más catálogos no se pudieron cargar. Revisa la consola.");
       }
     } catch (error) {
       console.error("Error inesperado cargando catálogos:", error);
@@ -581,48 +252,18 @@ export default function Compras() {
     }
   }, []);
 
-  useEffect(() => {
-    loadCatalogos();
-  }, [loadCatalogos]);
-
-  useEffect(() => {
-    loadCompras();
-  }, [loadCompras]);
-
-  useEffect(() => {
-    if (!params.id) {
-      setCompraDetalle(null);
-      return;
-    }
-
-    if (isVer || isEditar || isAnular) {
-      const id = Number(params.id);
-      if (!Number.isFinite(id)) {
-        closeToList();
-        return;
-      }
-      loadCompraDetalle(id);
-    }
-  }, [params.id, isVer, isEditar, isAnular, loadCompraDetalle, closeToList]);
-
   const filteredCompras = useMemo(() => {
     const s = searchTerm.toLowerCase();
 
-    return compras
-      .filter((c) => {
-        if (selectedBodegaId) return true;
-        if (!selectedBodega || selectedBodega === "Todas las bodegas") return true;
-        return c.bodega === selectedBodega;
-      })
-      .filter((c) => {
-        return (
-          c.numeroOrden.toLowerCase().includes(s) ||
-          c.proveedor.toLowerCase().includes(s) ||
-          c.estado.toLowerCase().includes(s) ||
-          String(c.items).includes(s)
-        );
-      });
-  }, [compras, searchTerm, selectedBodega, selectedBodegaId]);
+    return compras.filter((c) => {
+      return (
+        c.numeroOrden.toLowerCase().includes(s) ||
+        c.proveedor.toLowerCase().includes(s) ||
+        c.estado.toLowerCase().includes(s) ||
+        String(c.items).includes(s)
+      );
+    });
+  }, [compras, searchTerm]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -661,8 +302,9 @@ export default function Compras() {
     setShowConfirmEstadoModal(true);
   };
 
-  const buildCompraPayload = () => {
+  const buildCompraPayload = (): CompraCreatePayload => {
     return {
+      id_bodega: Number(formData.bodegaId),
       id_proveedor: Number(formData.proveedorId),
       id_termino_pago: Number(formData.terminoPagoId),
       descripcion: formData.observaciones.trim() || undefined,
@@ -687,9 +329,7 @@ export default function Compras() {
     }
 
     try {
-      await api.patch(`/compras/${compraParaCambioEstado.id}`, {
-        id_estado_compra: ESTADO_COMPRA_IDS.Aprobada,
-      });
+      await comprasService.aprobar(compraParaCambioEstado.id);
 
       await loadCompras();
 
@@ -837,8 +477,7 @@ export default function Compras() {
         return;
       }
 
-      const { data } = await api.get(`/compras/${compra.id}`);
-      const compraFull = mapCompraFromApi(data);
+      const compraFull = await comprasService.getById(compra.id);
       generateCompraPDF(compraFull);
     } catch (error) {
       console.error("Error generando PDF:", error);
@@ -858,7 +497,8 @@ export default function Compras() {
       bodega:
         selectedBodega && selectedBodega !== "Todas las bodegas"
           ? selectedBodega
-          : "Bodega activa",
+          : "",
+      bodegaId: selectedBodegaId ? String(selectedBodegaId) : "",
     });
 
     setSelectedProductoId("");
@@ -871,7 +511,7 @@ export default function Compras() {
   useEffect(() => {
     if (!isCrear) return;
     resetCompraForm();
-  }, [isCrear, selectedBodega]);
+  }, [isCrear, selectedBodega, selectedBodegaId]);
 
   useEffect(() => {
     if (!isEditar) return;
@@ -885,7 +525,8 @@ export default function Compras() {
       fechaEntrega: compraDetalle.fechaEntrega,
       estado: compraDetalle.estado,
       observaciones: compraDetalle.observaciones,
-      bodega: compraDetalle.bodega || "Bodega activa",
+      bodega: compraDetalle.bodega || "",
+      bodegaId: String(compraDetalle.bodegaId || ""),
     });
 
     setProductosOrden(compraDetalle.productos ?? []);
@@ -894,6 +535,27 @@ export default function Compras() {
     setCantidadProducto(1);
     setPrecioProducto("");
   }, [isEditar, compraDetalle]);
+
+  useEffect(() => {
+    loadCompras();
+  }, [loadCompras]);
+
+  useEffect(() => {
+    loadCatalogos();
+  }, [loadCatalogos]);
+
+  useEffect(() => {
+    const id = Number(params.id);
+
+    if (!params.id || Number.isNaN(id)) {
+      setCompraDetalle(null);
+      return;
+    }
+
+    if (isVer || isEditar || isAnular) {
+      loadCompraDetalle(id);
+    }
+  }, [params.id, isVer, isEditar, isAnular, loadCompraDetalle]);
 
   const handleAgregarProducto = () => {
     if (!selectedProductoId) {
@@ -974,6 +636,11 @@ export default function Compras() {
   const confirmCreate = async () => {
     if (isSaving) return;
 
+    if (!formData.bodegaId) {
+      toast.error("Debes seleccionar una bodega");
+      return;
+    }
+
     if (!formData.proveedorId) {
       toast.error("Debes seleccionar un proveedor");
       return;
@@ -997,7 +664,7 @@ export default function Compras() {
     try {
       setIsSaving(true);
 
-      await api.post("/compras", buildCompraPayload());
+      await comprasService.create(buildCompraPayload());
 
       await loadCompras();
       closeToList();
@@ -1012,6 +679,11 @@ export default function Compras() {
 
   const confirmEdit = async () => {
     if (!compraDetalle || isSaving) return;
+
+    if (!formData.bodegaId) {
+      toast.error("Debes seleccionar una bodega");
+      return;
+    }
 
     if (compraDetalle.estado === "Anulada") {
       toast.error("No puedes editar una orden anulada");
@@ -1041,7 +713,7 @@ export default function Compras() {
     try {
       setIsSaving(true);
 
-      await api.patch(`/compras/${compraDetalle.id}`, {
+      await comprasService.update(compraDetalle.id, {
         ...buildCompraPayload(),
         id_estado_compra: ESTADO_COMPRA_IDS[formData.estado],
       });
@@ -1057,6 +729,10 @@ export default function Compras() {
     }
   };
 
+  const handleSuccessModalClose = () => {
+    setShowSuccessModal(false);
+  };
+
   const confirmAnular = async () => {
     if (!compraDetalle) return;
 
@@ -1065,10 +741,13 @@ export default function Compras() {
       return;
     }
 
+    if (compraDetalle.estado === "Aprobada") {
+      toast.error("No puedes anular una orden aprobada");
+      return;
+    }
+
     try {
-      await api.patch(`/compras/${compraDetalle.id}`, {
-        id_estado_compra: ESTADO_COMPRA_IDS.Anulada,
-      });
+      await comprasService.anular(compraDetalle.id);
 
       await loadCompras();
       toast.success("Orden anulada exitosamente");
@@ -1077,10 +756,6 @@ export default function Compras() {
       console.error("Error anulando compra:", error);
       toast.error("No se pudo anular la orden");
     }
-  };
-
-  const handleSuccessModalClose = () => {
-    setShowSuccessModal(false);
   };
 
   const compraSeleccionada = compraDetalle;
@@ -1273,8 +948,20 @@ export default function Compras() {
                           onClick={() => handleAnular(compra)}
                           className="hover:bg-red-50"
                           title="Anular"
+                          disabled={
+                            compra.estado === "Aprobada" ||
+                            compra.estado === "Anulada"
+                          }
                         >
-                          <Ban size={16} className="text-red-600" />
+                          <Ban
+                            size={16}
+                            className={
+                              compra.estado === "Aprobada" ||
+                              compra.estado === "Anulada"
+                                ? "text-gray-400"
+                                : "text-red-600"
+                            }
+                          />
                         </Button>
                       </div>
                     </TableCell>
@@ -1341,213 +1028,267 @@ export default function Compras() {
         }}
       >
         <DialogContent
-          className="max-w-6xl max-h-[85vh] overflow-y-auto"
+          className="max-w-6xl w-[95vw] max-h-[90vh] overflow-y-auto p-0"
           aria-describedby="create-order-description"
           onInteractOutside={(e) => e.preventDefault()}
         >
-          <DialogHeader>
-            <DialogTitle>Nueva Orden de Compra</DialogTitle>
-            <DialogDescription id="create-order-description">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b bg-white">
+            <DialogTitle className="text-2xl font-semibold">
+              Nueva Orden de Compra
+            </DialogTitle>
+            <DialogDescription id="create-order-description" className="text-sm text-gray-500">
               Completa la información para crear una nueva orden de compra
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-6 py-4 px-2">
-            <div className="grid grid-cols-4 gap-6">
-              <div className="space-y-2">
-                <Label htmlFor="numeroOrden">Número de Orden</Label>
-                <Input
-                  id="numeroOrden"
-                  value={formData.numeroOrden || "Se genera automáticamente"}
-                  disabled
-                  className="bg-gray-100 h-12"
-                />
+          <div className="px-6 py-6 space-y-6">
+            <div className="rounded-xl border bg-white p-5 space-y-5">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-semibold text-gray-800">
+                  Información General
+                </h3>
+                <span className="text-xs text-gray-500">Campos principales de la orden</span>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="fecha">Fecha</Label>
-                <Input
-                  id="fecha"
-                  type="date"
-                  value={formData.fecha}
-                  disabled
-                  className="bg-gray-100 h-12"
-                />
-              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+                <div className="space-y-2">
+                  <Label htmlFor="numeroOrden">Número de Orden</Label>
+                  <Input
+                    id="numeroOrden"
+                    value={formData.numeroOrden || "Se genera automáticamente"}
+                    disabled
+                    className="bg-gray-100 h-12"
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="fechaEntrega">Fecha de Entrega *</Label>
-                <Input
-                  id="fechaEntrega"
-                  type="date"
-                  value={formData.fechaEntrega}
-                  onChange={(e) =>
-                    setFormData({ ...formData, fechaEntrega: e.target.value })
-                  }
-                  className="h-12"
-                />
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="fecha">Fecha</Label>
+                  <Input
+                    id="fecha"
+                    type="date"
+                    value={formData.fecha}
+                    disabled
+                    className="bg-gray-100 h-12"
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="bodega">Bodega</Label>
-                <Input
-                  id="bodega"
-                  value={formData.bodega || "Bodega activa"}
-                  disabled
-                  className="bg-gray-100 h-12"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label htmlFor="proveedor">Proveedor *</Label>
-                <div className="flex gap-4">
-                  <Select
-                    value={formData.proveedorId}
-                    onValueChange={(value: string) =>
-                      setFormData({ ...formData, proveedorId: value })
+                <div className="space-y-2">
+                  <Label htmlFor="fechaEntrega">Fecha de Entrega *</Label>
+                  <Input
+                    id="fechaEntrega"
+                    type="date"
+                    value={formData.fechaEntrega}
+                    onChange={(e) =>
+                      setFormData({ ...formData, fechaEntrega: e.target.value })
                     }
+                    className="h-12"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="bodega">Bodega *</Label>
+                  <Select
+                    value={formData.bodegaId}
+                    onValueChange={(value: string) => {
+                      const bodegaSeleccionada = bodegasActivas.find(
+                        (bodega) => String(bodega.id) === value
+                      );
+
+                      setFormData({
+                        ...formData,
+                        bodegaId: value,
+                        bodega: bodegaSeleccionada?.nombre || "",
+                      });
+                    }}
                   >
-                    <SelectTrigger id="proveedor" className="flex-1 h-12">
-                      <SelectValue placeholder="Selecciona un proveedor" />
+                    <SelectTrigger id="bodega" className="h-12">
+                      <SelectValue placeholder="Selecciona una bodega" />
                     </SelectTrigger>
                     <SelectContent>
-                      {proveedoresActivos.length === 0 ? (
+                      {bodegasActivas.length === 0 ? (
                         <div className="px-2 py-2 text-sm text-gray-500">
-                          No hay proveedores activos disponibles
+                          No hay bodegas disponibles
                         </div>
                       ) : (
-                        proveedoresActivos.map((proveedor) => (
-                          <SelectItem key={proveedor.id} value={String(proveedor.id)}>
-                            {proveedor.nombre}
+                        bodegasActivas.map((bodega) => (
+                          <SelectItem key={bodega.id} value={String(bodega.id)}>
+                            {bodega.nombre}
                           </SelectItem>
                         ))
                       )}
                     </SelectContent>
                   </Select>
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => navigate("/app/proveedores/crear")}
-                    className="border-blue-600 text-blue-600 hover:bg-blue-50 px-8 h-12"
-                  >
-                    <Plus size={18} className="mr-2" />
-                    Nuevo Proveedor
-                  </Button>
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="terminoPago">Término de Pago *</Label>
-                <Select
-                  value={formData.terminoPagoId}
-                  onValueChange={(value: string) =>
-                    setFormData({ ...formData, terminoPagoId: value })
-                  }
-                >
-                  <SelectTrigger id="terminoPago" className="h-12">
-                    <SelectValue placeholder="Selecciona un término de pago" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {terminosPagoActivos.length === 0 ? (
-                      <div className="px-2 py-2 text-sm text-gray-500">
-                        No hay términos de pago disponibles
-                      </div>
-                    ) : (
-                      terminosPagoActivos.map((termino) => (
-                        <SelectItem key={termino.id} value={String(termino.id)}>
-                          {termino.nombre}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
               </div>
             </div>
 
-            <div className="border-t pt-6 mt-6">
-              <Label className="text-lg mb-4 block">Productos de la Orden</Label>
+            <div className="rounded-xl border bg-white p-5 space-y-5">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-semibold text-gray-800">
+                  Proveedor y Condiciones
+                </h3>
+                <span className="text-xs text-gray-500">Asocia proveedor y forma de pago</span>
+              </div>
 
-              <div className="grid grid-cols-12 gap-4">
-                <div className="col-span-4 space-y-2">
-                  <Label htmlFor="producto">Producto</Label>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+                <div className="space-y-2">
+                  <Label htmlFor="proveedor">Proveedor *</Label>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <Select
+                      value={formData.proveedorId}
+                      onValueChange={(value: string) =>
+                        setFormData({ ...formData, proveedorId: value })
+                      }
+                    >
+                      <SelectTrigger id="proveedor" className="flex-1 h-12">
+                        <SelectValue placeholder="Selecciona un proveedor" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {proveedoresActivos.length === 0 ? (
+                          <div className="px-2 py-2 text-sm text-gray-500">
+                            No hay proveedores activos disponibles
+                          </div>
+                        ) : (
+                          proveedoresActivos.map((proveedor) => (
+                            <SelectItem key={proveedor.id} value={String(proveedor.id)}>
+                              {proveedor.nombre}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => navigate("/app/proveedores/crear")}
+                      className="border-blue-600 text-blue-600 hover:bg-blue-50 h-12 px-5 whitespace-nowrap"
+                    >
+                      <Plus size={18} className="mr-2" />
+                      Nuevo Proveedor
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="terminoPago">Término de Pago *</Label>
                   <Select
-                    value={selectedProductoId}
-                    onValueChange={setSelectedProductoId}
-                  >
-                    <SelectTrigger id="producto" className="h-12">
-                      <SelectValue placeholder="Selecciona un producto" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {productosActivos.map((producto) => (
-                        <SelectItem key={producto.id} value={String(producto.id)}>
-                          {producto.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="col-span-2 space-y-2">
-                  <Label htmlFor="cantidad">Cantidad</Label>
-                  <Input
-                    id="cantidad"
-                    type="number"
-                    value={cantidadProducto}
-                    onChange={(e) =>
-                      setCantidadProducto(parseInt(e.target.value) || 1)
+                    value={formData.terminoPagoId}
+                    onValueChange={(value: string) =>
+                      setFormData({ ...formData, terminoPagoId: value })
                     }
-                    min="1"
-                    className="h-12"
-                  />
-                </div>
-
-                <div className="col-span-2 space-y-2">
-                  <Label htmlFor="iva">IVA</Label>
-                  <Select value={selectedIvaId} onValueChange={setSelectedIvaId}>
-                    <SelectTrigger id="iva" className="h-12">
-                      <SelectValue placeholder="Selecciona IVA" />
+                  >
+                    <SelectTrigger id="terminoPago" className="h-12">
+                      <SelectValue placeholder="Selecciona un término de pago" />
                     </SelectTrigger>
                     <SelectContent>
-                      {ivasActivos.map((iva) => (
-                        <SelectItem key={iva.id} value={String(iva.id)}>
-                          {iva.nombre} ({iva.porcentaje}%)
-                        </SelectItem>
-                      ))}
+                      {terminosPagoActivos.length === 0 ? (
+                        <div className="px-2 py-2 text-sm text-gray-500">
+                          No hay términos de pago disponibles
+                        </div>
+                      ) : (
+                        terminosPagoActivos.map((termino) => (
+                          <SelectItem key={termino.id} value={String(termino.id)}>
+                            {termino.nombre}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+            </div>
 
-                <div className="col-span-2 space-y-2">
-                  <Label htmlFor="precio">Precio Unitario</Label>
-                  <Input
-                    id="precio"
-                    type="number"
-                    value={precioProducto}
-                    onChange={(e) => setPrecioProducto(e.target.value)}
-                    min="0"
-                    step="0.01"
-                    placeholder="0.00"
-                    className="h-12 sin-flechas"
-                  />
-                </div>
+            <div className="rounded-xl border bg-white p-5 space-y-5">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-semibold text-gray-800">
+                  Productos de la Orden
+                </h3>
+                <span className="text-xs text-gray-500">
+                  Agrega los productos que incluirá la compra
+                </span>
+              </div>
 
-                <div className="col-span-2 flex items-end">
-                  <Button
-                    type="button"
-                    onClick={handleAgregarProducto}
-                    className="w-full bg-green-600 hover:bg-green-700 h-12"
-                  >
-                    <Plus size={18} className="mr-2" />
-                    Agregar
-                  </Button>
+              <div className="rounded-xl border bg-gray-50 p-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-4">
+                  <div className="xl:col-span-4 space-y-2">
+                    <Label htmlFor="producto">Producto</Label>
+                    <Select
+                      value={selectedProductoId}
+                      onValueChange={setSelectedProductoId}
+                    >
+                      <SelectTrigger id="producto" className="h-12 bg-white">
+                        <SelectValue placeholder="Selecciona un producto" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {productosActivos.map((producto) => (
+                          <SelectItem key={producto.id} value={String(producto.id)}>
+                            {producto.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="xl:col-span-2 space-y-2">
+                    <Label htmlFor="cantidad">Cantidad</Label>
+                    <Input
+                      id="cantidad"
+                      type="number"
+                      value={cantidadProducto}
+                      onChange={(e) =>
+                        setCantidadProducto(parseInt(e.target.value) || 1)
+                      }
+                      min="1"
+                      className="h-12 bg-white"
+                    />
+                  </div>
+
+                  <div className="xl:col-span-2 space-y-2">
+                    <Label htmlFor="iva">IVA</Label>
+                    <Select value={selectedIvaId} onValueChange={setSelectedIvaId}>
+                      <SelectTrigger id="iva" className="h-12 bg-white">
+                        <SelectValue placeholder="Selecciona IVA" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ivasActivos.map((iva) => (
+                          <SelectItem key={iva.id} value={String(iva.id)}>
+                            {iva.nombre} ({iva.porcentaje}%)
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="xl:col-span-2 space-y-2">
+                    <Label htmlFor="precio">Precio Unitario</Label>
+                    <Input
+                      id="precio"
+                      type="number"
+                      value={precioProducto}
+                      onChange={(e) => setPrecioProducto(e.target.value)}
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      className="h-12 bg-white sin-flechas"
+                    />
+                  </div>
+
+                  <div className="xl:col-span-2 flex items-end">
+                    <Button
+                      type="button"
+                      onClick={handleAgregarProducto}
+                      className="w-full bg-green-600 hover:bg-green-700 h-12"
+                    >
+                      <Plus size={18} className="mr-2" />
+                      Agregar
+                    </Button>
+                  </div>
                 </div>
               </div>
 
               {productosOrden.length > 0 && (
-                <div className="mt-4 border rounded-lg overflow-hidden">
+                <div className="border rounded-xl overflow-hidden">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-gray-50">
@@ -1562,7 +1303,7 @@ export default function Compras() {
 
                     <TableBody>
                       {productosOrden.map((item) => (
-                        <TableRow key={item.producto.id}>
+                        <TableRow key={item.producto.id} className="hover:bg-gray-50">
                           <TableCell className="font-medium">
                             {item.producto.nombre}
                           </TableCell>
@@ -1575,7 +1316,7 @@ export default function Compras() {
                           <TableCell className="text-right">
                             ${item.precio.toLocaleString("es-CO")}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="text-right font-medium">
                             ${item.subtotal.toLocaleString("es-CO")}
                           </TableCell>
                           <TableCell className="text-center">
@@ -1597,7 +1338,7 @@ export default function Compras() {
                 </div>
               )}
 
-              <div className="mt-4 bg-gray-50 p-4 rounded-lg space-y-2">
+              <div className="bg-gray-50 rounded-xl border p-4 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">N° de Items:</span>
                   <span className="font-medium">{calcularTotales.items}</span>
@@ -1614,7 +1355,7 @@ export default function Compras() {
                     ${calcularTotales.impuestos.toLocaleString("es-CO")}
                   </span>
                 </div>
-                <div className="flex justify-between text-lg border-t pt-2">
+                <div className="flex justify-between text-lg border-t pt-3 mt-2">
                   <span className="font-semibold">Total:</span>
                   <span className="font-bold text-blue-600">
                     ${calcularTotales.total.toLocaleString("es-CO")}
@@ -1623,21 +1364,28 @@ export default function Compras() {
               </div>
             </div>
 
-            <div>
-              <Label htmlFor="observaciones">Observaciones</Label>
-              <Textarea
-                id="observaciones"
-                value={formData.observaciones}
-                onChange={(e) =>
-                  setFormData({ ...formData, observaciones: e.target.value })
-                }
-                placeholder="Escribe cualquier observación sobre la orden de compra..."
-                rows={3}
-              />
+            <div className="rounded-xl border bg-white p-5 space-y-3">
+              <h3 className="text-base font-semibold text-gray-800">
+                Observaciones
+              </h3>
+
+              <div className="space-y-2">
+                <Label htmlFor="observaciones">Notas adicionales</Label>
+                <Textarea
+                  id="observaciones"
+                  value={formData.observaciones}
+                  onChange={(e) =>
+                    setFormData({ ...formData, observaciones: e.target.value })
+                  }
+                  placeholder="Escribe cualquier observación sobre la orden de compra..."
+                  rows={4}
+                  className="resize-none"
+                />
+              </div>
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="border-t bg-white px-6 py-4">
             <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
@@ -1915,7 +1663,6 @@ export default function Compras() {
                     <SelectContent>
                       <SelectItem value="Pendiente">Pendiente</SelectItem>
                       <SelectItem value="Aprobada">Aprobada</SelectItem>
-                      <SelectItem value="Anulada">Anulada</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1965,13 +1712,38 @@ export default function Compras() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="edit-bodega">Bodega</Label>
-                  <Input
-                    id="edit-bodega"
-                    value={formData.bodega}
-                    disabled
-                    className="bg-gray-100 h-12"
-                  />
+                  <Label htmlFor="edit-bodega">Bodega *</Label>
+                  <Select
+                    value={formData.bodegaId}
+                    onValueChange={(value: string) => {
+                      const bodegaSeleccionada = bodegasActivas.find(
+                        (bodega) => String(bodega.id) === value
+                      );
+
+                      setFormData({
+                        ...formData,
+                        bodegaId: value,
+                        bodega: bodegaSeleccionada?.nombre || "",
+                      });
+                    }}
+                  >
+                    <SelectTrigger id="edit-bodega" className="h-12">
+                      <SelectValue placeholder="Selecciona una bodega" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {bodegasActivas.length === 0 ? (
+                        <div className="px-2 py-2 text-sm text-gray-500">
+                          No hay bodegas disponibles
+                        </div>
+                      ) : (
+                        bodegasActivas.map((bodega) => (
+                          <SelectItem key={bodega.id} value={String(bodega.id)}>
+                            {bodega.nombre}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -2185,12 +1957,21 @@ export default function Compras() {
             </div>
           ) : compraSeleccionada ? (
             <div className="py-4">
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-                <p className="text-sm text-yellow-800">
-                  Esta acción no se puede deshacer. La orden{" "}
-                  <strong>{compraSeleccionada.numeroOrden}</strong> será anulada.
-                </p>
-              </div>
+              {compraSeleccionada.estado === "Aprobada" ? (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                  <p className="text-sm text-red-800">
+                    La orden <strong>{compraSeleccionada.numeroOrden}</strong> está
+                    aprobada y no puede ser anulada.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                  <p className="text-sm text-yellow-800">
+                    Esta acción no se puede deshacer. La orden{" "}
+                    <strong>{compraSeleccionada.numeroOrden}</strong> será anulada.
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-2 text-sm">
                 <p>
@@ -2199,6 +1980,9 @@ export default function Compras() {
                 <p>
                   <strong>Total:</strong> $
                   {compraSeleccionada.total.toLocaleString("es-CO")}
+                </p>
+                <p>
+                  <strong>Estado:</strong> {compraSeleccionada.estado}
                 </p>
               </div>
             </div>
@@ -2212,7 +1996,15 @@ export default function Compras() {
             <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
-            <Button onClick={confirmAnular} className="bg-red-600 hover:bg-red-700">
+            <Button
+              onClick={confirmAnular}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={
+                !compraSeleccionada ||
+                compraSeleccionada.estado === "Aprobada" ||
+                compraSeleccionada.estado === "Anulada"
+              }
+            >
               Anular
             </Button>
           </DialogFooter>
