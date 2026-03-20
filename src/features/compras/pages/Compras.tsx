@@ -888,7 +888,7 @@ export default function Compras() {
       <div>
         <h2 className="text-gray-900">Órdenes de Compra</h2>
         <p className="text-gray-600 mt-1">
-          Gestiona las órdenes de compra de productos
+          Administra la información de tus órdenes de compra  
         </p>
       </div>
 

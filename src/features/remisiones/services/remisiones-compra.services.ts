@@ -145,6 +145,17 @@ const unwrapResponse = <T = any>(response: any): T => {
   return response?.data?.data ?? response?.data ?? response;
 };
 
+const filterBySelectedBodega = <T extends { idBodega: number }>(
+  items: T[],
+  selectedBodegaId?: number
+) => {
+  if (!selectedBodegaId) return items;
+
+  return items.filter(
+    (item) => Number(item.idBodega) === Number(selectedBodegaId)
+  );
+};
+
 const extractList = <T = any>(raw: any): T[] => {
   if (Array.isArray(raw)) return raw;
   if (Array.isArray(raw?.items)) return raw.items;
@@ -161,70 +172,15 @@ const formatDateOnly = (value: unknown) => {
   return date.toISOString().split("T")[0];
 };
 
-const buildBodegaParamsVariants = (selectedBodegaId?: number) => {
-  if (!selectedBodegaId) return [{}];
-
-  return [
-    { idBodega: selectedBodegaId },
-    { id_bodega: selectedBodegaId },
-    {},
-  ];
+const buildBodegaParams = (selectedBodegaId?: number) => {
+  if (!selectedBodegaId) return undefined;
+  return { idBodega: selectedBodegaId };
 };
 
-async function getRequestFirstSuccess(
-  candidates: Array<{ url: string; params?: Record<string, any> }>
-) {
-  let lastError: unknown;
-
-  for (const candidate of candidates) {
-    try {
-      const response = await api.get(candidate.url, {
-        params: candidate.params,
-      });
-      return unwrapResponse(response);
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  throw lastError;
-}
-
-async function postRequestFirstSuccess(
-  candidates: Array<{ url: string; data?: Record<string, any> }>
-) {
-  let lastError: unknown;
-
-  for (const candidate of candidates) {
-    try {
-      const response = await api.post(candidate.url, candidate.data);
-      return unwrapResponse(response);
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  throw lastError;
-}
-
-async function patchRequestFirstSuccess(
-  candidates: Array<{ url: string; data?: Record<string, any> }>
-) {
-  let lastError: unknown;
-
-  for (const candidate of candidates) {
-    try {
-      const response = await api.patch(candidate.url, candidate.data);
-      return unwrapResponse(response);
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  throw lastError;
-}
-
-const getEstadoKey = (estado: unknown, afectaExistencias?: boolean): EstadoRemisionKey => {
+const getEstadoKey = (
+  estado: unknown,
+  afectaExistencias?: boolean
+): EstadoRemisionKey => {
   const norm = normalizeText(estado);
 
   if (norm === "anulada") return "ANULADA";
@@ -250,7 +206,8 @@ const mapRemisionItem = (raw: RawRecord): RemisionCompraItemUI => {
   );
 
   return {
-    id_detalle_remision_compra: toNumber(raw?.id_detalle_remision_compra || 0) || undefined,
+    id_detalle_remision_compra:
+      toNumber(raw?.id_detalle_remision_compra || 0) || undefined,
     id_producto: toNumber(
       raw?.id_producto ?? raw?.producto?.id_producto ?? raw?.producto?.id ?? raw?.idProducto
     ),
@@ -265,8 +222,12 @@ const mapRemisionItem = (raw: RawRecord): RemisionCompraItemUI => {
     ivaPorcentaje,
     lote: toStringSafe(raw?.lote),
     fecha_vencimiento: formatDateOnly(raw?.fecha_vencimiento),
-    codigo_barras: toStringSafe(raw?.codigo_barras ?? raw?.cod_barras ?? raw?.codigoBarras),
-    cod_barras: toStringSafe(raw?.codigo_barras ?? raw?.cod_barras ?? raw?.codigoBarras),
+    codigo_barras: toStringSafe(
+      raw?.codigo_barras ?? raw?.cod_barras ?? raw?.codigoBarras
+    ),
+    cod_barras: toStringSafe(
+      raw?.codigo_barras ?? raw?.cod_barras ?? raw?.codigoBarras
+    ),
     nota: toStringSafe(raw?.nota),
   };
 };
@@ -375,8 +336,8 @@ const mapCompraDetail = (raw: RawRecord): CompraDetail => {
     asArray(raw?.detalle_compra).length > 0
       ? asArray(raw?.detalle_compra)
       : asArray(raw?.items).length > 0
-        ? asArray(raw?.items)
-        : asArray(raw?.detalles);
+      ? asArray(raw?.items)
+      : asArray(raw?.detalles);
 
   return {
     id: toNumber(raw?.id_compra ?? raw?.id),
@@ -394,37 +355,38 @@ const mapCompraDetail = (raw: RawRecord): CompraDetail => {
 };
 
 export async function getRemisionesCompra(selectedBodegaId?: number) {
-  const paramsVariants = buildBodegaParamsVariants(selectedBodegaId);
+  const params = buildBodegaParams(selectedBodegaId);
+  const response = await api.get("/remisiones-compra", { params });
+  const raw = unwrapResponse(response);
 
-  const raw = await getRequestFirstSuccess([
-    ...paramsVariants.map((params) => ({
-      url: "/remisiones-compra",
-      params,
-    })),
-    ...paramsVariants.map((params) => ({
-      url: "/remision-compra",
-      params,
-    })),
-  ]);
+  const remisiones = extractList(raw)
+    .map(mapRemision)
+    .filter((item) => item.id > 0);
 
-  return extractList(raw).map(mapRemision);
+  const filtradas = filterBySelectedBodega(remisiones, selectedBodegaId);
+
+  const unique = Array.from(
+    new Map(filtradas.map((item) => [item.id, item])).values()
+  );
+
+  return unique.sort((a, b) => b.id - a.id);
 }
 
 export async function getRemisionCompraById(id: number) {
-  const raw = await getRequestFirstSuccess([
-    { url: `/remisiones-compra/${id}` },
-    { url: `/remision-compra/${id}` },
-  ]);
-
+  const response = await api.get(`/remisiones-compra/${id}`);
+  const raw = unwrapResponse(response);
   return mapRemision(raw);
 }
 
-export async function createRemisionCompra(payload: CreateRemisionCompraPayload) {
-  const raw = await postRequestFirstSuccess([
-    { url: "/remisiones-compra", data: payload },
-    { url: "/remision-compra", data: payload },
-  ]);
+export async function getCompraById(id: number) {
+  const response = await api.get(`/compras/${id}`);
+  const raw = unwrapResponse(response);
+  return mapCompraDetail(raw);
+}
 
+export async function createRemisionCompra(payload: CreateRemisionCompraPayload) {
+  const response = await api.post("/remisiones-compra", payload);
+  const raw = unwrapResponse(response);
   return mapRemision(raw);
 }
 
@@ -432,11 +394,8 @@ export async function updateRemisionCompra(
   id: number,
   payload: UpdateRemisionCompraPayload
 ) {
-  const raw = await patchRequestFirstSuccess([
-    { url: `/remisiones-compra/${id}`, data: payload },
-    { url: `/remision-compra/${id}`, data: payload },
-  ]);
-
+  const response = await api.patch(`/remisiones-compra/${id}`, payload);
+  const raw = unwrapResponse(response);
   return mapRemision(raw);
 }
 
@@ -444,44 +403,26 @@ export async function cambiarEstadoRemisionCompra(
   id: number,
   payload: CambiarEstadoRemisionCompraPayload
 ) {
-  const raw = await patchRequestFirstSuccess([
-    { url: `/remisiones-compra/${id}/estado`, data: payload },
-    { url: `/remision-compra/${id}/estado`, data: payload },
-  ]);
-
+  const response = await api.patch(`/remisiones-compra/${id}/estado`, payload);
+  const raw = unwrapResponse(response);
   return mapRemision(raw);
 }
 
 export async function getComprasOptions(selectedBodegaId?: number) {
-  const paramsVariants = buildBodegaParamsVariants(selectedBodegaId);
-
-  const raw = await getRequestFirstSuccess([
-    ...paramsVariants.map((params) => ({
-      url: "/compras",
-      params,
-    })),
-    ...paramsVariants.map((params) => ({
-      url: "/compras/options",
-      params,
-    })),
-  ]);
+  const params = buildBodegaParams(selectedBodegaId);
+  const response = await api.get("/compras", { params });
+  const raw = unwrapResponse(response);
 
   const compras = extractList(raw)
     .map(mapCompraOption)
     .filter((item) => item.id > 0);
 
+  const filtradas = filterBySelectedBodega(compras, selectedBodegaId);
+
   const unique = Array.from(
-    new Map(compras.map((item) => [item.id, item])).values()
+    new Map(filtradas.map((item) => [item.id, item])).values()
   );
 
   return unique.sort((a, b) => b.id - a.id);
 }
-
-export async function getCompraById(id: number) {
-  const raw = await getRequestFirstSuccess([
-    { url: `/compras/${id}` },
-    { url: `/compras/detalle/${id}` },
-  ]);
-
-  return mapCompraDetail(raw);
-}
+  

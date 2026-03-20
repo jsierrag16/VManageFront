@@ -134,6 +134,181 @@ const buildEmptyForm = () => ({
   idFactura: "",
 });
 
+const safeJsonParse = (value: string) => {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+};
+
+const extractNumberFromUnknown = (value: unknown): number | undefined => {
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
+};
+
+const extractStringFromUnknown = (value: unknown): string | undefined => {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  return undefined;
+};
+
+const extractBodegaIdFromUnknown = (
+  value: unknown,
+  depth = 0
+): number | undefined => {
+  if (depth > 5 || value === null || value === undefined) return undefined;
+
+  const direct = extractNumberFromUnknown(value);
+  if (direct) return direct;
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = extractBodegaIdFromUnknown(item, depth + 1);
+      if (found) return found;
+    }
+    return undefined;
+  }
+
+  if (typeof value !== "object") return undefined;
+
+  const obj = value as Record<string, unknown>;
+
+  const directCandidates: unknown[] = [
+    obj.selectedBodegaId,
+    obj.idBodega,
+    obj.id_bodega,
+    obj.idBodegaActiva,
+    obj.id_bodega_activa,
+    (obj.selectedBodega as any)?.id,
+    (obj.selectedBodega as any)?.idBodega,
+    (obj.selectedBodega as any)?.id_bodega,
+    (obj.bodega as any)?.id,
+    (obj.bodega as any)?.idBodega,
+    (obj.bodega as any)?.id_bodega,
+    (obj.activeBodega as any)?.id,
+    (obj.activeBodega as any)?.idBodega,
+    (obj.activeBodega as any)?.id_bodega,
+  ];
+
+  for (const candidate of directCandidates) {
+    const found = extractNumberFromUnknown(candidate);
+    if (found) return found;
+  }
+
+  for (const candidate of Object.values(obj)) {
+    const found = extractBodegaIdFromUnknown(candidate, depth + 1);
+    if (found) return found;
+  }
+
+  return undefined;
+};
+
+const extractBodegaNombreFromUnknown = (
+  value: unknown,
+  depth = 0
+): string | undefined => {
+  if (depth > 5 || value === null || value === undefined) return undefined;
+
+  const directString = extractStringFromUnknown(value);
+  if (directString) return directString;
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = extractBodegaNombreFromUnknown(item, depth + 1);
+      if (found) return found;
+    }
+    return undefined;
+  }
+
+  if (typeof value !== "object") return undefined;
+
+  const obj = value as Record<string, unknown>;
+
+  const directCandidates: unknown[] = [
+    obj.selectedBodegaNombre,
+    obj.selectedBodegaName,
+    obj.bodegaNombreActiva,
+    obj.nombre_bodega,
+    obj.nombreBodega,
+    (obj.selectedBodega as any)?.nombre_bodega,
+    (obj.selectedBodega as any)?.nombreBodega,
+    (obj.selectedBodega as any)?.nombre,
+    (obj.bodega as any)?.nombre_bodega,
+    (obj.bodega as any)?.nombreBodega,
+    (obj.bodega as any)?.nombre,
+    (obj.activeBodega as any)?.nombre_bodega,
+    (obj.activeBodega as any)?.nombreBodega,
+    (obj.activeBodega as any)?.nombre,
+  ];
+
+  for (const candidate of directCandidates) {
+    const found = extractStringFromUnknown(candidate);
+    if (found) return found;
+  }
+
+  for (const candidate of Object.values(obj)) {
+    const found = extractBodegaNombreFromUnknown(candidate, depth + 1);
+    if (found) return found;
+  }
+
+  return undefined;
+};
+
+const getStoredBodegaState = () => {
+  if (typeof window === "undefined") {
+    return {
+      id: undefined as number | undefined,
+      nombre: "",
+    };
+  }
+
+  const storages = [window.localStorage, window.sessionStorage];
+
+  let foundId: number | undefined;
+  let foundNombre = "";
+
+  for (const storage of storages) {
+    const rawSelectedBodega = storage.getItem("selectedBodega");
+    const rawSelectedBodegaId =
+      storage.getItem("selectedBodegaId") ||
+      storage.getItem("idBodegaActiva") ||
+      storage.getItem("id_bodega_activa");
+
+    const rawSelectedBodegaNombre =
+      storage.getItem("selectedBodegaNombre") ||
+      storage.getItem("selectedBodegaName");
+
+    if (!foundId && rawSelectedBodegaId) {
+      foundId = extractNumberFromUnknown(rawSelectedBodegaId);
+    }
+
+    if (!foundNombre && rawSelectedBodegaNombre) {
+      foundNombre = extractStringFromUnknown(rawSelectedBodegaNombre) ?? "";
+    }
+
+    if (rawSelectedBodega) {
+      const parsed = safeJsonParse(rawSelectedBodega);
+
+      if (parsed !== undefined) {
+        if (!foundId) {
+          foundId = extractBodegaIdFromUnknown(parsed);
+        }
+
+        if (!foundNombre) {
+          foundNombre = extractBodegaNombreFromUnknown(parsed) ?? "";
+        }
+      }
+    }
+
+    if (foundId || foundNombre) break;
+  }
+
+  return {
+    id: foundId,
+    nombre: foundNombre,
+  };
+};
+
 export default function RemisionesCompra() {
   const { selectedBodegaId, selectedBodegaNombre } = useOutletContext<
     AppOutletContext & {
@@ -141,6 +316,55 @@ export default function RemisionesCompra() {
       selectedBodegaNombre?: string;
     }
   >();
+
+const [storedBodega, setStoredBodega] = useState<{
+  id?: number;
+  nombre: string;
+}>({
+  id: undefined,
+  nombre: "",
+});
+
+const [bodegaReady, setBodegaReady] = useState(false);
+
+useEffect(() => {
+  const contextReady =
+    Number.isInteger(Number(selectedBodegaId)) ||
+    normalizeText(selectedBodegaNombre) === normalizeText("Todas las bodegas");
+
+  if (contextReady) {
+    setStoredBodega({
+      id: selectedBodegaId,
+      nombre: selectedBodegaNombre || "",
+    });
+    setBodegaReady(true);
+    return;
+  }
+
+  const timer = window.setTimeout(() => {
+    const stored = getStoredBodegaState();
+    setStoredBodega(stored);
+    setBodegaReady(true);
+  }, 0);
+
+  return () => window.clearTimeout(timer);
+}, [selectedBodegaId, selectedBodegaNombre]);
+
+const effectiveSelectedBodegaNombre =
+  (selectedBodegaNombre || storedBodega.nombre || "").trim();
+
+const isTodasLasBodegas =
+  normalizeText(effectiveSelectedBodegaNombre) ===
+  normalizeText("Todas las bodegas");
+
+const effectiveSelectedBodegaId = isTodasLasBodegas
+  ? undefined
+  : selectedBodegaId ?? storedBodega.id;
+
+const hasResolvedBodega =
+  bodegaReady &&
+  (isTodasLasBodegas ||
+    Number.isInteger(Number(effectiveSelectedBodegaId)));
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -150,10 +374,15 @@ export default function RemisionesCompra() {
   const isVer = location.pathname.endsWith("/ver");
   const isEditar = location.pathname.endsWith("/editar");
   const isAnular = location.pathname.endsWith("/anular");
+  const isListRoute = location.pathname === "/app/remcompras";
 
   const closeToList = () => navigate("/app/remcompras");
+  const refreshAndGoToList = async () => {
+    await loadRemisiones();
+    navigate("/app/remcompras", { replace: true });
+  };
 
-  const [loadingPage, setLoadingPage] = useState(true);
+  const [loadingPage, setLoadingPage] = useState(false);
   const [loadingDetalleRemision, setLoadingDetalleRemision] = useState(false);
   const [loadingCompraDetalle, setLoadingCompraDetalle] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -165,7 +394,8 @@ export default function RemisionesCompra() {
   const [remisiones, setRemisiones] = useState<RemisionCompraUI[]>([]);
   const [comprasOptions, setComprasOptions] = useState<CompraOption[]>([]);
   const [selectedCompra, setSelectedCompra] = useState<CompraDetail | null>(null);
-  const [selectedRemision, setSelectedRemision] = useState<RemisionCompraUI | null>(null);
+  const [selectedRemision, setSelectedRemision] =
+    useState<RemisionCompraUI | null>(null);
 
   const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -184,22 +414,28 @@ export default function RemisionesCompra() {
   const [currentNota, setCurrentNota] = useState("");
   const [codigoBarras, setCodigoBarras] = useState("");
 
+  const [reloadListKey, setReloadListKey] = useState(0);
+
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
+  const triggerListReload = () => {
+    setReloadListKey((prev) => prev + 1);
+  };
+
   const loadRemisiones = async () => {
-    const data = await getRemisionesCompra(selectedBodegaId);
+    const data = await getRemisionesCompra(effectiveSelectedBodegaId);
     setRemisiones(data);
   };
 
   const loadCompras = async () => {
-    const data = await getComprasOptions(selectedBodegaId);
+    const data = await getComprasOptions(effectiveSelectedBodegaId);
     setComprasOptions(data);
   };
 
   const loadInitialData = async () => {
     setLoadingPage(true);
     try {
-      await Promise.all([loadRemisiones(), loadCompras()]);
+      await loadRemisiones();
     } catch (error) {
       toast.error(getErrorMessage(error, "No fue posible cargar las remisiones"));
     } finally {
@@ -208,8 +444,41 @@ export default function RemisionesCompra() {
   };
 
   useEffect(() => {
+    if (!bodegaReady) return;
+    if (!isListRoute) return;
+    if (!hasResolvedBodega) return;
+
     void loadInitialData();
-  }, [selectedBodegaId]);
+  }, [
+    bodegaReady,
+    effectiveSelectedBodegaId,
+    effectiveSelectedBodegaNombre,
+    hasResolvedBodega,
+    isListRoute,
+    reloadListKey,
+  ]);
+
+  useEffect(() => {
+    if (!bodegaReady) return;
+    if (!isCrear) return;
+    if (!hasResolvedBodega) return;
+
+    const run = async () => {
+      try {
+        await loadCompras();
+      } catch (error) {
+        toast.error(getErrorMessage(error, "No fue posible cargar las compras"));
+      }
+    };
+
+    void run();
+  }, [
+    bodegaReady,
+    isCrear,
+    hasResolvedBodega,
+    effectiveSelectedBodegaId,
+    effectiveSelectedBodegaNombre,
+  ]);
 
   const resetItemBuilder = () => {
     setCurrentProducto("");
@@ -328,7 +597,7 @@ export default function RemisionesCompra() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedBodegaNombre]);
+  }, [searchTerm, effectiveSelectedBodegaNombre, effectiveSelectedBodegaId]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRemisiones.length / itemsPerPage));
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -337,9 +606,15 @@ export default function RemisionesCompra() {
 
   const stats = useMemo(() => {
     const totalRemisiones = filteredRemisiones.length;
-    const pendientes = filteredRemisiones.filter((r) => r.estadoKey === "PENDIENTE").length;
-    const aplicadas = filteredRemisiones.filter((r) => r.estadoKey === "APLICADA").length;
-    const anuladas = filteredRemisiones.filter((r) => r.estadoKey === "ANULADA").length;
+    const pendientes = filteredRemisiones.filter(
+      (r) => r.estadoKey === "PENDIENTE"
+    ).length;
+    const aplicadas = filteredRemisiones.filter(
+      (r) => r.estadoKey === "APLICADA"
+    ).length;
+    const anuladas = filteredRemisiones.filter(
+      (r) => r.estadoKey === "ANULADA"
+    ).length;
 
     return { totalRemisiones, pendientes, aplicadas, anuladas };
   }, [filteredRemisiones]);
@@ -419,7 +694,9 @@ export default function RemisionesCompra() {
         bodega: compra.bodegaNombre,
       }));
     } catch (error) {
-      toast.error(getErrorMessage(error, "No fue posible cargar el detalle de la compra"));
+      toast.error(
+        getErrorMessage(error, "No fue posible cargar el detalle de la compra")
+      );
     } finally {
       setLoadingCompraDetalle(false);
     }
@@ -431,7 +708,12 @@ export default function RemisionesCompra() {
       return;
     }
 
-    if (!currentProducto || !currentNumeroLote || !currentCantidad || !currentFechaVencimiento) {
+    if (
+      !currentProducto ||
+      !currentNumeroLote ||
+      !currentCantidad ||
+      !currentFechaVencimiento
+    ) {
       toast.error("Completa producto, lote, cantidad y fecha de vencimiento");
       return;
     }
@@ -559,10 +841,8 @@ export default function RemisionesCompra() {
       });
 
       setLastCreatedCode(created.numeroRemision);
-      await loadRemisiones();
-      closeToList();
-      setShowSuccessModal(true);
       resetForm();
+      setShowSuccessModal(true);
     } catch (error) {
       toast.error(getErrorMessage(error, "No fue posible crear la remisión"));
     } finally {
@@ -593,9 +873,9 @@ export default function RemisionesCompra() {
         detalle_remision_compra: buildDetallePayload(),
       });
 
-      await loadRemisiones();
+      triggerListReload();
+      navigate("/app/remcompras", { replace: true });
       toast.success("Remisión de compra actualizada exitosamente");
-      closeToList();
     } catch (error) {
       toast.error(getErrorMessage(error, "No fue posible actualizar la remisión"));
     } finally {
@@ -622,9 +902,9 @@ export default function RemisionesCompra() {
         id_estado_remision_compra: ESTADO_REMISION_IDS.ANULADA,
       });
 
-      await loadRemisiones();
+      triggerListReload();
+      navigate("/app/remcompras", { replace: true });
       toast.success("Remisión de compra anulada exitosamente");
-      closeToList();
     } catch (error) {
       toast.error(getErrorMessage(error, "No fue posible anular la remisión"));
     } finally {
@@ -685,20 +965,16 @@ export default function RemisionesCompra() {
         id_estado_remision_compra: ESTADO_REMISION_IDS.APLICADA,
       });
 
-      await loadRemisiones(); 
+      setShowConfirmEstadoModal(false);
+      setRemisionParaCambioEstado(null);
+      setNuevoEstadoLabel(null);
 
-      if (selectedRemision?.id === remisionParaCambioEstado.id) {
-        const fresh = await getRemisionCompraById(remisionParaCambioEstado.id);
-        setSelectedRemision(fresh);
-      }
+      triggerListReload();
+      navigate("/app/remcompras", { replace: true });
 
       toast.success(
         "Estado actualizado correctamente y existencias aplicadas desde backend"
       );
-
-      setShowConfirmEstadoModal(false);
-      setRemisionParaCambioEstado(null);
-      setNuevoEstadoLabel(null);
     } catch (error) {
       toast.error(getErrorMessage(error, "No fue posible cambiar el estado"));
     } finally {
@@ -709,6 +985,7 @@ export default function RemisionesCompra() {
   const handleSuccessModalClose = () => {
     setShowSuccessModal(false);
     setLastCreatedCode("");
+    navigate("/app/remcompras", { replace: true });
   };
 
   const handleDescargarRemisiones = () => {
@@ -737,7 +1014,9 @@ export default function RemisionesCompra() {
 
       const csvContent = [
         headers.join(","),
-        ...rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")),
+        ...rows.map((row) =>
+          row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")
+        ),
       ].join("\n");
 
       const blob = new Blob(["\ufeff" + csvContent], {
@@ -802,7 +1081,9 @@ export default function RemisionesCompra() {
       const url = URL.createObjectURL(blob);
 
       link.href = url;
-      link.download = `remision_${detalle.numeroRemision}_${new Date().toISOString().split("T")[0]}.csv`;
+      link.download = `remision_${detalle.numeroRemision}_${new Date()
+        .toISOString()
+        .split("T")[0]}.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -838,7 +1119,7 @@ export default function RemisionesCompra() {
       <div>
         <h2 className="text-gray-900">Gestión de Remisiones de Compra</h2>
         <p className="text-gray-600 mt-1">
-          Crea, consulta, edita y administra las remisiones de compra asociadas a órdenes de compra.
+          Administra la información de tus remisiones de compra
         </p>
       </div>
 
@@ -866,46 +1147,20 @@ export default function RemisionesCompra() {
         <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-6 text-white">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-green-100 text-sm">Aprobadas / Confirmadas</p>
+              <p className="text-green-100 text-sm">Aprobadas</p>
               <p className="text-3xl mt-2">{stats.aplicadas}</p>
             </div>
             <CheckCircle className="text-green-200" size={40} />
           </div>
         </div>
 
-        <div
-          className="rounded-xl shadow-lg p-6"
-          style={{
-            background: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)",
-            color: "#ffffff",
-          }}
-        >
+        <div className="bg-red-500 rounded-xl shadow-lg p-6 text-white">
           <div className="flex items-center justify-between">
             <div>
-              <p
-                style={{
-                  color: "#fecaca",
-                  fontSize: "0.875rem",
-                }}
-              >
-                Anuladas
-              </p>
-              <p
-                style={{
-                  color: "#ffffff",
-                  fontSize: "1.875rem",
-                  marginTop: "0.5rem",
-                  fontWeight: 700,
-                  lineHeight: 1,
-                }}
-              >
-                {stats.anuladas}
-              </p>
+              <p className="text-red-100 text-sm">Anuladas</p>
+              <p className="text-3xl mt-2">{stats.anuladas}</p>
             </div>
-
-            <div style={{ color: "#fecaca" }}>
-              <Ban size={40} />
-            </div>
+            <Ban className="text-red-200" size={40} />
           </div>
         </div>
       </div>
@@ -913,7 +1168,10 @@ export default function RemisionesCompra() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
         <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
           <div className="relative flex-1 w-full sm:w-auto">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              size={20}
+            />
             <Input
               type="text"
               placeholder="Buscar por remisión, orden, proveedor, estado, bodega o número de items..."
@@ -960,75 +1218,105 @@ export default function RemisionesCompra() {
                   </TableCell>
                 </TableRow>
               ) : (
-                currentRemisiones.map((remision, index) => (
-                  <TableRow key={remision.id} className="hover:bg-gray-50">
-                    <TableCell className="text-gray-500">{startIndex + index + 1}</TableCell>
-                    <TableCell className="font-medium">{remision.numeroRemision}</TableCell>
-                    <TableCell>{remision.ordenCompra}</TableCell>
-                    <TableCell>{remision.proveedor}</TableCell>
-                    <TableCell>{formatDate(remision.fecha)}</TableCell>
-                    <TableCell>{remision.itemsCount}</TableCell>
-                    <TableCell className="text-center">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEstadoClick(remision)}
-                        disabled={remision.estadoKey !== "PENDIENTE"}
-                        className={`h-7 ${
-                          remision.estadoKey === "APLICADA"
-                            ? "bg-green-100 text-green-800 hover:bg-green-200"
-                            : remision.estadoKey === "PENDIENTE"
+                currentRemisiones.map((remision, index) => {
+                  const accionBloqueada =
+                    remision.estadoKey !== "PENDIENTE" || remision.afectaExistencias;
+
+                  return (
+                    <TableRow key={remision.id} className="hover:bg-gray-50">
+                      <TableCell className="text-gray-500">
+                        {startIndex + index + 1}
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {remision.numeroRemision}
+                      </TableCell>
+                      <TableCell>{remision.ordenCompra}</TableCell>
+                      <TableCell>{remision.proveedor}</TableCell>
+                      <TableCell>{formatDate(remision.fecha)}</TableCell>
+                      <TableCell>{remision.itemsCount}</TableCell>
+                      <TableCell className="text-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEstadoClick(remision)}
+                          disabled={remision.estadoKey !== "PENDIENTE"}
+                          className={`h-7 ${
+                            remision.estadoKey === "APLICADA"
+                              ? "bg-green-100 text-green-800 hover:bg-green-200"
+                              : remision.estadoKey === "PENDIENTE"
                               ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
                               : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
-                        }`}
-                      >
-                        {remision.estado}
-                      </Button>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleView(remision)}
-                          className="hover:bg-blue-50"
-                          title="Ver detalles"
+                          }`}
                         >
-                          <Eye size={16} className="text-blue-600" />
+                          {remision.estado}
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDescargarRemision(remision)}
-                          className="hover:bg-green-50"
-                          title="Descargar"
-                        >
-                          <Download size={16} className="text-green-600" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEdit(remision)}
-                          className="hover:bg-yellow-50"
-                          title="Editar"
-                          disabled={remision.estadoKey !== "PENDIENTE" || remision.afectaExistencias}
-                        >
-                          <Edit size={16} className="text-yellow-600" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleAnular(remision)}
-                          className="hover:bg-red-50"
-                          title="Anular"
-                          disabled={remision.estadoKey !== "PENDIENTE" || remision.afectaExistencias}
-                        >
-                          <Ban size={16} className="text-red-600" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleView(remision)}
+                            className="hover:bg-blue-50"
+                            title="Ver detalles"
+                          >
+                            <Eye size={16} className="text-blue-600" />
+                          </Button>
+
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDescargarRemision(remision)}
+                            className="hover:bg-green-50"
+                            title="Descargar"
+                          >
+                            <Download size={16} className="text-green-600" />
+                          </Button>
+
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEdit(remision)}
+                            className={
+                              accionBloqueada
+                                ? "cursor-not-allowed hover:bg-transparent"
+                                : "hover:bg-yellow-50"
+                            }
+                            title="Editar"
+                            disabled={accionBloqueada}
+                          >
+                            <Edit
+                              size={16}
+                              className={
+                                accionBloqueada ? "text-gray-400" : "text-yellow-600"
+                              }
+                            />
+                          </Button>
+
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleAnular(remision)}
+                            className={
+                              accionBloqueada
+                                ? "cursor-not-allowed hover:bg-transparent"
+                                : "hover:bg-red-50"
+                            }
+                            title="Anular"
+                            disabled={accionBloqueada}
+                          >
+                            <Ban
+                              size={16}
+                              className={
+                                accionBloqueada ? "text-gray-400" : "text-red-600"
+                              }
+                            />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>
@@ -1037,7 +1325,8 @@ export default function RemisionesCompra() {
         {filteredRemisiones.length > 0 && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
             <div className="text-sm text-gray-600">
-              Mostrando {startIndex + 1} - {Math.min(endIndex, filteredRemisiones.length)} de{" "}
+              Mostrando {startIndex + 1} -{" "}
+              {Math.min(endIndex, filteredRemisiones.length)} de{" "}
               {filteredRemisiones.length} remisiones
             </div>
 
@@ -1172,7 +1461,10 @@ export default function RemisionesCompra() {
                   type="date"
                   value={formData.fechaVencimiento}
                   onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, fechaVencimiento: e.target.value }))
+                    setFormData((prev) => ({
+                      ...prev,
+                      fechaVencimiento: e.target.value,
+                    }))
                   }
                 />
               </div>
@@ -1197,7 +1489,10 @@ export default function RemisionesCompra() {
                   id="observaciones"
                   value={formData.observaciones}
                   onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, observaciones: e.target.value }))
+                    setFormData((prev) => ({
+                      ...prev,
+                      observaciones: e.target.value,
+                    }))
                   }
                   placeholder="Notas adicionales..."
                 />
@@ -1212,7 +1507,8 @@ export default function RemisionesCompra() {
                       Compra seleccionada: {selectedCompra.codigo}
                     </p>
                     <p className="text-sm text-blue-800">
-                      Proveedor: {selectedCompra.proveedorNombre} | Bodega: {selectedCompra.bodegaNombre}
+                      Proveedor: {selectedCompra.proveedorNombre} | Bodega:{" "}
+                      {selectedCompra.bodegaNombre}
                     </p>
                   </div>
                   {loadingCompraDetalle && (
@@ -1279,7 +1575,8 @@ export default function RemisionesCompra() {
                 </div>
 
                 <p className="text-xs text-blue-700 mt-2">
-                  Opcional. Este código se guarda en el detalle de la remisión y luego en existencias.
+                  Opcional. Este código se guarda en el detalle de la remisión y luego
+                  en existencias.
                 </p>
               </div>
 
@@ -1296,7 +1593,10 @@ export default function RemisionesCompra() {
                       </SelectTrigger>
                       <SelectContent>
                         {productosDisponibles.map((producto) => (
-                          <SelectItem key={producto.idProducto} value={String(producto.idProducto)}>
+                          <SelectItem
+                            key={producto.idProducto}
+                            value={String(producto.idProducto)}
+                          >
                             {producto.productoNombre}
                           </SelectItem>
                         ))}
@@ -1328,7 +1628,9 @@ export default function RemisionesCompra() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="fechaVencimientoItem">Fecha de Vencimiento *</Label>
+                    <Label htmlFor="fechaVencimientoItem">
+                      Fecha de Vencimiento *
+                    </Label>
                     <Input
                       id="fechaVencimientoItem"
                       type="date"
@@ -1525,13 +1827,18 @@ export default function RemisionesCompra() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="edit-fechaVencimiento">Fecha de Vencimiento</Label>
+                  <Label htmlFor="edit-fechaVencimiento">
+                    Fecha de Vencimiento
+                  </Label>
                   <Input
                     id="edit-fechaVencimiento"
                     type="date"
                     value={formData.fechaVencimiento}
                     onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, fechaVencimiento: e.target.value }))
+                      setFormData((prev) => ({
+                        ...prev,
+                        fechaVencimiento: e.target.value,
+                      }))
                     }
                   />
                 </div>
@@ -1556,7 +1863,10 @@ export default function RemisionesCompra() {
                     id="edit-observaciones"
                     value={formData.observaciones}
                     onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, observaciones: e.target.value }))
+                      setFormData((prev) => ({
+                        ...prev,
+                        observaciones: e.target.value,
+                      }))
                     }
                   />
                 </div>
@@ -1612,7 +1922,10 @@ export default function RemisionesCompra() {
                         </SelectTrigger>
                         <SelectContent>
                           {productosDisponibles.map((producto) => (
-                            <SelectItem key={producto.idProducto} value={String(producto.idProducto)}>
+                            <SelectItem
+                              key={producto.idProducto}
+                              value={String(producto.idProducto)}
+                            >
                               {producto.productoNombre}
                             </SelectItem>
                           ))}
@@ -1662,7 +1975,9 @@ export default function RemisionesCompra() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="edit-fechaVencimientoItem">Fecha de Vencimiento *</Label>
+                      <Label htmlFor="edit-fechaVencimientoItem">
+                        Fecha de Vencimiento *
+                      </Label>
                       <Input
                         id="edit-fechaVencimientoItem"
                         type="date"
@@ -1823,11 +2138,15 @@ export default function RemisionesCompra() {
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Fecha de Vencimiento</p>
-                  <p className="font-semibold">{formatDate(selectedRemision.fechaVencimiento)}</p>
+                  <p className="font-semibold">
+                    {formatDate(selectedRemision.fechaVencimiento)}
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Bodega</p>
-                  <p className="font-semibold">{selectedRemision.bodega || selectedBodegaNombre}</p>
+                  <p className="font-semibold">
+                    {selectedRemision.bodega || effectiveSelectedBodegaNombre}
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Estado</p>
@@ -1877,7 +2196,9 @@ export default function RemisionesCompra() {
                           <TableCell>{formatMoney(item.precio_unitario)}</TableCell>
                           <TableCell>{item.ivaPorcentaje}%</TableCell>
                           <TableCell>{formatDate(item.fecha_vencimiento)}</TableCell>
-                          <TableCell>{item.codigo_barras || item.cod_barras || "—"}</TableCell>
+                          <TableCell>
+                            {item.codigo_barras || item.cod_barras || "—"}
+                          </TableCell>
                           <TableCell>{item.nota || "—"}</TableCell>
                         </TableRow>
                       ))}
@@ -1924,7 +2245,8 @@ export default function RemisionesCompra() {
           <DialogHeader>
             <DialogTitle>Anular Remisión de Compra</DialogTitle>
             <DialogDescription id="delete-remision-compra-description">
-              ¿Estás seguro de que deseas anular esta remisión de compra? Esta acción no se puede deshacer.
+              ¿Estás seguro de que deseas anular esta remisión de compra? Esta acción
+              no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
 
@@ -1972,7 +2294,8 @@ export default function RemisionesCompra() {
           <DialogHeader>
             <DialogTitle>Cambiar Estado de Remisión</DialogTitle>
             <DialogDescription id="confirm-estado-description">
-              ¿Deseas aprobar/confirmar esta remisión? Solo al confirmar/aprobar se deben aplicar existencias desde el backend.
+              ¿Deseas aprobar/confirmar esta remisión? Solo al confirmar/aprobar se
+              deben aplicar existencias desde el backend.
             </DialogDescription>
           </DialogHeader>
 
@@ -2029,10 +2352,7 @@ export default function RemisionesCompra() {
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={showSuccessModal}
-        onOpenChange={handleSuccessModalClose}
-      >
+      <Dialog open={showSuccessModal} onOpenChange={handleSuccessModalClose}>
         <DialogContent
           className="max-w-md"
           onPointerDownOutside={(e) => e.preventDefault()}
