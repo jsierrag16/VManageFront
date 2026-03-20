@@ -1,96 +1,17 @@
 import api from "../../../shared/services/api";
 
-export type EstadoRemisionKey = "PENDIENTE" | "APLICADA" | "ANULADA" | "OTRO";
-
 export const ESTADO_REMISION_IDS = {
   PENDIENTE: 1,
-  APLICADA: 3,
-  ANULADA: 4,
+  APLICADA: 2, // en backend realmente corresponde a "Recibida"
+  ANULADA: 3,
 } as const;
 
-type ApiListResponse<T> =
-  | T[]
-  | {
-      data?: T[];
-      page?: number;
-      total?: number;
-      pages?: number;
-      limit?: number;
-    };
+type RawRecord = Record<string, any>;
 
-const unwrapList = <T>(payload: ApiListResponse<T> | null | undefined): T[] => {
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.data)) return payload.data;
-  return [];
-};
-
-const toNumber = (value: unknown, fallback = 0): number => {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-};
-
-const toStringValue = (value: unknown, fallback = ""): string => {
-  return typeof value === "string" ? value : value == null ? fallback : String(value);
-};
-
-const toInputDate = (value: unknown): string => {
-  if (!value) return "";
-  const d = new Date(String(value));
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toISOString().split("T")[0];
-};
-
-const resolveEstadoKey = (
-  idEstado: number,
-  nombreEstado: unknown
-): EstadoRemisionKey => {
-  if (idEstado === ESTADO_REMISION_IDS.PENDIENTE) return "PENDIENTE";
-  if (idEstado === ESTADO_REMISION_IDS.APLICADA) return "APLICADA";
-  if (idEstado === ESTADO_REMISION_IDS.ANULADA) return "ANULADA";
-
-  const raw = toStringValue(nombreEstado).trim().toLowerCase();
-
-  if (["pendiente"].includes(raw)) return "PENDIENTE";
-
-  if (
-    ["recibida", "recibido", "aprobada", "aprobado", "confirmada", "confirmado"].includes(raw)
-  ) {
-    return "APLICADA";
-  }
-
-  if (["anulada", "anulado", "cancelada", "cancelado"].includes(raw)) {
-    return "ANULADA";
-  }
-
-  return "OTRO";
-};
-
-export type CompraDetalleItem = {
-  idProducto: number;
-  productoNombre: string;
-  cantidad: number;
-  precioUnitario: number;
-  idIva: number;
-  ivaPorcentaje: number;
-  codigoBarras: string;
-};
-
-export type CompraOption = {
-  id: number;
-  codigo: string;
-  proveedorId: number;
-  proveedorNombre: string;
-  idBodega: number;
-  bodegaNombre: string;
-  estado: string;
-};
-
-export type CompraDetail = CompraOption & {
-  items: CompraDetalleItem[];
-};
+export type EstadoRemisionKey = "PENDIENTE" | "APLICADA" | "ANULADA" | "OTRO";
 
 export type RemisionCompraItemUI = {
-  id?: number;
+  id_detalle_remision_compra?: number;
   id_producto: number;
   productoNombre: string;
   cantidad: number;
@@ -99,7 +20,8 @@ export type RemisionCompraItemUI = {
   ivaPorcentaje: number;
   lote: string;
   fecha_vencimiento: string;
-  cod_barras: string;
+  codigo_barras: string;
+  cod_barras?: string;
   nota: string;
 };
 
@@ -113,16 +35,49 @@ export type RemisionCompraUI = {
   ordenCompra: string;
   proveedorId: number;
   proveedor: string;
-  idBodega: number;
-  bodega: string;
+  estadoId: number;
   estado: string;
   estadoKey: EstadoRemisionKey;
-  idEstado: number;
-  afectaExistencias: boolean;
+  idUsuarioCreador: number;
   idFactura: number | null;
-  items: RemisionCompraItemUI[];
+  afectaExistencias: boolean;
+  fechaAplicacionExistencias: string;
+  idUsuarioAplicoExistencias: number | null;
+  idBodega: number;
+  bodega: string;
   itemsCount: number;
+  items: RemisionCompraItemUI[];
   total: number;
+};
+
+export type CompraOption = {
+  id: number;
+  codigo: string;
+  proveedorId: number;
+  proveedorNombre: string;
+  idBodega: number;
+  bodegaNombre: string;
+  estado: string;
+};
+
+export type CompraDetailItem = {
+  idProducto: number;
+  productoNombre: string;
+  cantidad: number;
+  precioUnitario: number;
+  idIva: number;
+  ivaPorcentaje: number;
+  codigoBarras: string;
+};
+
+export type CompraDetail = {
+  id: number;
+  codigo: string;
+  proveedorId: number;
+  proveedorNombre: string;
+  idBodega: number;
+  bodegaNombre: string;
+  items: CompraDetailItem[];
 };
 
 export type CreateRemisionCompraPayload = {
@@ -139,7 +94,7 @@ export type CreateRemisionCompraPayload = {
     id_iva: number;
     lote?: string;
     fecha_vencimiento?: string;
-    cod_barras?: string;
+    codigo_barras?: string;
     nota?: string;
   }>;
 };
@@ -155,7 +110,7 @@ export type UpdateRemisionCompraPayload = {
     id_iva: number;
     lote?: string;
     fecha_vencimiento?: string;
-    cod_barras?: string;
+    codigo_barras?: string;
     nota?: string;
   }>;
 };
@@ -164,179 +119,369 @@ export type CambiarEstadoRemisionCompraPayload = {
   id_estado_remision_compra: number;
 };
 
-const mapCompraBase = (raw: any): CompraOption => {
-  return {
-    id: toNumber(raw?.id_compra),
-    codigo: toStringValue(raw?.codigo_compra),
-    proveedorId: toNumber(raw?.id_proveedor),
-    proveedorNombre: toStringValue(
-      raw?.proveedor?.nombre_empresa ?? raw?.nombre_empresa ?? raw?.proveedor_nombre
-    ),
-    idBodega: toNumber(raw?.id_bodega),
-    bodegaNombre: toStringValue(
-      raw?.bodega?.nombre_bodega ?? raw?.nombre_bodega ?? raw?.bodega_nombre
-    ),
-    estado: toStringValue(
-      raw?.estado_compra?.nombre_estado ?? raw?.nombre_estado ?? ""
-    ),
-  };
+const toNumber = (value: unknown, fallback = 0) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
 };
 
-const mapCompraDetalleItem = (raw: any): CompraDetalleItem => {
-  return {
-    idProducto: toNumber(raw?.id_producto),
-    productoNombre: toStringValue(
-      raw?.producto?.nombre_producto ?? raw?.nombre_producto ?? raw?.productoNombre
-    ),
-    cantidad: toNumber(raw?.cantidad),
-    precioUnitario: toNumber(raw?.precio_unitario),
-    idIva: toNumber(raw?.id_iva),
-    ivaPorcentaje: toNumber(
-      raw?.iva?.porcentaje ?? raw?.porcentaje_iva ?? raw?.ivaPorcentaje
-    ),
-    codigoBarras: toStringValue(
-      raw?.producto?.codigo_barras ??
-        raw?.producto?.cod_barras ??
-        raw?.codigo_barras ??
-        raw?.cod_barras
-    ),
-  };
+const toStringSafe = (value: unknown, fallback = "") => {
+  if (value === null || value === undefined) return fallback;
+  return String(value);
 };
 
-const mapCompraDetail = (raw: any): CompraDetail => {
-  const base = mapCompraBase(raw);
-  const detalleRaw = unwrapList<any>(raw?.detalle_compra);
-
-  return {
-    ...base,
-    items: detalleRaw.map(mapCompraDetalleItem),
-  };
+const asArray = <T = any>(value: unknown): T[] => {
+  if (Array.isArray(value)) return value as T[];
+  return [];
 };
 
-const mapRemisionItem = (raw: any): RemisionCompraItemUI => {
-  return {
-    id:
-      raw?.id_detalle_remision_compra != null
-        ? toNumber(raw.id_detalle_remision_compra)
-        : undefined,
-    id_producto: toNumber(raw?.id_producto),
-    productoNombre: toStringValue(
-      raw?.producto?.nombre_producto ?? raw?.nombre_producto ?? raw?.productoNombre
-    ),
-    cantidad: toNumber(raw?.cantidad),
-    precio_unitario: toNumber(raw?.precio_unitario),
-    id_iva: toNumber(raw?.id_iva),
-    ivaPorcentaje: toNumber(
-      raw?.iva?.porcentaje ?? raw?.porcentaje_iva ?? raw?.ivaPorcentaje
-    ),
-    lote: toStringValue(raw?.lote),
-    fecha_vencimiento: toInputDate(raw?.fecha_vencimiento),
-    cod_barras: toStringValue(raw?.cod_barras ?? raw?.codigo_barras),
-    nota: toStringValue(raw?.nota),
-  };
+const normalizeText = (value: unknown) =>
+  String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+
+const unwrapResponse = <T = any>(response: any): T => {
+  return response?.data?.data ?? response?.data ?? response;
 };
 
-const calcularTotal = (items: RemisionCompraItemUI[]) => {
-  return items.reduce((acc, item) => {
-    const base = item.cantidad * item.precio_unitario;
-    const iva = base * (item.ivaPorcentaje / 100);
-    return acc + base + iva;
-  }, 0);
+const extractList = <T = any>(raw: any): T[] => {
+  if (Array.isArray(raw)) return raw;
+  if (Array.isArray(raw?.items)) return raw.items;
+  if (Array.isArray(raw?.rows)) return raw.rows;
+  if (Array.isArray(raw?.data)) return raw.data;
+  return [];
 };
 
-const mapRemision = (raw: any): RemisionCompraUI => {
-  const detalleRaw = unwrapList<any>(raw?.detalle_remision_compra);
-  const items = detalleRaw.map(mapRemisionItem);
+const formatDateOnly = (value: unknown) => {
+  const str = toStringSafe(value);
+  if (!str) return "";
+  const date = new Date(str);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().split("T")[0];
+};
 
-  const idEstado = toNumber(raw?.id_estado_remision_compra);
-  const estadoNombre = toStringValue(
-    raw?.estado_remision_compra?.nombre_estado ??
-      raw?.nombre_estado ??
-      raw?.estado,
-    "Pendiente"
+const buildBodegaParamsVariants = (selectedBodegaId?: number) => {
+  if (!selectedBodegaId) return [{}];
+
+  return [
+    { idBodega: selectedBodegaId },
+    { id_bodega: selectedBodegaId },
+    {},
+  ];
+};
+
+async function getRequestFirstSuccess(
+  candidates: Array<{ url: string; params?: Record<string, any> }>
+) {
+  let lastError: unknown;
+
+  for (const candidate of candidates) {
+    try {
+      const response = await api.get(candidate.url, {
+        params: candidate.params,
+      });
+      return unwrapResponse(response);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError;
+}
+
+async function postRequestFirstSuccess(
+  candidates: Array<{ url: string; data?: Record<string, any> }>
+) {
+  let lastError: unknown;
+
+  for (const candidate of candidates) {
+    try {
+      const response = await api.post(candidate.url, candidate.data);
+      return unwrapResponse(response);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError;
+}
+
+async function patchRequestFirstSuccess(
+  candidates: Array<{ url: string; data?: Record<string, any> }>
+) {
+  let lastError: unknown;
+
+  for (const candidate of candidates) {
+    try {
+      const response = await api.patch(candidate.url, candidate.data);
+      return unwrapResponse(response);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError;
+}
+
+const getEstadoKey = (estado: unknown, afectaExistencias?: boolean): EstadoRemisionKey => {
+  const norm = normalizeText(estado);
+
+  if (norm === "anulada") return "ANULADA";
+  if (
+    afectaExistencias ||
+    norm === "recibida" ||
+    norm === "aplicada" ||
+    norm === "aprobada" ||
+    norm === "confirmada"
+  ) {
+    return "APLICADA";
+  }
+  if (norm === "pendiente") return "PENDIENTE";
+
+  return "OTRO";
+};
+
+const mapRemisionItem = (raw: RawRecord): RemisionCompraItemUI => {
+  const cantidad = toNumber(raw?.cantidad);
+  const precio = toNumber(raw?.precio_unitario);
+  const ivaPorcentaje = toNumber(
+    raw?.iva?.porcentaje ?? raw?.iva_porcentaje ?? raw?.porcentaje_iva
   );
 
   return {
-    id: toNumber(raw?.id_remision_compra),
-    numeroRemision: toStringValue(
-      raw?.codigo_remision_compra ?? raw?.numeroRemision
+    id_detalle_remision_compra: toNumber(raw?.id_detalle_remision_compra || 0) || undefined,
+    id_producto: toNumber(
+      raw?.id_producto ?? raw?.producto?.id_producto ?? raw?.producto?.id ?? raw?.idProducto
     ),
-    fecha: toInputDate(raw?.fecha_creacion ?? raw?.fecha),
-    fechaVencimiento: toInputDate(raw?.fecha_vencimiento),
-    observaciones: toStringValue(raw?.observaciones),
-    ordenCompraId: toNumber(raw?.id_compra),
-    ordenCompra: toStringValue(
-      raw?.compras?.codigo_compra ??
-        raw?.compra?.codigo_compra ??
-        raw?.codigo_compra
+    productoNombre: toStringSafe(
+      raw?.producto?.nombre_producto ??
+        raw?.nombre_producto ??
+        raw?.productoNombre
     ),
-    proveedorId: toNumber(raw?.id_proveedor),
-    proveedor: toStringValue(
-      raw?.proveedor?.nombre_empresa ?? raw?.nombre_empresa ?? raw?.proveedorNombre
-    ),
-    idBodega: toNumber(raw?.id_bodega),
-    bodega: toStringValue(
-      raw?.bodega?.nombre_bodega ?? raw?.nombre_bodega ?? raw?.bodegaNombre
-    ),
-    estado: estadoNombre,
-    estadoKey: resolveEstadoKey(idEstado, estadoNombre),
-    idEstado,
-    afectaExistencias: Boolean(raw?.afecta_existencias),
-    idFactura:
-      raw?.id_factura == null || raw?.id_factura === ""
-        ? null
-        : toNumber(raw?.id_factura),
-    items,
-    itemsCount:
-      items.length ||
-      toNumber(raw?._count?.detalle_remision_compra) ||
-      toNumber(raw?.itemsCount) ||
-      toNumber(raw?.total_items),
-    total: calcularTotal(items),
+    cantidad,
+    precio_unitario: precio,
+    id_iva: toNumber(raw?.id_iva ?? raw?.iva?.id_iva ?? raw?.idIva),
+    ivaPorcentaje,
+    lote: toStringSafe(raw?.lote),
+    fecha_vencimiento: formatDateOnly(raw?.fecha_vencimiento),
+    codigo_barras: toStringSafe(raw?.codigo_barras ?? raw?.cod_barras ?? raw?.codigoBarras),
+    cod_barras: toStringSafe(raw?.codigo_barras ?? raw?.cod_barras ?? raw?.codigoBarras),
+    nota: toStringSafe(raw?.nota),
   };
 };
 
-export async function getRemisionesCompra(params?: { idCompra?: number }) {
-  const response = await api.get("/remisiones-compra", {
-    params: params?.idCompra ? { idCompra: params.idCompra } : undefined,
-  });
+const mapRemision = (raw: RawRecord): RemisionCompraUI => {
+  const items = asArray(raw?.detalle_remision_compra).map(mapRemisionItem);
 
-  return unwrapList<any>(response.data).map(mapRemision);
+  const total = items.reduce((acc, item) => {
+    const subtotal = item.cantidad * item.precio_unitario;
+    const iva = subtotal * (item.ivaPorcentaje / 100);
+    return acc + subtotal + iva;
+  }, 0);
+
+  const estado = toStringSafe(
+    raw?.estado_remision_compra?.nombre_estado ?? raw?.estado ?? raw?.nombre_estado
+  );
+
+  return {
+    id: toNumber(raw?.id_remision_compra ?? raw?.id),
+    numeroRemision: toStringSafe(
+      raw?.codigo_remision_compra ?? raw?.numeroRemision ?? raw?.codigo
+    ),
+    fecha: formatDateOnly(raw?.fecha_creacion ?? raw?.fecha),
+    fechaVencimiento: formatDateOnly(raw?.fecha_vencimiento),
+    observaciones: toStringSafe(raw?.observaciones),
+    ordenCompraId: toNumber(raw?.id_compra ?? raw?.compras?.id_compra),
+    ordenCompra: toStringSafe(
+      raw?.compras?.codigo_compra ?? raw?.ordenCompra ?? raw?.codigo_compra
+    ),
+    proveedorId: toNumber(raw?.id_proveedor ?? raw?.proveedor?.id_proveedor),
+    proveedor: toStringSafe(
+      raw?.proveedor?.nombre_empresa ?? raw?.proveedorNombre ?? raw?.nombre_empresa
+    ),
+    estadoId: toNumber(
+      raw?.id_estado_remision_compra ?? raw?.estado_remision_compra?.id_estado_remision_compra
+    ),
+    estado,
+    estadoKey: getEstadoKey(estado, Boolean(raw?.afecta_existencias)),
+    idUsuarioCreador: toNumber(raw?.id_usuario_creador ?? raw?.usuario?.id_usuario),
+    idFactura:
+      raw?.id_factura === null || raw?.id_factura === undefined
+        ? null
+        : toNumber(raw?.id_factura),
+    afectaExistencias: Boolean(raw?.afecta_existencias),
+    fechaAplicacionExistencias: formatDateOnly(raw?.fecha_aplicacion_existencias),
+    idUsuarioAplicoExistencias:
+      raw?.id_usuario_aplico_existencias === null ||
+      raw?.id_usuario_aplico_existencias === undefined
+        ? null
+        : toNumber(raw?.id_usuario_aplico_existencias),
+    idBodega: toNumber(raw?.id_bodega ?? raw?.bodega?.id_bodega),
+    bodega: toStringSafe(
+      raw?.bodega?.nombre_bodega ?? raw?.bodegaNombre ?? raw?.nombre_bodega
+    ),
+    itemsCount:
+      toNumber(raw?._count?.detalle_remision_compra) || items.length || 0,
+    items,
+    total,
+  };
+};
+
+const mapCompraOption = (raw: RawRecord): CompraOption => {
+  return {
+    id: toNumber(raw?.id_compra ?? raw?.id),
+    codigo: toStringSafe(raw?.codigo_compra ?? raw?.codigo),
+    proveedorId: toNumber(raw?.id_proveedor ?? raw?.proveedor?.id_proveedor),
+    proveedorNombre: toStringSafe(
+      raw?.proveedor?.nombre_empresa ?? raw?.proveedorNombre ?? raw?.nombre_empresa
+    ),
+    idBodega: toNumber(raw?.id_bodega ?? raw?.bodega?.id_bodega),
+    bodegaNombre: toStringSafe(
+      raw?.bodega?.nombre_bodega ?? raw?.bodegaNombre ?? raw?.nombre_bodega
+    ),
+    estado: toStringSafe(
+      raw?.estado_compra?.nombre_estado ?? raw?.estado ?? raw?.nombre_estado
+    ),
+  };
+};
+
+const mapCompraDetailItem = (raw: RawRecord): CompraDetailItem => {
+  return {
+    idProducto: toNumber(
+      raw?.id_producto ?? raw?.producto?.id_producto ?? raw?.producto?.id
+    ),
+    productoNombre: toStringSafe(
+      raw?.producto?.nombre_producto ??
+        raw?.nombre_producto ??
+        raw?.productoNombre
+    ),
+    cantidad: toNumber(raw?.cantidad),
+    precioUnitario: toNumber(raw?.precio_unitario),
+    idIva: toNumber(raw?.id_iva ?? raw?.iva?.id_iva ?? raw?.producto?.id_iva),
+    ivaPorcentaje: toNumber(
+      raw?.iva?.porcentaje ??
+        raw?.iva_porcentaje ??
+        raw?.producto?.iva?.porcentaje
+    ),
+    codigoBarras: toStringSafe(
+      raw?.codigo_barras ?? raw?.cod_barras ?? raw?.codigoBarras
+    ),
+  };
+};
+
+const mapCompraDetail = (raw: RawRecord): CompraDetail => {
+  const detalle =
+    asArray(raw?.detalle_compra).length > 0
+      ? asArray(raw?.detalle_compra)
+      : asArray(raw?.items).length > 0
+        ? asArray(raw?.items)
+        : asArray(raw?.detalles);
+
+  return {
+    id: toNumber(raw?.id_compra ?? raw?.id),
+    codigo: toStringSafe(raw?.codigo_compra ?? raw?.codigo),
+    proveedorId: toNumber(raw?.id_proveedor ?? raw?.proveedor?.id_proveedor),
+    proveedorNombre: toStringSafe(
+      raw?.proveedor?.nombre_empresa ?? raw?.proveedorNombre ?? raw?.nombre_empresa
+    ),
+    idBodega: toNumber(raw?.id_bodega ?? raw?.bodega?.id_bodega),
+    bodegaNombre: toStringSafe(
+      raw?.bodega?.nombre_bodega ?? raw?.bodegaNombre ?? raw?.nombre_bodega
+    ),
+    items: detalle.map(mapCompraDetailItem),
+  };
+};
+
+export async function getRemisionesCompra(selectedBodegaId?: number) {
+  const paramsVariants = buildBodegaParamsVariants(selectedBodegaId);
+
+  const raw = await getRequestFirstSuccess([
+    ...paramsVariants.map((params) => ({
+      url: "/remisiones-compra",
+      params,
+    })),
+    ...paramsVariants.map((params) => ({
+      url: "/remision-compra",
+      params,
+    })),
+  ]);
+
+  return extractList(raw).map(mapRemision);
 }
 
 export async function getRemisionCompraById(id: number) {
-  const response = await api.get(`/remisiones-compra/${id}`);
-  return mapRemision(response.data);
+  const raw = await getRequestFirstSuccess([
+    { url: `/remisiones-compra/${id}` },
+    { url: `/remision-compra/${id}` },
+  ]);
+
+  return mapRemision(raw);
 }
 
 export async function createRemisionCompra(payload: CreateRemisionCompraPayload) {
-  const response = await api.post("/remisiones-compra", payload);
-  return mapRemision(response.data);
+  const raw = await postRequestFirstSuccess([
+    { url: "/remisiones-compra", data: payload },
+    { url: "/remision-compra", data: payload },
+  ]);
+
+  return mapRemision(raw);
 }
 
 export async function updateRemisionCompra(
   id: number,
   payload: UpdateRemisionCompraPayload
 ) {
-  const response = await api.put(`/remisiones-compra/${id}`, payload);
-  return mapRemision(response.data);
+  const raw = await patchRequestFirstSuccess([
+    { url: `/remisiones-compra/${id}`, data: payload },
+    { url: `/remision-compra/${id}`, data: payload },
+  ]);
+
+  return mapRemision(raw);
 }
 
 export async function cambiarEstadoRemisionCompra(
   id: number,
   payload: CambiarEstadoRemisionCompraPayload
 ) {
-  const response = await api.patch(`/remisiones-compra/${id}/estado`, payload);
-  return mapRemision(response.data);
+  const raw = await patchRequestFirstSuccess([
+    { url: `/remisiones-compra/${id}/estado`, data: payload },
+    { url: `/remision-compra/${id}/estado`, data: payload },
+  ]);
+
+  return mapRemision(raw);
 }
 
-export async function getComprasOptions() {
-  const response = await api.get("/compras");
-  return unwrapList<any>(response.data).map(mapCompraBase);
+export async function getComprasOptions(selectedBodegaId?: number) {
+  const paramsVariants = buildBodegaParamsVariants(selectedBodegaId);
+
+  const raw = await getRequestFirstSuccess([
+    ...paramsVariants.map((params) => ({
+      url: "/compras",
+      params,
+    })),
+    ...paramsVariants.map((params) => ({
+      url: "/compras/options",
+      params,
+    })),
+  ]);
+
+  const compras = extractList(raw)
+    .map(mapCompraOption)
+    .filter((item) => item.id > 0);
+
+  const unique = Array.from(
+    new Map(compras.map((item) => [item.id, item])).values()
+  );
+
+  return unique.sort((a, b) => b.id - a.id);
 }
 
 export async function getCompraById(id: number) {
-  const response = await api.get(`/compras/${id}`);
-  return mapCompraDetail(response.data);
-}
+  const raw = await getRequestFirstSuccess([
+    { url: `/compras/${id}` },
+    { url: `/compras/detalle/${id}` },
+  ]);
 
+  return mapCompraDetail(raw);
+}

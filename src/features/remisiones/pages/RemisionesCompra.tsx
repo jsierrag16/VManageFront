@@ -50,7 +50,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../../shared/components/ui/select";
-import { useProductos } from "../../../shared/context/ProductosContext";
 import type { AppOutletContext } from "../../../layouts/MainLayout";
 import {
   ESTADO_REMISION_IDS,
@@ -76,7 +75,7 @@ type ItemForm = {
   ivaPorcentaje: number;
   lote: string;
   fecha_vencimiento: string;
-  cod_barras: string;
+  codigo_barras: string;
   nota: string;
 };
 
@@ -136,8 +135,12 @@ const buildEmptyForm = () => ({
 });
 
 export default function RemisionesCompra() {
-  const { productos } = useProductos();
-  const { selectedBodegaNombre } = useOutletContext<AppOutletContext>();
+  const { selectedBodegaId, selectedBodegaNombre } = useOutletContext<
+    AppOutletContext & {
+      selectedBodegaId?: number;
+      selectedBodegaNombre?: string;
+    }
+  >();
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -184,12 +187,12 @@ export default function RemisionesCompra() {
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
   const loadRemisiones = async () => {
-    const data = await getRemisionesCompra();
+    const data = await getRemisionesCompra(selectedBodegaId);
     setRemisiones(data);
   };
 
   const loadCompras = async () => {
-    const data = await getComprasOptions();
+    const data = await getComprasOptions(selectedBodegaId);
     setComprasOptions(data);
   };
 
@@ -206,7 +209,7 @@ export default function RemisionesCompra() {
 
   useEffect(() => {
     void loadInitialData();
-  }, []);
+  }, [selectedBodegaId]);
 
   const resetItemBuilder = () => {
     setCurrentProducto("");
@@ -277,7 +280,7 @@ export default function RemisionesCompra() {
               ivaPorcentaje: item.ivaPorcentaje,
               lote: item.lote || "",
               fecha_vencimiento: item.fecha_vencimiento || "",
-              cod_barras: item.cod_barras || "",
+              codigo_barras: item.codigo_barras || item.cod_barras || "",
               nota: item.nota || "",
             }))
           );
@@ -307,13 +310,9 @@ export default function RemisionesCompra() {
   }, [params.id, isVer, isEditar, isAnular]);
 
   const filteredRemisiones = useMemo(() => {
-    const base =
-      selectedBodegaNombre && selectedBodegaNombre !== "Todas las bodegas"
-        ? remisiones.filter((r) => normalizeText(r.bodega) === normalizeText(selectedBodegaNombre))
-        : remisiones;
+    const q = normalizeText(searchTerm);
 
-    return base.filter((remision) => {
-      const q = normalizeText(searchTerm);
+    return remisiones.filter((remision) => {
       if (!q) return true;
 
       return [
@@ -325,7 +324,7 @@ export default function RemisionesCompra() {
         String(remision.itemsCount),
       ].some((field) => normalizeText(field).includes(q));
     });
-  }, [remisiones, searchTerm, selectedBodegaNombre]);
+  }, [remisiones, searchTerm]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -476,12 +475,6 @@ export default function RemisionesCompra() {
       return;
     }
 
-    const productoContexto = (productos as any[])?.find(
-      (p) =>
-        Number(p?.id) === compraItem.idProducto ||
-        Number(p?.id_producto) === compraItem.idProducto
-    );
-
     const nuevoItem: ItemForm = {
       localId: makeLocalId(),
       id_producto: compraItem.idProducto,
@@ -492,9 +485,7 @@ export default function RemisionesCompra() {
       ivaPorcentaje: compraItem.ivaPorcentaje,
       lote: currentNumeroLote.trim(),
       fecha_vencimiento: currentFechaVencimiento,
-      cod_barras:
-        compraItem.codigoBarras ||
-        String(productoContexto?.codigoBarras ?? productoContexto?.codigo_barras ?? ""),
+      codigo_barras: codigoBarras.trim(),
       nota: currentNota.trim(),
     };
 
@@ -513,59 +504,21 @@ export default function RemisionesCompra() {
 
     e.preventDefault();
 
-    if (!codigoBarras.trim()) return;
-    if (!selectedCompra) {
-      toast.error("Primero selecciona una orden de compra");
-      return;
-    }
+    const currentId = e.currentTarget.id;
+    const targetId = currentId.startsWith("edit-") ? "edit-numeroLote" : "numeroLote";
 
-    const codigo = normalizeText(codigoBarras);
-
-    const encontradoEnCompra = selectedCompra.items.find(
-      (item) => normalizeText(item.codigoBarras) === codigo
-    );
-
-    if (encontradoEnCompra) {
-      setCurrentProducto(String(encontradoEnCompra.idProducto));
-      toast.success(`Producto encontrado: ${encontradoEnCompra.productoNombre}`);
-      setCodigoBarras("");
-
-      setTimeout(() => {
-        const numeroLoteInput = document.getElementById("numeroLote") as HTMLInputElement | null;
-        numeroLoteInput?.focus();
-      }, 100);
-      return;
-    }
-
-    const productoContexto = (productos as any[])?.find((p) => {
-      const codigoProducto = p?.codigoBarras ?? p?.codigo_barras ?? p?.cod_barras;
-      return normalizeText(codigoProducto) === codigo;
-    });
-
-    if (productoContexto) {
-      const idProducto = Number(productoContexto?.id ?? productoContexto?.id_producto);
-      const itemCompra = selectedCompra.items.find((i) => i.idProducto === idProducto);
-
-      if (itemCompra) {
-        setCurrentProducto(String(itemCompra.idProducto));
-        toast.success(`Producto encontrado: ${itemCompra.productoNombre}`);
-        setCodigoBarras("");
-
-        setTimeout(() => {
-          const numeroLoteInput = document.getElementById("numeroLote") as HTMLInputElement | null;
-          numeroLoteInput?.focus();
-        }, 100);
-        return;
-      }
-    }
-
-    toast.error("El código de barras no corresponde a un producto de la compra");
-    setCodigoBarras("");
+    const loteInput = document.getElementById(targetId) as HTMLInputElement | null;
+    loteInput?.focus();
   };
 
   const validateBeforeSubmit = () => {
-    if (!formData.id_compra || !formData.id_proveedor || !formData.id_bodega) {
+    if (!formData.id_compra) {
       toast.error("Debes seleccionar una orden de compra válida");
+      return false;
+    }
+
+    if (!formData.id_proveedor || !formData.id_bodega) {
+      toast.error("La compra seleccionada no tiene proveedor o bodega válidos");
       return false;
     }
 
@@ -585,7 +538,7 @@ export default function RemisionesCompra() {
       id_iva: item.id_iva,
       lote: item.lote.trim() || "",
       fecha_vencimiento: item.fecha_vencimiento || undefined,
-      cod_barras: item.cod_barras?.trim() || undefined,
+      codigo_barras: item.codigo_barras?.trim() || undefined,
       nota: item.nota?.trim() || undefined,
     }));
   };
@@ -732,7 +685,12 @@ export default function RemisionesCompra() {
         id_estado_remision_compra: ESTADO_REMISION_IDS.APLICADA,
       });
 
-      await loadRemisiones();
+      await loadRemisiones(); 
+
+      if (selectedRemision?.id === remisionParaCambioEstado.id) {
+        const fresh = await getRemisionCompraById(remisionParaCambioEstado.id);
+        setSelectedRemision(fresh);
+      }
 
       toast.success(
         "Estado actualizado correctamente y existencias aplicadas desde backend"
@@ -820,7 +778,7 @@ export default function RemisionesCompra() {
         `Observaciones,"${(detalle.observaciones || "N/A").replace(/"/g, '""')}"`,
         "",
         "PRODUCTOS",
-        "Producto,Lote,Cantidad,Precio Unitario,IVA %,Fecha Vencimiento,Nota",
+        "Producto,Lote,Cantidad,Precio Unitario,IVA %,Fecha Vencimiento,Código Barras,Nota",
         ...detalle.items.map(
           (item) =>
             `"${item.productoNombre.replace(/"/g, '""')}",` +
@@ -829,6 +787,7 @@ export default function RemisionesCompra() {
             `${item.precio_unitario},` +
             `${item.ivaPorcentaje},` +
             `"${formatDate(item.fecha_vencimiento)}",` +
+            `"${(item.codigo_barras || item.cod_barras || "").replace(/"/g, '""')}",` +
             `"${(item.nota || "").replace(/"/g, '""')}"`
         ),
       ];
@@ -875,87 +834,82 @@ export default function RemisionesCompra() {
   }
 
   return (
-    
-  <div className="space-y-6">
-        <div>
+    <div className="space-y-6">
+      <div>
         <h2 className="text-gray-900">Gestión de Remisiones de Compra</h2>
         <p className="text-gray-600 mt-1">
           Crea, consulta, edita y administra las remisiones de compra asociadas a órdenes de compra.
         </p>
       </div>
-    
-      {/* Estadísticas */}
-  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-    <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-blue-100 text-sm">Total Remisiones</p>
-          <p className="text-3xl mt-2">{stats.totalRemisiones}</p>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-blue-100 text-sm">Total Remisiones</p>
+              <p className="text-3xl mt-2">{stats.totalRemisiones}</p>
+            </div>
+            <FileText className="text-blue-200" size={40} />
+          </div>
         </div>
-        <FileText className="text-blue-200" size={40} />
+
+        <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl shadow-lg p-6 text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-yellow-100 text-sm">Pendientes</p>
+              <p className="text-3xl mt-2">{stats.pendientes}</p>
+            </div>
+            <Clock className="text-yellow-200" size={40} />
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-6 text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-green-100 text-sm">Aprobadas / Confirmadas</p>
+              <p className="text-3xl mt-2">{stats.aplicadas}</p>
+            </div>
+            <CheckCircle className="text-green-200" size={40} />
+          </div>
+        </div>
+
+        <div
+          className="rounded-xl shadow-lg p-6"
+          style={{
+            background: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)",
+            color: "#ffffff",
+          }}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p
+                style={{
+                  color: "#fecaca",
+                  fontSize: "0.875rem",
+                }}
+              >
+                Anuladas
+              </p>
+              <p
+                style={{
+                  color: "#ffffff",
+                  fontSize: "1.875rem",
+                  marginTop: "0.5rem",
+                  fontWeight: 700,
+                  lineHeight: 1,
+                }}
+              >
+                {stats.anuladas}
+              </p>
+            </div>
+
+            <div style={{ color: "#fecaca" }}>
+              <Ban size={40} />
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
 
-    <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl shadow-lg p-6 text-white">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-yellow-100 text-sm">Pendientes</p>
-          <p className="text-3xl mt-2">{stats.pendientes}</p>
-        </div>
-        <Clock className="text-yellow-200" size={40} />
-      </div>
-    </div>
-
-    <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-6 text-white">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-green-100 text-sm">Aprobadas / Confirmadas</p>
-          <p className="text-3xl mt-2">{stats.aplicadas}</p>
-        </div>
-        <CheckCircle className="text-green-200" size={40} />
-      </div>
-    </div>
-
-    <div
-      className="rounded-xl shadow-lg p-6"
-      style={{
-        background: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)",
-        color: "#ffffff",
-      }}
-    >
-      <div className="flex items-center justify-between">
-        <div>
-          <p
-            style={{
-              color: "#fecaca",
-              fontSize: "0.875rem",
-            }}
-          >
-            Anuladas
-          </p>
-          <p
-            style={{
-              color: "#ffffff",
-              fontSize: "1.875rem",
-              marginTop: "0.5rem",
-              fontWeight: 700,
-              lineHeight: 1,
-            }}
-          >
-            {stats.anuladas}
-          </p>
-        </div>
-
-        <div style={{ color: "#fecaca" }}>
-          <Ban size={40} />
-        </div>
-      </div>
-    </div>
-
-  </div>
-
-
-      {/* Barra de búsqueda y acciones */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
         <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
           <div className="relative flex-1 w-full sm:w-auto">
@@ -970,11 +924,6 @@ export default function RemisionesCompra() {
           </div>
 
           <div className="flex gap-2 w-full sm:w-auto">
-            <Button variant="outline" onClick={handleDescargarRemisiones} className="w-full sm:w-auto">
-              <Download size={18} className="mr-2" />
-              Descargar
-            </Button>
-
             <Button
               onClick={handleCreate}
               className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto"
@@ -986,7 +935,6 @@ export default function RemisionesCompra() {
         </div>
       </div>
 
-      {/* Tabla */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <Table>
@@ -1134,7 +1082,6 @@ export default function RemisionesCompra() {
         )}
       </div>
 
-      {/* Modal Crear */}
       <Dialog
         open={isCrear}
         onOpenChange={(open) => {
@@ -1311,9 +1258,10 @@ export default function RemisionesCompra() {
                 <div className="flex items-center gap-2 mb-2">
                   <Barcode size={20} className="text-blue-600" />
                   <Label htmlFor="codigoBarras" className="text-blue-900">
-                    Lector de Código de Barras
+                    Código de Barras del Ítem
                   </Label>
                 </div>
+
                 <div className="relative">
                   <Input
                     id="codigoBarras"
@@ -1321,7 +1269,7 @@ export default function RemisionesCompra() {
                     value={codigoBarras}
                     onChange={(e) => setCodigoBarras(e.target.value)}
                     onKeyDown={handleBarcodeKeyDown}
-                    placeholder="Escanee el código de barras del producto..."
+                    placeholder="Escanee o escriba el código de barras del lote/ítem..."
                     className="pr-10 bg-white border-blue-300 focus:border-blue-500"
                   />
                   <Barcode
@@ -1329,8 +1277,9 @@ export default function RemisionesCompra() {
                     size={20}
                   />
                 </div>
+
                 <p className="text-xs text-blue-700 mt-2">
-                  Solo reconoce productos que pertenezcan a la compra seleccionada
+                  Opcional. Este código se guarda en el detalle de la remisión y luego en existencias.
                 </p>
               </div>
 
@@ -1421,6 +1370,7 @@ export default function RemisionesCompra() {
                         <TableHead>Precio</TableHead>
                         <TableHead>IVA</TableHead>
                         <TableHead>Vencimiento</TableHead>
+                        <TableHead>Cód. Barras</TableHead>
                         <TableHead>Nota</TableHead>
                         <TableHead className="w-16"></TableHead>
                       </TableRow>
@@ -1434,6 +1384,7 @@ export default function RemisionesCompra() {
                           <TableCell>{formatMoney(item.precio_unitario)}</TableCell>
                           <TableCell>{item.ivaPorcentaje}%</TableCell>
                           <TableCell>{formatDate(item.fecha_vencimiento)}</TableCell>
+                          <TableCell>{item.codigo_barras || "—"}</TableCell>
                           <TableCell>{item.nota || "—"}</TableCell>
                           <TableCell>
                             <Button
@@ -1448,7 +1399,7 @@ export default function RemisionesCompra() {
                         </TableRow>
                       ))}
                       <TableRow className="bg-gray-50">
-                        <TableCell colSpan={7} className="text-right font-semibold">
+                        <TableCell colSpan={8} className="text-right font-semibold">
                           Total aproximado
                         </TableCell>
                         <TableCell className="font-semibold">
@@ -1493,7 +1444,6 @@ export default function RemisionesCompra() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Editar */}
       <Dialog
         open={isEditar}
         onOpenChange={(open) => {
@@ -1671,6 +1621,24 @@ export default function RemisionesCompra() {
                     </div>
 
                     <div className="space-y-2">
+                      <Label htmlFor="edit-codigoBarrasItem">Código de Barras</Label>
+                      <div className="relative">
+                        <Input
+                          id="edit-codigoBarrasItem"
+                          value={codigoBarras}
+                          onChange={(e) => setCodigoBarras(e.target.value)}
+                          onKeyDown={handleBarcodeKeyDown}
+                          placeholder="Escanee o escriba el código de barras..."
+                          className="pr-10"
+                        />
+                        <Barcode
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                          size={18}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
                       <Label htmlFor="edit-numeroLote">Número de Lote *</Label>
                       <Input
                         id="edit-numeroLote"
@@ -1736,6 +1704,7 @@ export default function RemisionesCompra() {
                           <TableHead>Precio</TableHead>
                           <TableHead>IVA</TableHead>
                           <TableHead>Vencimiento</TableHead>
+                          <TableHead>Cód. Barras</TableHead>
                           <TableHead>Nota</TableHead>
                           <TableHead className="w-16"></TableHead>
                         </TableRow>
@@ -1749,6 +1718,7 @@ export default function RemisionesCompra() {
                             <TableCell>{formatMoney(item.precio_unitario)}</TableCell>
                             <TableCell>{item.ivaPorcentaje}%</TableCell>
                             <TableCell>{formatDate(item.fecha_vencimiento)}</TableCell>
+                            <TableCell>{item.codigo_barras || "—"}</TableCell>
                             <TableCell>{item.nota || "—"}</TableCell>
                             <TableCell>
                               <Button
@@ -1763,7 +1733,7 @@ export default function RemisionesCompra() {
                           </TableRow>
                         ))}
                         <TableRow className="bg-gray-50">
-                          <TableCell colSpan={7} className="text-right font-semibold">
+                          <TableCell colSpan={8} className="text-right font-semibold">
                             Total aproximado
                           </TableCell>
                           <TableCell className="font-semibold">
@@ -1806,7 +1776,6 @@ export default function RemisionesCompra() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Ver */}
       <Dialog
         open={isVer}
         onOpenChange={(open) => {
@@ -1895,6 +1864,7 @@ export default function RemisionesCompra() {
                         <TableHead>Precio</TableHead>
                         <TableHead>IVA</TableHead>
                         <TableHead>Vencimiento</TableHead>
+                        <TableHead>Cód. Barras</TableHead>
                         <TableHead>Nota</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1907,11 +1877,12 @@ export default function RemisionesCompra() {
                           <TableCell>{formatMoney(item.precio_unitario)}</TableCell>
                           <TableCell>{item.ivaPorcentaje}%</TableCell>
                           <TableCell>{formatDate(item.fecha_vencimiento)}</TableCell>
+                          <TableCell>{item.codigo_barras || item.cod_barras || "—"}</TableCell>
                           <TableCell>{item.nota || "—"}</TableCell>
                         </TableRow>
                       ))}
                       <TableRow className="bg-gray-50">
-                        <TableCell colSpan={6} className="text-right font-semibold">
+                        <TableCell colSpan={7} className="text-right font-semibold">
                           Total
                         </TableCell>
                         <TableCell className="font-semibold">
@@ -1940,7 +1911,6 @@ export default function RemisionesCompra() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Anular */}
       <Dialog
         open={isAnular}
         onOpenChange={(open) => {
@@ -1991,7 +1961,6 @@ export default function RemisionesCompra() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Confirmar Estado */}
       <Dialog
         open={showConfirmEstadoModal}
         onOpenChange={setShowConfirmEstadoModal}
@@ -2060,7 +2029,6 @@ export default function RemisionesCompra() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Éxito */}
       <Dialog
         open={showSuccessModal}
         onOpenChange={handleSuccessModalClose}
@@ -2117,4 +2085,3 @@ export default function RemisionesCompra() {
     </div>
   );
 }
-

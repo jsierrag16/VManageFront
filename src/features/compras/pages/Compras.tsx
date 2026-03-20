@@ -56,35 +56,37 @@ import {
 
 import { toast } from "sonner";
 import type { AppOutletContext } from "../../../layouts/MainLayout";
-import type {
-  BasicOption,
-  Compra,
-  CompraEstado,
-  IvaOption,
-  ProductoOrden,
-  CompraCreatePayload,
-} from "../services/compras.types";
 
 import {
   ESTADO_COMPRA_IDS,
   getFechaActual,
 } from "../services/compras.mapper";
 
-import { comprasService } from "../services/compras.services";
+import {
+  comprasService,
+  type BasicOption,
+  type Compra,
+  type CompraEstado,
+  type IvaOption,
+  type ProductoOrden,
+  type CompraCreatePayload,
+  type ProveedorOption,
+} from "../services/compras.services";
 
 export default function Compras() {
   const [searchTerm, setSearchTerm] = useState("");
   const [compras, setCompras] = useState<Compra[]>([]);
   const [compraDetalle, setCompraDetalle] = useState<Compra | null>(null);
 
-  const [proveedores, setProveedores] = useState<BasicOption[]>([]);
+  const [proveedores, setProveedores] = useState<ProveedorOption[]>([]);
   const [productosCatalogo, setProductosCatalogo] = useState<BasicOption[]>([]);
   const [terminosPago, setTerminosPago] = useState<BasicOption[]>([]);
   const [ivas, setIvas] = useState<IvaOption[]>([]);
   const [bodegas, setBodegas] = useState<BasicOption[]>([]);
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
+  const [showConfirmEstadoModal, setShowConfirmEstadoModal] =
+    useState(false);
   const [compraParaCambioEstado, setCompraParaCambioEstado] =
     useState<Compra | null>(null);
 
@@ -125,6 +127,16 @@ export default function Compras() {
   };
 
   const handleEdit = (c: Compra) => {
+    if (c.estado === "Aprobada") {
+      toast.error("No puedes editar una orden aprobada");
+      return;
+    }
+
+    if (c.estado === "Anulada") {
+      toast.error("No puedes editar una orden anulada");
+      return;
+    }
+
     navigate(`/app/compras/${c.id}/editar`);
   };
 
@@ -142,9 +154,67 @@ export default function Compras() {
     navigate(`/app/compras/${c.id}/anular`);
   };
 
+  const handleCantidadProductoChange = (value: string) => {
+    const limpio = value.replace(/\D/g, "");
+
+    if (limpio === "") {
+      setCantidadProductoInput("");
+      setCantidadProducto(0);
+      return;
+    }
+
+    const numero = parseInt(limpio, 10);
+
+    if (numero > 1000) return;
+
+    setCantidadProductoInput(String(numero));
+    setCantidadProducto(numero);
+  };
+
+  const handleCantidadProductoBlur = () => {
+    if (!cantidadProductoInput.trim()) {
+      setCantidadProductoInput("");
+      setCantidadProducto(0);
+      return;
+    }
+
+    const numero = parseInt(cantidadProductoInput, 10);
+
+    if (Number.isNaN(numero) || numero <= 0) {
+      setCantidadProductoInput("");
+      setCantidadProducto(0);
+      return;
+    }
+
+    setCantidadProductoInput(String(numero));
+    setCantidadProducto(numero);
+  };
+
+  const handlePrecioProductoChange = (value: string) => {
+    let limpio = value.replace(",", ".").replace(/[^\d.]/g, "");
+
+    if (limpio === "") {
+      setPrecioProducto("");
+      return;
+    }
+
+    const partes = limpio.split(".");
+    if (partes.length > 2) return;
+
+    const entero = partes[0] ?? "";
+    const decimal = partes[1] ?? "";
+
+    if (entero.length > 12) return;
+    if (decimal.length > 2) return;
+
+    setPrecioProducto(limpio);
+  };
+
   const [formData, setFormData] = useState({
     numeroOrden: "",
     proveedorId: "",
+    proveedorTipoDocumento: "",
+    proveedorNumeroDocumento: "",
     terminoPagoId: "",
     fecha: "",
     fechaEntrega: "",
@@ -156,7 +226,8 @@ export default function Compras() {
 
   const [selectedProductoId, setSelectedProductoId] = useState("");
   const [selectedIvaId, setSelectedIvaId] = useState("");
-  const [cantidadProducto, setCantidadProducto] = useState(1);
+  const [cantidadProducto, setCantidadProducto] = useState(0);
+  const [cantidadProductoInput, setCantidadProductoInput] = useState("");
   const [precioProducto, setPrecioProducto] = useState<string>("");
   const [productosOrden, setProductosOrden] = useState<ProductoOrden[]>([]);
 
@@ -238,8 +309,6 @@ export default function Compras() {
       setTerminosPago(result.terminosPago);
       setIvas(result.ivas);
       setBodegas(result.bodegas ?? []);
-
-      console.log("CATALOGOS COMPRAS =>", result);
 
       if (result.huboError) {
         toast.error(
@@ -363,7 +432,9 @@ export default function Compras() {
     doc.text(`Bodega: ${compra.bodega || "-"}`, 20, 58);
 
     doc.text(
-      `Fecha: ${compra.fecha ? new Date(compra.fecha).toLocaleDateString("es-CO") : "-"}`,
+      `Fecha: ${
+        compra.fecha ? new Date(compra.fecha).toLocaleDateString("es-CO") : "-"
+      }`,
       120,
       40
     );
@@ -489,6 +560,8 @@ export default function Compras() {
     setFormData({
       numeroOrden: "",
       proveedorId: "",
+      proveedorTipoDocumento: "",
+      proveedorNumeroDocumento: "",
       terminoPagoId: "",
       fecha: getFechaActual(),
       fechaEntrega: "",
@@ -503,7 +576,8 @@ export default function Compras() {
 
     setSelectedProductoId("");
     setSelectedIvaId("");
-    setCantidadProducto(1);
+    setCantidadProducto(0);
+    setCantidadProductoInput("");
     setPrecioProducto("");
     setProductosOrden([]);
   };
@@ -520,6 +594,8 @@ export default function Compras() {
     setFormData({
       numeroOrden: compraDetalle.numeroOrden,
       proveedorId: String(compraDetalle.proveedorId || ""),
+      proveedorTipoDocumento: compraDetalle.proveedorTipoDocumento || "",
+      proveedorNumeroDocumento: compraDetalle.proveedorNumeroDocumento || "",
       terminoPagoId: String(compraDetalle.terminoPagoId || ""),
       fecha: compraDetalle.fecha,
       fechaEntrega: compraDetalle.fechaEntrega,
@@ -532,7 +608,8 @@ export default function Compras() {
     setProductosOrden(compraDetalle.productos ?? []);
     setSelectedProductoId("");
     setSelectedIvaId("");
-    setCantidadProducto(1);
+    setCantidadProducto(0);
+    setCantidadProductoInput("");
     setPrecioProducto("");
   }, [isEditar, compraDetalle]);
 
@@ -557,73 +634,105 @@ export default function Compras() {
     }
   }, [params.id, isVer, isEditar, isAnular, loadCompraDetalle]);
 
+  const handleProveedorChange = useCallback(
+    (value: string) => {
+      const proveedorSeleccionado = proveedoresActivos.find(
+        (proveedor) => String(proveedor.id) === value
+      );
+
+      setFormData((prev) => ({
+        ...prev,
+        proveedorId: value,
+        proveedorTipoDocumento: proveedorSeleccionado?.tipoDocumento || "",
+        proveedorNumeroDocumento:
+          proveedorSeleccionado?.numeroDocumento || "",
+      }));
+    },
+    [proveedoresActivos]
+  );
+
   const handleAgregarProducto = () => {
     if (!selectedProductoId) {
-      toast.error("Debes seleccionar un producto");
+      toast.error("Selecciona un producto");
+      return;
+    }
+
+    const cantidadNormalizada = Number(cantidadProductoInput.replace(",", "."));
+    const precioNormalizado = Number(precioProducto.replace(",", "."));
+
+    if (
+      !cantidadProductoInput.trim() ||
+      Number.isNaN(cantidadNormalizada) ||
+      cantidadNormalizada <= 0
+    ) {
+      toast.error("Ingresa una cantidad válida");
+      return;
+    }
+
+    if (cantidadNormalizada > 1000) {
+      toast.error("La cantidad máxima permitida es 1000");
       return;
     }
 
     if (!selectedIvaId) {
-      toast.error("Debes seleccionar un IVA");
+      toast.error("Selecciona un IVA");
       return;
     }
 
-    if (cantidadProducto <= 0) {
-      toast.error("La cantidad debe ser mayor a 0");
-      return;
-    }
-
-    const precio = parseFloat(precioProducto) || 0;
-
-    if (!precioProducto.trim() || Number.isNaN(precio) || precio <= 0) {
-      toast.error("El precio debe ser mayor a 0");
+    if (
+      !precioProducto.trim() ||
+      Number.isNaN(precioNormalizado) ||
+      precioNormalizado <= 0
+    ) {
+      toast.error("Ingresa un precio unitario válido");
       return;
     }
 
     const productoSeleccionado = productosActivos.find(
-      (p) => String(p.id) === String(selectedProductoId)
+      (producto) => String(producto.id) === selectedProductoId
     );
 
     if (!productoSeleccionado) {
-      toast.error("Producto no encontrado");
+      toast.error("El producto seleccionado no es válido");
       return;
     }
 
     const ivaSeleccionado = ivasActivos.find(
-      (i) => String(i.id) === String(selectedIvaId)
+      (iva) => String(iva.id) === selectedIvaId
     );
 
     if (!ivaSeleccionado) {
-      toast.error("IVA no encontrado");
+      toast.error("El IVA seleccionado no es válido");
       return;
     }
 
     const yaExiste = productosOrden.some(
-      (item) => String(item.producto.id) === String(productoSeleccionado.id)
+      (item) => String(item.producto.id) === selectedProductoId
     );
 
     if (yaExiste) {
-      toast.error("Este producto ya fue agregado a la orden");
+      toast.error("Ese producto ya fue agregado a la orden");
       return;
     }
 
+    const subtotal = cantidadNormalizada * precioNormalizado;
+
     const nuevoProducto: ProductoOrden = {
-      producto: {
-        id: productoSeleccionado.id,
-        nombre: productoSeleccionado.nombre,
-      },
-      cantidad: cantidadProducto,
-      precio,
-      subtotal: Number((cantidadProducto * precio).toFixed(2)),
+      producto: productoSeleccionado,
+      cantidad: cantidadNormalizada,
+      precio: precioNormalizado,
+      subtotal,
       idIva: ivaSeleccionado.id,
       ivaNombre: ivaSeleccionado.nombre,
       ivaPorcentaje: ivaSeleccionado.porcentaje,
     };
 
     setProductosOrden((prev) => [...prev, nuevoProducto]);
+
     setSelectedProductoId("");
     setSelectedIvaId("");
-    setCantidadProducto(1);
+    setCantidadProducto(0);
+    setCantidadProductoInput("");
     setPrecioProducto("");
   };
 
@@ -687,6 +796,11 @@ export default function Compras() {
 
     if (compraDetalle.estado === "Anulada") {
       toast.error("No puedes editar una orden anulada");
+      return;
+    }
+
+    if (compraDetalle.estado === "Aprobada") {
+      toast.error("No puedes editar una orden aprobada");
       return;
     }
 
@@ -759,6 +873,15 @@ export default function Compras() {
   };
 
   const compraSeleccionada = compraDetalle;
+
+  const fieldClass =
+    "h-11 rounded-lg border-gray-300 bg-white shadow-none focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:border-blue-500";
+
+  const readonlyFieldClass =
+    "h-11 rounded-lg border-gray-200 bg-gray-100 cursor-not-allowed shadow-none";
+
+  const numberFieldClass =
+    "h-11 rounded-lg border-gray-300 bg-white text-right shadow-none [appearance:textfield] focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:border-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
 
   return (
     <div className="space-y-6">
@@ -938,8 +1061,20 @@ export default function Compras() {
                           onClick={() => handleEdit(compra)}
                           className="hover:bg-yellow-50"
                           title="Editar"
+                          disabled={
+                            compra.estado === "Aprobada" ||
+                            compra.estado === "Anulada"
+                          }
                         >
-                          <Edit size={16} className="text-yellow-600" />
+                          <Edit
+                            size={16}
+                            className={
+                              compra.estado === "Aprobada" ||
+                              compra.estado === "Anulada"
+                                ? "text-gray-400"
+                                : "text-yellow-600"
+                            }
+                          />
                         </Button>
 
                         <Button
@@ -1028,50 +1163,42 @@ export default function Compras() {
         }}
       >
         <DialogContent
-          className="max-w-6xl w-[95vw] max-h-[90vh] overflow-y-auto p-0"
+          className="max-w-6xl max-h-[90vh] overflow-y-auto"
           aria-describedby="create-order-description"
           onInteractOutside={(e) => e.preventDefault()}
         >
-          <DialogHeader className="px-6 pt-6 pb-4 border-b bg-white">
-            <DialogTitle className="text-2xl font-semibold">
-              Nueva Orden de Compra
-            </DialogTitle>
-            <DialogDescription id="create-order-description" className="text-sm text-gray-500">
-              Completa la información para crear una nueva orden de compra
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="px-6 py-6 space-y-6">
-            <div className="rounded-xl border bg-white p-5 space-y-5">
-              <div className="flex items-center justify-between">
-                <h3 className="text-base font-semibold text-gray-800">
-                  Información General
-                </h3>
-                <span className="text-xs text-gray-500">Campos principales de la orden</span>
+          <DialogHeader>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <DialogTitle>Nueva Orden de Compra</DialogTitle>
+                <DialogDescription
+                  id="create-order-description"
+                  className="text-sm text-gray-500"
+                >
+                  Completa la información para crear una nueva orden de compra
+                </DialogDescription>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
-                <div className="space-y-2">
-                  <Label htmlFor="numeroOrden">Número de Orden</Label>
-                  <Input
-                    id="numeroOrden"
-                    value={formData.numeroOrden || "Se genera automáticamente"}
-                    disabled
-                    className="bg-gray-100 h-12"
-                  />
+              {formData.numeroOrden ? (
+                <div className="text-right">
+                  <p className="text-xs text-gray-500">Número de Orden</p>
+                  <p className="font-semibold text-gray-900">
+                    {formData.numeroOrden}
+                  </p>
                 </div>
+              ) : null}
+            </div>
+          </DialogHeader>
 
-                <div className="space-y-2">
-                  <Label htmlFor="fecha">Fecha</Label>
-                  <Input
-                    id="fecha"
-                    type="date"
-                    value={formData.fecha}
-                    disabled
-                    className="bg-gray-100 h-12"
-                  />
-                </div>
+          <div className="space-y-5 py-4">
+            <div className="space-y-4">
+              <div className="flex items-center justify-end border-b pb-2">
+                <p className="text-sm font-semibold text-green-600">
+                  {formData.fecha}
+                </p>
+              </div>
 
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="fechaEntrega">Fecha de Entrega *</Label>
                   <Input
@@ -1081,11 +1208,11 @@ export default function Compras() {
                     onChange={(e) =>
                       setFormData({ ...formData, fechaEntrega: e.target.value })
                     }
-                    className="h-12"
+                    className={fieldClass}
                   />
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="bodega">Bodega *</Label>
                   <Select
                     value={formData.bodegaId}
@@ -1101,12 +1228,12 @@ export default function Compras() {
                       });
                     }}
                   >
-                    <SelectTrigger id="bodega" className="h-12">
+                    <SelectTrigger id="bodega" className={fieldClass}>
                       <SelectValue placeholder="Selecciona una bodega" />
                     </SelectTrigger>
                     <SelectContent>
                       {bodegasActivas.length === 0 ? (
-                        <div className="px-2 py-2 text-sm text-gray-500">
+                        <div className="px-3 py-2 text-sm text-gray-500">
                           No hay bodegas disponibles
                         </div>
                       ) : (
@@ -1122,54 +1249,83 @@ export default function Compras() {
               </div>
             </div>
 
-            <div className="rounded-xl border bg-white p-5 space-y-5">
-              <div className="flex items-center justify-between">
-                <h3 className="text-base font-semibold text-gray-800">
+            <div className="border-t pt-6 mt-6">
+              <div className="space-y-1 mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">
                   Proveedor y Condiciones
                 </h3>
-                <span className="text-xs text-gray-500">Asocia proveedor y forma de pago</span>
+                <p className="text-sm text-gray-500">
+                  Selecciona proveedor y término de pago
+                </p>
               </div>
 
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
                 <div className="space-y-2">
                   <Label htmlFor="proveedor">Proveedor *</Label>
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <Select
-                      value={formData.proveedorId}
-                      onValueChange={(value: string) =>
-                        setFormData({ ...formData, proveedorId: value })
-                      }
-                    >
-                      <SelectTrigger id="proveedor" className="flex-1 h-12">
-                        <SelectValue placeholder="Selecciona un proveedor" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {proveedoresActivos.length === 0 ? (
-                          <div className="px-2 py-2 text-sm text-gray-500">
-                            No hay proveedores activos disponibles
-                          </div>
-                        ) : (
-                          proveedoresActivos.map((proveedor) => (
-                            <SelectItem key={proveedor.id} value={String(proveedor.id)}>
-                              {proveedor.nombre}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => navigate("/app/proveedores/crear")}
-                      className="border-blue-600 text-blue-600 hover:bg-blue-50 h-12 px-5 whitespace-nowrap"
-                    >
-                      <Plus size={18} className="mr-2" />
-                      Nuevo Proveedor
-                    </Button>
-                  </div>
+                  <Select
+                    value={formData.proveedorId}
+                    onValueChange={handleProveedorChange}
+                  >
+                    <SelectTrigger id="proveedor" className={fieldClass}>
+                      <SelectValue placeholder="Selecciona un proveedor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {proveedoresActivos.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-gray-500">
+                          No hay proveedores activos disponibles
+                        </div>
+                      ) : (
+                        proveedoresActivos.map((proveedor) => (
+                          <SelectItem
+                            key={proveedor.id}
+                            value={String(proveedor.id)}
+                          >
+                            {proveedor.nombre}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
                 </div>
 
+                <div className="flex items-end lg:pt-7">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => navigate("/app/proveedores/crear")}
+                    className="h-11 w-full border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
+                  >
+                    <Plus size={16} className="mr-2" />
+                    Nuevo Proveedor
+                  </Button>
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="proveedorTipoDocumento">Tipo de Documento</Label>
+                  <Input
+                    id="proveedorTipoDocumento"
+                    value={formData.proveedorTipoDocumento}
+                    readOnly
+                    className={readonlyFieldClass}
+                    placeholder="Se completa al seleccionar proveedor"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="proveedorNumeroDocumento">Documento / NIT</Label>
+                  <Input
+                    id="proveedorNumeroDocumento"
+                    value={formData.proveedorNumeroDocumento}
+                    readOnly
+                    className={readonlyFieldClass}
+                    placeholder="Se completa al seleccionar proveedor"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="terminoPago">Término de Pago *</Label>
                   <Select
@@ -1178,12 +1334,12 @@ export default function Compras() {
                       setFormData({ ...formData, terminoPagoId: value })
                     }
                   >
-                    <SelectTrigger id="terminoPago" className="h-12">
+                    <SelectTrigger id="terminoPago" className={fieldClass}>
                       <SelectValue placeholder="Selecciona un término de pago" />
                     </SelectTrigger>
                     <SelectContent>
                       {terminosPagoActivos.length === 0 ? (
-                        <div className="px-2 py-2 text-sm text-gray-500">
+                        <div className="px-3 py-2 text-sm text-gray-500">
                           No hay términos de pago disponibles
                         </div>
                       ) : (
@@ -1199,25 +1355,23 @@ export default function Compras() {
               </div>
             </div>
 
-            <div className="rounded-xl border bg-white p-5 space-y-5">
-              <div className="flex items-center justify-between">
-                <h3 className="text-base font-semibold text-gray-800">
+            <div className="border-t pt-6 mt-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Package size={20} className="text-blue-600" />
+                <h3 className="font-semibold text-gray-900">
                   Productos de la Orden
                 </h3>
-                <span className="text-xs text-gray-500">
-                  Agrega los productos que incluirá la compra
-                </span>
               </div>
 
-              <div className="rounded-xl border bg-gray-50 p-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-4">
-                  <div className="xl:col-span-4 space-y-2">
-                    <Label htmlFor="producto">Producto</Label>
+              <div className="bg-gray-50 p-4 rounded-lg space-y-4 mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="producto">Producto *</Label>
                     <Select
                       value={selectedProductoId}
                       onValueChange={setSelectedProductoId}
                     >
-                      <SelectTrigger id="producto" className="h-12 bg-white">
+                      <SelectTrigger id="producto" className={fieldClass}>
                         <SelectValue placeholder="Selecciona un producto" />
                       </SelectTrigger>
                       <SelectContent>
@@ -1230,24 +1384,29 @@ export default function Compras() {
                     </Select>
                   </div>
 
-                  <div className="xl:col-span-2 space-y-2">
-                    <Label htmlFor="cantidad">Cantidad</Label>
+                  <div className="space-y-2">
+                    <Label htmlFor="cantidad">Cantidad *</Label>
                     <Input
                       id="cantidad"
-                      type="number"
-                      value={cantidadProducto}
+                      type="text"
+                      inputMode="numeric"
+                      value={cantidadProductoInput}
                       onChange={(e) =>
-                        setCantidadProducto(parseInt(e.target.value) || 1)
+                        handleCantidadProductoChange(e.target.value)
                       }
-                      min="1"
-                      className="h-12 bg-white"
+                      onBlur={handleCantidadProductoBlur}
+                      placeholder="Ej: 50"
+                      className={numberFieldClass}
                     />
+                    <p className="text-xs text-gray-500">
+                      Máximo 1000 unidades.
+                    </p>
                   </div>
 
-                  <div className="xl:col-span-2 space-y-2">
-                    <Label htmlFor="iva">IVA</Label>
+                  <div className="space-y-2">
+                    <Label htmlFor="iva">IVA *</Label>
                     <Select value={selectedIvaId} onValueChange={setSelectedIvaId}>
-                      <SelectTrigger id="iva" className="h-12 bg-white">
+                      <SelectTrigger id="iva" className={fieldClass}>
                         <SelectValue placeholder="Selecciona IVA" />
                       </SelectTrigger>
                       <SelectContent>
@@ -1260,139 +1419,168 @@ export default function Compras() {
                     </Select>
                   </div>
 
-                  <div className="xl:col-span-2 space-y-2">
-                    <Label htmlFor="precio">Precio Unitario</Label>
+                  <div className="space-y-2">
+                    <Label htmlFor="precio">Precio Unitario *</Label>
                     <Input
                       id="precio"
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={precioProducto}
-                      onChange={(e) => setPrecioProducto(e.target.value)}
-                      min="0"
-                      step="0.01"
-                      placeholder="0.00"
-                      className="h-12 bg-white sin-flechas"
+                      onChange={(e) =>
+                        handlePrecioProductoChange(e.target.value)
+                      }
+                      placeholder="Ej: 25000"
+                      className={numberFieldClass}
                     />
                   </div>
-
-                  <div className="xl:col-span-2 flex items-end">
-                    <Button
-                      type="button"
-                      onClick={handleAgregarProducto}
-                      className="w-full bg-green-600 hover:bg-green-700 h-12"
-                    >
-                      <Plus size={18} className="mr-2" />
-                      Agregar
-                    </Button>
-                  </div>
                 </div>
+
+                <Button
+                  type="button"
+                  onClick={handleAgregarProducto}
+                  className="bg-green-600 hover:bg-green-700 w-full h-11"
+                >
+                  <Plus size={16} className="mr-2" />
+                  Agregar Producto
+                </Button>
               </div>
 
-              {productosOrden.length > 0 && (
-                <div className="border rounded-xl overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-gray-50">
-                        <TableHead>Producto</TableHead>
-                        <TableHead className="text-center">Cantidad</TableHead>
-                        <TableHead className="text-center">IVA</TableHead>
-                        <TableHead className="text-right">Precio Unit.</TableHead>
-                        <TableHead className="text-right">Subtotal</TableHead>
-                        <TableHead className="text-center">Acciones</TableHead>
-                      </TableRow>
-                    </TableHeader>
-
-                    <TableBody>
-                      {productosOrden.map((item) => (
-                        <TableRow key={item.producto.id} className="hover:bg-gray-50">
-                          <TableCell className="font-medium">
-                            {item.producto.nombre}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {item.cantidad}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {item.ivaNombre} ({item.ivaPorcentaje}%)
-                          </TableCell>
-                          <TableCell className="text-right">
-                            ${item.precio.toLocaleString("es-CO")}
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
-                            ${item.subtotal.toLocaleString("es-CO")}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                handleEliminarProducto(item.producto.id)
-                              }
-                              className="hover:bg-red-50"
-                            >
-                              <Trash2 size={16} className="text-red-600" />
-                            </Button>
-                          </TableCell>
+              {productosOrden.length > 0 ? (
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="max-h-[260px] overflow-y-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-gray-50">
+                          <TableHead>Producto</TableHead>
+                          <TableHead className="text-center">Cantidad</TableHead>
+                          <TableHead className="text-center">IVA</TableHead>
+                          <TableHead className="text-right">Precio Unitario</TableHead>
+                          <TableHead className="text-right">Subtotal</TableHead>
+                          <TableHead className="w-16"></TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+
+                      <TableBody>
+                        {productosOrden.map((item) => (
+                          <TableRow key={item.producto.id}>
+                            <TableCell>{item.producto.nombre}</TableCell>
+                            <TableCell className="text-center">
+                              {item.cantidad}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {item.ivaNombre} ({item.ivaPorcentaje}%)
+                            </TableCell>
+                            <TableCell className="text-right">
+                              ${item.precio.toLocaleString("es-CO")}
+                            </TableCell>
+                            <TableCell className="text-right font-medium">
+                              ${item.subtotal.toLocaleString("es-CO")}
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  handleEliminarProducto(item.producto.id)
+                                }
+                                className="hover:bg-red-50"
+                              >
+                                <Trash2 size={16} className="text-red-600" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+
+                        <TableRow className="bg-gray-50">
+                          <TableCell colSpan={4} className="text-right font-semibold">
+                            Total
+                          </TableCell>
+                          <TableCell className="text-right font-semibold text-blue-600">
+                            ${calcularTotales.total.toLocaleString("es-CO")}
+                          </TableCell>
+                          <TableCell />
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500 border rounded-lg border-dashed">
+                  <Package size={44} className="mx-auto mb-2 text-gray-300" />
+                  <p>No hay productos agregados</p>
+                  <p className="text-sm">
+                    Selecciona un producto y agrégalo a la orden
+                  </p>
                 </div>
               )}
 
-              <div className="bg-gray-50 rounded-xl border p-4 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">N° de Items:</span>
-                  <span className="font-medium">{calcularTotales.items}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Subtotal:</span>
-                  <span className="font-medium">
-                    ${calcularTotales.subtotal.toLocaleString("es-CO")}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">IVA:</span>
-                  <span className="font-medium">
-                    ${calcularTotales.impuestos.toLocaleString("es-CO")}
-                  </span>
-                </div>
-                <div className="flex justify-between text-lg border-t pt-3 mt-2">
-                  <span className="font-semibold">Total:</span>
-                  <span className="font-bold text-blue-600">
-                    ${calcularTotales.total.toLocaleString("es-CO")}
-                  </span>
+              <div className="mt-4 ml-auto w-full max-w-sm rounded-lg border bg-gray-50 p-4">
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">N° de Items</span>
+                    <span className="font-medium">{calcularTotales.items}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Subtotal</span>
+                    <span className="font-medium">
+                      ${calcularTotales.subtotal.toLocaleString("es-CO")}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">IVA</span>
+                    <span className="font-medium">
+                      ${calcularTotales.impuestos.toLocaleString("es-CO")}
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-t pt-3 mt-3">
+                    <span className="font-semibold">Total</span>
+                    <span className="font-semibold text-blue-600">
+                      ${calcularTotales.total.toLocaleString("es-CO")}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="rounded-xl border bg-white p-5 space-y-3">
-              <h3 className="text-base font-semibold text-gray-800">
-                Observaciones
-              </h3>
+            <div className="border-t pt-6 mt-6">
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Observaciones
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    Notas adicionales para esta orden
+                  </p>
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="observaciones">Notas adicionales</Label>
-                <Textarea
-                  id="observaciones"
-                  value={formData.observaciones}
-                  onChange={(e) =>
-                    setFormData({ ...formData, observaciones: e.target.value })
-                  }
-                  placeholder="Escribe cualquier observación sobre la orden de compra..."
-                  rows={4}
-                  className="resize-none"
-                />
+                <div className="space-y-2">
+                  <Label htmlFor="observaciones">Notas adicionales</Label>
+                  <Textarea
+                    id="observaciones"
+                    value={formData.observaciones}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        observaciones: e.target.value,
+                      })
+                    }
+                    placeholder="Escribe cualquier observación sobre la orden de compra..."
+                    rows={4}
+                    className="rounded-lg border-gray-300 resize-none shadow-none focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:border-blue-500"
+                  />
+                </div>
               </div>
             </div>
           </div>
 
-          <DialogFooter className="border-t bg-white px-6 py-4">
-            <Button variant="outline" onClick={closeToList}>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeToList} disabled={isSaving}>
               Cancelar
             </Button>
             <Button
               onClick={confirmCreate}
-              disabled={isSaving}
               className="bg-blue-600 hover:bg-blue-700"
+              disabled={isSaving}
             >
               {isSaving ? "Creando..." : "Crear Orden"}
             </Button>
@@ -1457,6 +1645,20 @@ export default function Compras() {
                 </div>
 
                 <div>
+                  <Label className="text-gray-600">Tipo de Documento</Label>
+                  <p className="font-medium">
+                    {compraSeleccionada.proveedorTipoDocumento || "-"}
+                  </p>
+                </div>
+
+                <div>
+                  <Label className="text-gray-600">Documento / NIT</Label>
+                  <p className="font-medium">
+                    {compraSeleccionada.proveedorNumeroDocumento || "-"}
+                  </p>
+                </div>
+
+                <div>
                   <Label className="text-gray-600">Bodega</Label>
                   <p className="font-medium">{compraSeleccionada.bodega || "-"}</p>
                 </div>
@@ -1472,7 +1674,9 @@ export default function Compras() {
                   <Label className="text-gray-600">Fecha de Orden</Label>
                   <p className="font-medium">
                     {compraSeleccionada.fecha
-                      ? new Date(compraSeleccionada.fecha).toLocaleDateString("es-CO")
+                      ? new Date(compraSeleccionada.fecha).toLocaleDateString(
+                          "es-CO"
+                        )
                       : "-"}
                   </p>
                 </div>
@@ -1492,7 +1696,9 @@ export default function Compras() {
               {compraSeleccionada.productos &&
                 compraSeleccionada.productos.length > 0 && (
                   <div className="border-t pt-4">
-                    <Label className="text-gray-600 mb-2 block">Productos</Label>
+                    <Label className="text-gray-600 mb-2 block">
+                      Productos
+                    </Label>
                     <div className="border rounded-lg overflow-hidden">
                       <Table>
                         <TableHeader>
@@ -1654,7 +1860,10 @@ export default function Compras() {
                   <Select
                     value={formData.estado}
                     onValueChange={(value) =>
-                      setFormData({ ...formData, estado: value as CompraEstado })
+                      setFormData({
+                        ...formData,
+                        estado: value as CompraEstado,
+                      })
                     }
                   >
                     <SelectTrigger id="edit-estado" className="h-12">
@@ -1673,9 +1882,7 @@ export default function Compras() {
                   <Label htmlFor="edit-proveedor">Proveedor *</Label>
                   <Select
                     value={formData.proveedorId}
-                    onValueChange={(value: string) =>
-                      setFormData({ ...formData, proveedorId: value })
-                    }
+                    onValueChange={handleProveedorChange}
                   >
                     <SelectTrigger id="edit-proveedor" className="h-12">
                       <SelectValue placeholder="Selecciona un proveedor" />
@@ -1747,7 +1954,35 @@ export default function Compras() {
                 </div>
               </div>
 
-              <div className="border-t pt-6 mt-6">
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-proveedorTipoDocumento">
+                    Tipo de Documento
+                  </Label>
+                  <Input
+                    id="edit-proveedorTipoDocumento"
+                    value={formData.proveedorTipoDocumento}
+                    readOnly
+                    className="bg-gray-100 h-12"
+                    placeholder="Se completa al seleccionar proveedor"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-proveedorNumeroDocumento">
+                    Documento / NIT
+                  </Label>
+                  <Input
+                    id="edit-proveedorNumeroDocumento"
+                    value={formData.proveedorNumeroDocumento}
+                    readOnly
+                    className="bg-gray-100 h-12"
+                    placeholder="Se completa al seleccionar proveedor"
+                  />
+                </div>
+              </div>
+
+              <div className="border-t pt-10 mt-10">
                 <Label className="text-lg mb-4 block">Productos de la Orden</Label>
 
                 <div className="grid grid-cols-12 gap-4">
@@ -1909,7 +2144,10 @@ export default function Compras() {
                   id="edit-observaciones"
                   value={formData.observaciones}
                   onChange={(e) =>
-                    setFormData({ ...formData, observaciones: e.target.value })
+                    setFormData({
+                      ...formData,
+                      observaciones: e.target.value,
+                    })
                   }
                   placeholder="Escribe cualquier observación sobre la orden de compra..."
                   rows={3}
@@ -1924,7 +2162,12 @@ export default function Compras() {
             </Button>
             <Button
               onClick={confirmEdit}
-              disabled={isSaving || isLoadingDetail}
+              disabled={
+                isSaving ||
+                isLoadingDetail ||
+                compraDetalle?.estado === "Aprobada" ||
+                compraDetalle?.estado === "Anulada"
+              }
               className="bg-yellow-600 hover:bg-yellow-700"
             >
               {isSaving ? "Actualizando..." : "Actualizar"}
@@ -1960,8 +2203,8 @@ export default function Compras() {
               {compraSeleccionada.estado === "Aprobada" ? (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
                   <p className="text-sm text-red-800">
-                    La orden <strong>{compraSeleccionada.numeroOrden}</strong> está
-                    aprobada y no puede ser anulada.
+                    La orden <strong>{compraSeleccionada.numeroOrden}</strong>{" "}
+                    está aprobada y no puede ser anulada.
                   </p>
                 </div>
               ) : (
