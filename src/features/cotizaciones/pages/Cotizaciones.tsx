@@ -5,11 +5,25 @@ import {
   useParams,
   useOutletContext,
 } from "react-router-dom";
-import { Search, Eye, Edit, Trash2, Plus, Package, Clock, CheckCircle2, FileText, Download, ChevronLeft, ChevronRight, Ban } from 'lucide-react';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import { Button } from '../../../shared/components/ui/button';
-import { Input } from '../../../shared/components/ui/input';
+import {
+  Search,
+  Eye,
+  Edit,
+  Trash2,
+  Plus,
+  Package,
+  Clock,
+  CheckCircle2,
+  FileText,
+  Download,
+  ChevronLeft,
+  ChevronRight,
+  Ban,
+} from "lucide-react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import { Button } from "../../../shared/components/ui/button";
+import { Input } from "../../../shared/components/ui/input";
 import {
   Table,
   TableBody,
@@ -17,32 +31,50 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '../../../shared/components/ui/table';
+} from "../../../shared/components/ui/table";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../../../shared/components/ui/select';
-import { Badge } from '../../../shared/components/ui/badge';
-import { Textarea } from '../../../shared/components/ui/textarea';
-import { Label } from '../../../shared/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../../../shared/components/ui/dialog';
-import { toast } from 'sonner';
-import { clientesData as initialClientesData, Cliente } from '../../../data/clientes';
-import { productosData, Producto } from '../../../data/productos';
-import { bodegasData } from '../../../data/bodegas';
-import { cotizacionesData, type Cotizacion } from "../../../data/cotizaciones";
+} from "../../../shared/components/ui/select";
+import { Badge } from "../../../shared/components/ui/badge";
+import { Textarea } from "../../../shared/components/ui/textarea";
+import { Label } from "../../../shared/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "../../../shared/components/ui/dialog";
+import { toast } from "sonner";
+import type { Cliente } from "../../../data/clientes";
+import { type Producto } from "../../../data/productos";
 import type { AppOutletContext } from "../../../layouts/MainLayout";
+import { clientesService } from "@/features/clientes/services/clientes.service";
+import { mapClienteApiToUi } from "@/features/clientes/services/clientes.mapper";
+import { getProductosVista } from "@/features/productos/services/productos.services";
+import {
+  cotizacionesService,
+  ESTADO_COTIZACION_FALLBACK,
+  type CotizacionUI as Cotizacion,
+} from "@/features/cotizaciones/services/cotizaciones.service";
 
 export default function Cotizaciones() {
-  // ✅ router + bodega + flags URL
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams<{ id: string }>();
 
-  const { selectedBodegaNombre } = useOutletContext<AppOutletContext>();
+  const {
+    selectedBodegaId,
+    selectedBodegaNombre,
+    bodegasDisponibles,
+    currentUser,
+  } = useOutletContext<AppOutletContext>();
+
   const selectedBodega = selectedBodegaNombre;
 
   const isCrear = location.pathname.endsWith("/crear");
@@ -53,17 +85,17 @@ export default function Cotizaciones() {
   const closeToList = () => navigate("/app/cotizaciones");
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>(cotizacionesData);
-  const [clientes] = useState<Cliente[]>(initialClientesData);
+  const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [productosCatalogo, setProductosCatalogo] = useState<Producto[]>([]);
 
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [isPdfOptionsModalOpen, setIsPdfOptionsModalOpen] = useState(false);
-  const [cotizacionParaPdf, setCotizacionParaPdf] = useState<Cotizacion | null>(null);
+  const [cotizacionParaPdf, setCotizacionParaPdf] =
+    useState<Cotizacion | null>(null);
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  // ✅ cotización seleccionada por URL (:id)
   const cotizacionSeleccionada = useMemo(() => {
     if (!params.id) return null;
     const id = Number(params.id);
@@ -71,7 +103,6 @@ export default function Cotizaciones() {
     return cotizaciones.find((c) => c.id === id) ?? null;
   }, [cotizaciones, params.id]);
 
-  // ✅ si entran a /ver, /editar o /anular con id inválido → volver
   useEffect(() => {
     if (!isVer && !isEditar && !isAnular) return;
 
@@ -79,29 +110,54 @@ export default function Cotizaciones() {
       closeToList();
       return;
     }
-  }, [isVer, isEditar, isAnular, cotizacionSeleccionada, closeToList]);
+
+    if (isEditar && cotizacionSeleccionada.estado === "Anulada") {
+      toast.error("No se puede editar una cotización anulada");
+      closeToList();
+      return;
+    }
+
+    if (
+      isAnular &&
+      (cotizacionSeleccionada.estado === "Aprobada" ||
+        cotizacionSeleccionada.estado === "Anulada")
+    ) {
+      toast.error(
+        cotizacionSeleccionada.estado === "Aprobada"
+          ? "No se puede anular una cotización aprobada"
+          : "La cotización ya está anulada"
+      );
+      closeToList();
+      return;
+    }
+  }, [isVer, isEditar, isAnular, cotizacionSeleccionada]);
 
   const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
   const [cotizacionParaCambioEstado, setCotizacionParaCambioEstado] =
     useState<Cotizacion | null>(null);
 
-  // Form states para cotización
   const [formData, setFormData] = useState({
     numeroCotizacion: "",
     cliente: "",
+    idCliente: "",
     fecha: "",
     fechaVencimiento: "",
-    estado: "Pendiente" as "Pendiente" | "Aprobada" | "Rechazada" | "Vencida" | "Anulada",
+    estado: "Pendiente" as
+      | "Pendiente"
+      | "Aprobada"
+      | "Rechazada"
+      | "Vencida"
+      | "Anulada",
     items: 0,
     subtotal: 0,
     impuestos: 0,
     observaciones: "",
     bodega: "",
+    idBodega: "",
   });
 
-  // Estados para manejo de productos en la cotización
   const [selectedProductoId, setSelectedProductoId] = useState("");
-  const [cantidadProducto, setCantidadProducto] = useState(1);
+  const [cantidadProducto, setCantidadProducto] = useState("0");
   const [precioProducto, setPrecioProducto] = useState<string>("");
   const [productosOrden, setProductosOrden] = useState<
     Array<{
@@ -109,15 +165,14 @@ export default function Cotizaciones() {
       cantidad: number;
       precio: number;
       subtotal: number;
+      idIva?: number;
     }>
   >([]);
 
-  // Filtrar productos activos
   const productosActivos = useMemo(() => {
-    return productosData.filter((p) => p.estado);
-  }, []);
+    return productosCatalogo.filter((p) => p.estado);
+  }, [productosCatalogo]);
 
-  // Generar número de cotización automático
   const generarNumeroCotizacion = () => {
     const maxNum = cotizaciones.reduce((max, c) => {
       const match = /^COT-(\d+)$/.exec(c.numeroCotizacion);
@@ -125,27 +180,93 @@ export default function Cotizaciones() {
       return Number.isFinite(num) ? Math.max(max, num) : max;
     }, 0);
 
-    return `COT-${String(maxNum + 1).padStart(3, "0")}`;
+    return `COT-${String(maxNum + 1).padStart(4, "0")}`;
   };
 
-  // Obtener fecha actual en formato YYYY-MM-DD
+  const estadoIds = useMemo(() => {
+    const map = { ...ESTADO_COTIZACION_FALLBACK };
+
+    cotizaciones.forEach((cotizacion) => {
+      if (cotizacion.estado) {
+        map[cotizacion.estado] = cotizacion.estadoId;
+      }
+    });
+
+    return map;
+  }, [cotizaciones]);
+
+  useEffect(() => {
+    const cargar = async () => {
+      try {
+        const [cotizacionesApi, clientesApi, productosApi] = await Promise.all([
+          cotizacionesService.getAll(),
+          clientesService.getAll({ incluirInactivos: true }),
+          getProductosVista("active", selectedBodegaId ?? undefined),
+        ]);
+
+        setCotizaciones(cotizacionesApi);
+
+        setClientes(
+          clientesApi.map(mapClienteApiToUi).map((cliente) => ({
+            id: String(cliente.id),
+            nombre: cliente.nombre,
+            email: cliente.email,
+            tipoDocumento: cliente.tipoDocumento,
+            numeroDocumento: cliente.numeroDocumento,
+            telefono: cliente.telefono,
+            direccion: cliente.direccion,
+            ciudad: cliente.ciudad,
+            departamento: cliente.departamento,
+            pais: "Colombia",
+            estado: cliente.estado,
+            bodega: "",
+            tipoCliente: cliente.tipoCliente,
+            fechaRegistro: "",
+          }))
+        );
+
+        setProductosCatalogo(
+          productosApi.map((producto) => ({
+            id: String(producto.id_producto),
+            nombre: producto.nombre_producto,
+            categoria: producto.categoria_producto?.nombre_categoria ?? "",
+            descripcion: producto.descripcion ?? "",
+            codigoBarras: "",
+            iva: Number(producto.iva?.porcentaje ?? 0),
+            stockTotal: Number(producto.stock_total ?? 0),
+            estado: Boolean(producto.estado),
+            lotes: (producto.lotes ?? []).map((lote) => ({
+              id: String(lote.id_existencia),
+              numeroLote: lote.lote,
+              cantidadDisponible: Number(lote.cantidad),
+              fechaVencimiento: lote.fecha_vencimiento ?? "",
+              bodega: lote.nombre_bodega,
+            })),
+          }))
+        );
+      } catch (error) {
+        console.error("Error cargando cotizaciones:", error);
+        toast.error("No se pudo cargar el módulo de cotizaciones");
+      }
+    };
+
+    void cargar();
+  }, [selectedBodegaId]);
+
   const getFechaActual = () => {
     return new Date().toISOString().split("T")[0];
   };
 
-  // Calcular fecha de vencimiento (7 días después)
   const getFechaVencimiento = () => {
     const fecha = new Date();
     fecha.setDate(fecha.getDate() + 7);
     return fecha.toISOString().split("T")[0];
   };
 
-  // Filtrar clientes activos
   const clientesActivos = useMemo(() => {
     return clientes.filter((c) => c.estado === "Activo");
   }, [clientes]);
 
-  // Filtrar cotizaciones por bodega y búsqueda
   const filteredCotizaciones = useMemo(() => {
     return cotizaciones
       .filter(
@@ -164,33 +285,33 @@ export default function Cotizaciones() {
       );
   }, [cotizaciones, searchTerm, selectedBodega]);
 
-  // Paginación
   const totalPages = Math.ceil(filteredCotizaciones.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const currentCotizaciones = filteredCotizaciones.slice(startIndex, endIndex);
 
-  // Resetear a página 1 cuando cambia filtro
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, selectedBodega]);
 
-  // Calcular estadísticas
   const stats = useMemo(() => {
     const totalCotizaciones = cotizaciones.length;
-    const pendientes = cotizaciones.filter((c) => c.estado === "Pendiente").length;
-    const aprobadas = cotizaciones.filter((c) => c.estado === "Aprobada").length;
+    const pendientes = cotizaciones.filter(
+      (c) => c.estado === "Pendiente"
+    ).length;
+    const aprobadas = cotizaciones.filter(
+      (c) => c.estado === "Aprobada"
+    ).length;
     const anuladas = cotizaciones.filter((c) => c.estado === "Anulada").length;
 
     return { totalCotizaciones, pendientes, aprobadas, anuladas };
   }, [cotizaciones]);
 
-
-  // Reset form de cotización
   const resetForm = () => {
     setFormData({
       numeroCotizacion: "",
       cliente: "",
+      idCliente: "",
       fecha: "",
       fechaVencimiento: "",
       estado: "Pendiente",
@@ -199,24 +320,33 @@ export default function Cotizaciones() {
       impuestos: 0,
       observaciones: "",
       bodega: "",
+      idBodega: "",
     });
 
     setProductosOrden([]);
     setSelectedProductoId("");
-    setCantidadProducto(1);
+    setCantidadProducto("0");
     setPrecioProducto("");
   };
 
-  // ✅ al entrar a /crear, limpiar form
   useEffect(() => {
     if (!isCrear) return;
 
     const bodegaInicial =
-      selectedBodega === "Todas las bodegas" ? "Bodega Principal" : selectedBodega;
+      selectedBodega !== "Todas las bodegas"
+        ? bodegasDisponibles.find((bodega) => bodega.id === selectedBodegaId)
+            ?.nombre ?? ""
+        : "";
+
+    const idBodegaInicial =
+      selectedBodega !== "Todas las bodegas" && selectedBodegaId
+        ? String(selectedBodegaId)
+        : "";
 
     setFormData({
       numeroCotizacion: generarNumeroCotizacion(),
       cliente: "",
+      idCliente: "",
       fecha: getFechaActual(),
       fechaVencimiento: getFechaVencimiento(),
       estado: "Pendiente",
@@ -225,15 +355,21 @@ export default function Cotizaciones() {
       impuestos: 0,
       observaciones: "",
       bodega: bodegaInicial,
+      idBodega: idBodegaInicial,
     });
 
     setProductosOrden([]);
     setSelectedProductoId("");
-    setCantidadProducto(1);
+    setCantidadProducto("0");
     setPrecioProducto("");
-  }, [isCrear, selectedBodega, cotizaciones]);
+  }, [
+    isCrear,
+    selectedBodega,
+    cotizaciones,
+    selectedBodegaId,
+    bodegasDisponibles,
+  ]);
 
-  // ✅ al entrar a /editar, precargar form
   useEffect(() => {
     if (!isEditar) return;
     if (!cotizacionSeleccionada) return;
@@ -241,6 +377,7 @@ export default function Cotizaciones() {
     setFormData({
       numeroCotizacion: cotizacionSeleccionada.numeroCotizacion,
       cliente: cotizacionSeleccionada.cliente,
+      idCliente: String(cotizacionSeleccionada.idCliente),
       fecha: cotizacionSeleccionada.fecha,
       fechaVencimiento: cotizacionSeleccionada.fechaVencimiento,
       estado: cotizacionSeleccionada.estado,
@@ -249,22 +386,24 @@ export default function Cotizaciones() {
       impuestos: cotizacionSeleccionada.impuestos,
       observaciones: cotizacionSeleccionada.observaciones,
       bodega: cotizacionSeleccionada.bodega,
+      idBodega: String(cotizacionSeleccionada.idBodega),
     });
 
     setProductosOrden(cotizacionSeleccionada.productos || []);
     setSelectedProductoId("");
-    setCantidadProducto(1);
+    setCantidadProducto("0");
     setPrecioProducto("");
   }, [isEditar, cotizacionSeleccionada]);
 
-  // Funciones para manejar productos en la cotización
   const handleAgregarProducto = () => {
     if (!selectedProductoId) {
       toast.error("Por favor selecciona un producto");
       return;
     }
 
-    if (cantidadProducto <= 0) {
+    const cantidad = Number(cantidadProducto);
+
+    if (!cantidadProducto.trim() || Number.isNaN(cantidad) || cantidad <= 0) {
       toast.error("La cantidad debe ser mayor a cero");
       return;
     }
@@ -290,11 +429,11 @@ export default function Cotizaciones() {
       return;
     }
 
-    const subtotal = cantidadProducto * precio;
+    const subtotal = cantidad * precio;
 
     const nuevoProducto = {
       producto,
-      cantidad: cantidadProducto,
+      cantidad,
       precio,
       subtotal,
     };
@@ -302,20 +441,17 @@ export default function Cotizaciones() {
     setProductosOrden([...productosOrden, nuevoProducto]);
 
     setSelectedProductoId("");
-    setCantidadProducto(1);
+    setCantidadProducto("0");
     setPrecioProducto("");
 
     toast.success("Producto agregado correctamente");
   };
 
   const handleEliminarProducto = (productoId: string) => {
-    setProductosOrden(
-      productosOrden.filter((p) => p.producto.id !== productoId)
-    );
+    setProductosOrden(productosOrden.filter((p) => p.producto.id !== productoId));
     toast.success("Producto eliminado de la cotización");
   };
 
-  // Calcular totales basados en los productos agregados
   const calcularTotales = useMemo(() => {
     let subtotalSinIva = 0;
     let totalImpuestos = 0;
@@ -349,7 +485,6 @@ export default function Cotizaciones() {
     };
   }, [productosOrden]);
 
-  // Navegación (modales por URL)
   const handleView = (cotizacion: Cotizacion) => {
     navigate(`/app/cotizaciones/${cotizacion.id}/ver`);
   };
@@ -358,27 +493,48 @@ export default function Cotizaciones() {
     navigate("/app/cotizaciones/crear");
   };
 
+  const puedeEditarCotizacion = (estado: Cotizacion["estado"]) => {
+    return estado !== "Anulada";
+  };
+
+  const puedeAnularCotizacion = (estado: Cotizacion["estado"]) => {
+    return estado !== "Aprobada" && estado !== "Anulada";
+  };
+
   const handleEdit = (cotizacion: Cotizacion) => {
+    if (!puedeEditarCotizacion(cotizacion.estado)) {
+      toast.error("No se puede editar una cotización anulada");
+      return;
+    }
+
     navigate(`/app/cotizaciones/${cotizacion.id}/editar`);
   };
 
   const handleAnular = (cotizacion: Cotizacion) => {
+    if (cotizacion.estado === "Aprobada") {
+      toast.error("No se puede anular una cotización aprobada");
+      return;
+    }
+
+    if (cotizacion.estado === "Anulada") {
+      toast.error("La cotización ya está anulada");
+      return;
+    }
+
     navigate(`/app/cotizaciones/${cotizacion.id}/anular`);
   };
 
   const getSiguienteEstado = (
     estadoActual: Cotizacion["estado"]
   ): Cotizacion["estado"] | null => {
-    const flujoEstados: Record<
-      Cotizacion["estado"],
-      Cotizacion["estado"] | null
-    > = {
-      Pendiente: "Aprobada",
-      Aprobada: null,
-      Rechazada: null,
-      Vencida: null,
-      Anulada: null,
-    };
+    const flujoEstados: Record<Cotizacion["estado"], Cotizacion["estado"] | null> =
+      {
+        Pendiente: "Aprobada",
+        Aprobada: null,
+        Rechazada: null,
+        Vencida: null,
+        Anulada: null,
+      };
 
     return flujoEstados[estadoActual];
   };
@@ -406,7 +562,7 @@ export default function Cotizaciones() {
     setShowConfirmEstadoModal(true);
   };
 
-  const handleConfirmEstado = () => {
+  const handleConfirmEstado = async () => {
     if (!cotizacionParaCambioEstado) return;
 
     if (cotizacionParaCambioEstado.estado === "Anulada") {
@@ -419,26 +575,37 @@ export default function Cotizaciones() {
     const nuevoEstado = getSiguienteEstado(cotizacionParaCambioEstado.estado);
     if (!nuevoEstado) return;
 
-    setCotizaciones(
-      cotizaciones.map((cotizacion) =>
-        cotizacion.id === cotizacionParaCambioEstado.id
-          ? { ...cotizacion, estado: nuevoEstado }
-          : cotizacion
-      )
-    );
+    try {
+      const actualizada = await cotizacionesService.updateEstado(
+        cotizacionParaCambioEstado.id,
+        estadoIds[nuevoEstado]
+      );
 
-    toast.success(`Estado actualizado a: ${nuevoEstado}`);
-    setShowConfirmEstadoModal(false);
-    setCotizacionParaCambioEstado(null);
+      setCotizaciones((prev) =>
+        prev.map((cotizacion) =>
+          cotizacion.id === cotizacionParaCambioEstado.id
+            ? actualizada
+            : cotizacion
+        )
+      );
+
+      toast.success(`Estado actualizado a: ${nuevoEstado}`);
+    } catch (error) {
+      console.error("Error cambiando estado de cotización:", error);
+      toast.error("No se pudo cambiar el estado de la cotización");
+    } finally {
+      setShowConfirmEstadoModal(false);
+      setCotizacionParaCambioEstado(null);
+    }
   };
 
-  const confirmCreate = () => {
+  const confirmCreate = async () => {
     if (
       !formData.numeroCotizacion ||
-      !formData.cliente ||
+      !formData.idCliente ||
       !formData.fecha ||
       !formData.fechaVencimiento ||
-      !formData.bodega
+      !formData.idBodega
     ) {
       toast.error("Por favor completa todos los campos obligatorios");
       return;
@@ -449,88 +616,117 @@ export default function Cotizaciones() {
       return;
     }
 
-    const nuevaCotizacion: Cotizacion = {
-      id: cotizaciones.length > 0 ? Math.max(...cotizaciones.map((c) => c.id)) + 1 : 1,
-      numeroCotizacion: formData.numeroCotizacion,
-      cliente: formData.cliente,
-      fecha: formData.fecha,
-      fechaVencimiento: formData.fechaVencimiento,
-      estado: formData.estado,
-      items: calcularTotales.items,
-      subtotal: calcularTotales.subtotal,
-      impuestos: calcularTotales.impuestos,
-      total: calcularTotales.total,
-      observaciones: formData.observaciones,
-      bodega: formData.bodega,
-      productos: [...productosOrden],
-    };
+    try {
+      const creada = await cotizacionesService.create({
+        fecha: formData.fecha,
+        fecha_vencimiento: formData.fechaVencimiento,
+        id_cliente: Number(formData.idCliente),
+        id_bodega: Number(formData.idBodega),
+        id_usuario_creador: Number(currentUser?.id ?? 0),
+        id_estado_cotizacion: estadoIds.Pendiente,
+        observaciones: formData.observaciones.trim() || undefined,
+        detalle: productosOrden.map((item) => ({
+          id_producto: Number(item.producto.id),
+          cantidad: Number(item.cantidad),
+          precio_unitario: Number(item.precio),
+          ...(item.idIva ? { id_iva: item.idIva } : {}),
+        })),
+      });
 
-    setCotizaciones([...cotizaciones, nuevaCotizacion]);
-    closeToList();
-    setShowSuccessModal(true);
-    resetForm();
+      setCotizaciones((prev) => [creada, ...prev]);
+      resetForm();
+      closeToList();
+      toast.success("Cotización creada exitosamente");
+    } catch (error) {
+      console.error("Error creando cotización:", error);
+      toast.error("No se pudo crear la cotización");
+    }
   };
 
-  const confirmEdit = () => {
-    if (
-      !cotizacionSeleccionada ||
-      !formData.numeroCotizacion ||
-      !formData.cliente ||
-      !formData.bodega
-    ) {
-      toast.error("Por favor completa todos los campos obligatorios");
-      return;
-    }
-
-    if (cotizacionSeleccionada.estado === "Anulada") {
-      toast.error("No puedes editar una cotización anulada");
-      return;
-    }
-
-    if (productosOrden.length === 0) {
-      toast.error("Debes agregar al menos un producto a la cotización");
-      return;
-    }
-
-    setCotizaciones(
-      cotizaciones.map((cotizacion) =>
-        cotizacion.id === cotizacionSeleccionada.id
-          ? {
-            ...cotizacion,
-            ...formData,
-            items: calcularTotales.items,
-            subtotal: calcularTotales.subtotal,
-            impuestos: calcularTotales.impuestos,
-            total: calcularTotales.total,
-            productos: [...productosOrden],
-          }
-          : cotizacion
-      )
-    );
-
-    toast.success("Cotización actualizada exitosamente");
-    closeToList();
-    resetForm();
-  };
-
-  const confirmAnular = () => {
+  const confirmEdit = async () => {
     if (!cotizacionSeleccionada) return;
+
+    if (
+      !formData.idCliente ||
+      !formData.fecha ||
+      !formData.fechaVencimiento ||
+      !formData.idBodega
+    ) {
+      toast.error("Por favor completa todos los campos obligatorios");
+      return;
+    }
+
+    if (productosOrden.length === 0) {
+      toast.error("Debes agregar al menos un producto a la cotización");
+      return;
+    }
+
+    try {
+      const actualizada = await cotizacionesService.update(
+        cotizacionSeleccionada.id,
+        {
+          fecha: formData.fecha,
+          fecha_vencimiento: formData.fechaVencimiento,
+          id_cliente: Number(formData.idCliente),
+          id_bodega: Number(formData.idBodega),
+          id_estado_cotizacion: estadoIds[formData.estado],
+          observaciones: formData.observaciones.trim() || undefined,
+          detalle: productosOrden.map((item) => ({
+            id_producto: Number(item.producto.id),
+            cantidad: Number(item.cantidad),
+            precio_unitario: Number(item.precio),
+            ...(item.idIva ? { id_iva: item.idIva } : {}),
+          })),
+        }
+      );
+
+      setCotizaciones((prev) =>
+        prev.map((cotizacion) =>
+          cotizacion.id === cotizacionSeleccionada.id ? actualizada : cotizacion
+        )
+      );
+
+      toast.success("Cotización actualizada exitosamente");
+      closeToList();
+    } catch (error) {
+      console.error("Error editando cotización:", error);
+      toast.error("No se pudo actualizar la cotización");
+    }
+  };
+
+  const confirmAnular = async () => {
+    if (!cotizacionSeleccionada) return;
+
+    if (cotizacionSeleccionada.estado === "Aprobada") {
+      toast.error("No se puede anular una cotización aprobada");
+      return;
+    }
 
     if (cotizacionSeleccionada.estado === "Anulada") {
       toast.error("La cotización ya está anulada");
       return;
     }
 
-    setCotizaciones(
-      cotizaciones.map((cotizacion) =>
-        cotizacion.id === cotizacionSeleccionada.id
-          ? { ...cotizacion, estado: "Anulada" }
-          : cotizacion
-      )
-    );
+    try {
+      const actualizada = await cotizacionesService.updateEstado(
+        cotizacionSeleccionada.id,
+        estadoIds.Anulada
+      );
 
-    toast.success("Cotización anulada exitosamente");
-    closeToList();
+      setCotizaciones((prev) =>
+        prev.map((cotizacion) =>
+          cotizacion.id === cotizacionSeleccionada.id
+            ? actualizada
+            : cotizacion
+        )
+      );
+
+      toast.success("Cotización anulada exitosamente");
+      closeToList();
+    } catch (error) {
+      console.error("Error anulando cotización:", error);
+      toast.error("No se pudo anular la cotización");
+    }
   };
 
   const handleDownloadPDF = (
@@ -556,9 +752,9 @@ export default function Cotizaciones() {
       40
     );
     doc.text(
-      `Fecha Vencimiento: ${new Date(cotizacion.fechaVencimiento).toLocaleDateString(
-        "es-CO"
-      )}`,
+      `Fecha Vencimiento: ${new Date(
+        cotizacion.fechaVencimiento
+      ).toLocaleDateString("es-CO")}`,
       120,
       46
     );
@@ -584,7 +780,9 @@ export default function Cotizaciones() {
             minimumFractionDigits: 2,
           })}`,
         ]);
-        tableHeaders = [["Producto", "Cantidad", "Precio Unit.", "IVA%", "Subtotal"]];
+        tableHeaders = [
+          ["Producto", "Cantidad", "Precio Unit.", "IVA%", "Subtotal"],
+        ];
         columnStyles = {
           0: { cellWidth: 65 },
           1: { cellWidth: 25, halign: "center" },
@@ -691,7 +889,9 @@ export default function Cotizaciones() {
       `Generado el ${new Date().toLocaleString("es-CO")}`,
       105,
       pageHeight - 10,
-      { align: "center" }
+      {
+        align: "center",
+      }
     );
 
     const suffix = incluirPrecios ? "" : "_SinPrecios";
@@ -704,7 +904,6 @@ export default function Cotizaciones() {
     setIsPdfOptionsModalOpen(true);
   };
 
-  // Función auxiliar para calcular impuestos por porcentaje de una cotización guardada
   const calcularImpuestosPorPorcentaje = (cotizacion: Cotizacion) => {
     const impuestosPorPorcentaje: { [key: number]: number } = {};
 
@@ -732,17 +931,15 @@ export default function Cotizaciones() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h2 className="text-gray-900">Cotizaciones</h2>
-        <p className="text-gray-600 mt-1">
+        <p className="mt-1 text-gray-600">
           Gestiona las cotizaciones de productos
         </p>
       </div>
 
-      {/* Estadísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white p-4 rounded-lg border border-gray-200">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="rounded-lg border border-gray-200 bg-white p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Total</p>
@@ -753,7 +950,8 @@ export default function Cotizaciones() {
             <FileText className="text-blue-600" size={32} />
           </div>
         </div>
-        <div className="bg-white p-4 rounded-lg border border-gray-200">
+
+        <div className="rounded-lg border border-gray-200 bg-white p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Pendientes</p>
@@ -764,7 +962,8 @@ export default function Cotizaciones() {
             <Clock className="text-yellow-600" size={32} />
           </div>
         </div>
-        <div className="bg-white p-4 rounded-lg border border-gray-200">
+
+        <div className="rounded-lg border border-gray-200 bg-white p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Aprobadas</p>
@@ -777,11 +976,10 @@ export default function Cotizaciones() {
         </div>
       </div>
 
-      {/* Barra de búsqueda y botón crear */}
       <div className="flex items-center gap-4">
         <div className="relative flex-1">
           <Search
-            className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+            className="absolute left-3 top-1/2 -translate-y-1/2 transform text-gray-400"
             size={20}
           />
           <Input
@@ -791,14 +989,14 @@ export default function Cotizaciones() {
             className="pl-10"
           />
         </div>
+
         <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
           <Plus size={18} className="mr-2" />
           Nueva Cotización
         </Button>
       </div>
 
-      {/* Tabla */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
@@ -813,13 +1011,11 @@ export default function Cotizaciones() {
                 <TableHead className="text-center">Acciones</TableHead>
               </TableRow>
             </TableHeader>
+
             <TableBody>
               {filteredCotizaciones.length === 0 ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={8}
-                    className="text-center py-8 text-gray-500"
-                  >
+                  <TableCell colSpan={8} className="py-8 text-center text-gray-500">
                     <Package size={48} className="mx-auto mb-2 text-gray-300" />
                     <p>No se encontraron cotizaciones</p>
                   </TableCell>
@@ -849,16 +1045,17 @@ export default function Cotizaciones() {
                         size="sm"
                         onClick={() => handleToggleEstado(cotizacion)}
                         disabled={cotizacion.estado === "Anulada"}
-                        className={`h-7 ${cotizacion.estado === "Aprobada"
-                          ? "bg-green-100 text-green-800 hover:bg-green-200"
-                          : cotizacion.estado === "Pendiente"
+                        className={`h-7 ${
+                          cotizacion.estado === "Aprobada"
+                            ? "bg-green-100 text-green-800 hover:bg-green-200"
+                            : cotizacion.estado === "Pendiente"
                             ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
                             : cotizacion.estado === "Rechazada"
-                              ? "bg-red-100 text-red-800 hover:bg-red-200"
-                              : cotizacion.estado === "Anulada"
-                                ? "bg-gray-100 text-gray-800 hover:bg-gray-100 opacity-60 cursor-not-allowed"
-                                : "bg-gray-100 text-gray-800 hover:bg-gray-200"
-                          }`}
+                            ? "bg-red-100 text-red-800 hover:bg-red-200"
+                            : cotizacion.estado === "Anulada"
+                            ? "cursor-not-allowed bg-gray-100 text-gray-800 opacity-60 hover:bg-gray-100"
+                            : "bg-gray-100 text-gray-800 hover:bg-gray-200"
+                        }`}
                       >
                         {cotizacion.estado}
                       </Button>
@@ -874,6 +1071,7 @@ export default function Cotizaciones() {
                         >
                           <Eye size={16} className="text-blue-600" />
                         </Button>
+
                         <Button
                           variant="ghost"
                           size="sm"
@@ -883,21 +1081,43 @@ export default function Cotizaciones() {
                         >
                           <Download size={16} className="text-green-600" />
                         </Button>
+
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleEdit(cotizacion)}
-                          className="hover:bg-yellow-50"
-                          title="Editar"
+                          disabled={!puedeEditarCotizacion(cotizacion.estado)}
+                          className={
+                            puedeEditarCotizacion(cotizacion.estado)
+                              ? "hover:bg-yellow-50"
+                              : "cursor-not-allowed opacity-50"
+                          }
+                          title={
+                            cotizacion.estado === "Anulada"
+                              ? "No se puede editar una cotización anulada"
+                              : "Editar"
+                          }
                         >
                           <Edit size={16} className="text-yellow-600" />
                         </Button>
+
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleAnular(cotizacion)}
-                          className="hover:bg-red-50"
-                          title="Anular"
+                          disabled={!puedeAnularCotizacion(cotizacion.estado)}
+                          className={
+                            puedeAnularCotizacion(cotizacion.estado)
+                              ? "hover:bg-red-50"
+                              : "cursor-not-allowed opacity-50"
+                          }
+                          title={
+                            cotizacion.estado === "Aprobada"
+                              ? "No se puede anular una cotización aprobada"
+                              : cotizacion.estado === "Anulada"
+                              ? "La cotización ya está anulada"
+                              : "Anular"
+                          }
                         >
                           <Ban size={16} className="text-red-600" />
                         </Button>
@@ -910,14 +1130,14 @@ export default function Cotizaciones() {
           </Table>
         </div>
 
-        {/* Paginación */}
         {filteredCotizaciones.length > 0 && (
-          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
+          <div className="flex items-center justify-between border-t border-gray-200 px-6 py-4">
             <div className="text-sm text-gray-600">
               Mostrando {startIndex + 1} -{" "}
               {Math.min(endIndex, filteredCotizaciones.length)} de{" "}
               {filteredCotizaciones.length} cotizaciones
             </div>
+
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
@@ -929,6 +1149,7 @@ export default function Cotizaciones() {
                 <ChevronLeft size={16} />
                 Anterior
               </Button>
+
               <div className="flex items-center gap-1">
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map(
                   (page) => (
@@ -944,6 +1165,7 @@ export default function Cotizaciones() {
                   )
                 )}
               </div>
+
               <Button
                 variant="outline"
                 size="sm"
@@ -959,7 +1181,6 @@ export default function Cotizaciones() {
         )}
       </div>
 
-      {/* Modal Crear Cotización */}
       <Dialog
         open={isCrear}
         onOpenChange={(open) => {
@@ -968,7 +1189,7 @@ export default function Cotizaciones() {
       >
         <DialogContent
           onInteractOutside={(e) => e.preventDefault()}
-          className="max-w-7xl max-h-[90vh] overflow-y-auto"
+          className="max-h-[90vh] max-w-7xl overflow-y-auto"
           aria-describedby="create-quote-description"
         >
           <DialogHeader>
@@ -977,6 +1198,7 @@ export default function Cotizaciones() {
               Completa la información para crear una nueva cotización
             </DialogDescription>
           </DialogHeader>
+
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -988,6 +1210,7 @@ export default function Cotizaciones() {
                   className="bg-gray-100"
                 />
               </div>
+
               <div>
                 <Label htmlFor="fecha">Fecha *</Label>
                 <Input
@@ -1005,14 +1228,23 @@ export default function Cotizaciones() {
               <Label htmlFor="cliente">Cliente *</Label>
               <div className="flex gap-2">
                 <Select
-                  value={formData.cliente}
-                  onValueChange={(value: string) =>
-                    setFormData({ ...formData, cliente: value })
-                  }
+                  value={formData.idCliente}
+                  onValueChange={(value: string) => {
+                    const clienteSeleccionado = clientesActivos.find(
+                      (cliente) => cliente.id === value
+                    );
+
+                    setFormData({
+                      ...formData,
+                      idCliente: value,
+                      cliente: clienteSeleccionado?.nombre ?? "",
+                    });
+                  }}
                 >
                   <SelectTrigger id="cliente" className="flex-1">
                     <SelectValue placeholder="Selecciona un cliente" />
                   </SelectTrigger>
+
                   <SelectContent>
                     {clientesActivos.length === 0 ? (
                       <div className="px-2 py-2 text-sm text-gray-500">
@@ -1020,13 +1252,14 @@ export default function Cotizaciones() {
                       </div>
                     ) : (
                       clientesActivos.map((cliente) => (
-                        <SelectItem key={cliente.id} value={cliente.nombre}>
+                        <SelectItem key={cliente.id} value={cliente.id}>
                           {cliente.nombre}
                         </SelectItem>
                       ))
                     )}
                   </SelectContent>
                 </Select>
+
                 <Button
                   type="button"
                   variant="outline"
@@ -1054,35 +1287,42 @@ export default function Cotizaciones() {
                   }
                 />
               </div>
+
               <div>
                 <Label htmlFor="bodega">Bodega *</Label>
                 <Select
-                  value={formData.bodega}
-                  onValueChange={(value: string) =>
-                    setFormData({ ...formData, bodega: value })
-                  }
+                  value={formData.idBodega}
+                  onValueChange={(value: string) => {
+                    const bodegaSeleccionada = bodegasDisponibles.find(
+                      (bodega) => String(bodega.id) === value
+                    );
+
+                    setFormData({
+                      ...formData,
+                      idBodega: value,
+                      bodega: bodegaSeleccionada?.nombre ?? "",
+                    });
+                  }}
                 >
                   <SelectTrigger id="bodega">
                     <SelectValue placeholder="Selecciona una bodega" />
                   </SelectTrigger>
+
                   <SelectContent>
-                    {bodegasData
-                      .filter((bodega) => bodega.estado)
-                      .map((bodega) => (
-                        <SelectItem key={bodega.id} value={bodega.nombre}>
-                          {bodega.nombre}
-                        </SelectItem>
-                      ))}
+                    {bodegasDisponibles.map((bodega) => (
+                      <SelectItem key={bodega.id} value={String(bodega.id)}>
+                        {bodega.nombre}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
-            {/* Sección de Productos */}
             <div className="border-t pt-4">
               <Label className="text-lg">Productos de la Cotización</Label>
 
-              <div className="grid grid-cols-12 gap-2 mt-3">
+              <div className="mt-3 grid grid-cols-12 gap-2">
                 <div className="col-span-5">
                   <Label htmlFor="producto">Producto</Label>
                   <Select
@@ -1092,6 +1332,7 @@ export default function Cotizaciones() {
                     <SelectTrigger id="producto">
                       <SelectValue placeholder="Selecciona un producto" />
                     </SelectTrigger>
+
                     <SelectContent>
                       {productosActivos.map((producto) => (
                         <SelectItem key={producto.id} value={producto.id}>
@@ -1101,18 +1342,33 @@ export default function Cotizaciones() {
                     </SelectContent>
                   </Select>
                 </div>
+
                 <div className="col-span-2">
                   <Label htmlFor="cantidad">Cantidad</Label>
                   <Input
                     id="cantidad"
                     type="number"
                     value={cantidadProducto}
-                    onChange={(e) =>
-                      setCantidadProducto(parseInt(e.target.value) || 1)
+                    min="0"
+                    onFocus={() => {
+                      if (cantidadProducto === "0") {
+                        setCantidadProducto("");
+                      }
+                    }}
+                    onBlur={() => {
+                      if (!cantidadProducto.trim()) {
+                        setCantidadProducto("0");
+                      }
+                    }}
+                    onChange={(e) => {
+                      setCantidadProducto(e.target.value);
+                    }}
+                    className={
+                      cantidadProducto === "0" ? "text-gray-400" : "text-gray-900"
                     }
-                    min="1"
                   />
                 </div>
+
                 <div className="col-span-3">
                   <Label htmlFor="precio">Precio Unit.</Label>
                   <Input
@@ -1123,9 +1379,10 @@ export default function Cotizaciones() {
                     min="0"
                     step="0"
                     placeholder="0.00"
-                    className="h-12 sin-flechas"
+                    className="sin-flechas w-full"
                   />
                 </div>
+
                 <div className="col-span-2 flex items-end">
                   <Button
                     type="button"
@@ -1139,20 +1396,19 @@ export default function Cotizaciones() {
               </div>
 
               {productosOrden.length > 0 && (
-                <div className="mt-4 border rounded-lg overflow-hidden">
+                <div className="mt-4 overflow-hidden rounded-lg border">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-gray-50">
                         <TableHead>Producto</TableHead>
                         <TableHead className="text-center">Cantidad</TableHead>
-                        <TableHead className="text-right">
-                          Precio Unit.
-                        </TableHead>
+                        <TableHead className="text-right">Precio Unit.</TableHead>
                         <TableHead className="text-center">IVA%</TableHead>
                         <TableHead className="text-right">Subtotal</TableHead>
                         <TableHead className="text-center">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
+
                     <TableBody>
                       {productosOrden.map((item) => (
                         <TableRow key={item.producto.id}>
@@ -1192,11 +1448,12 @@ export default function Cotizaciones() {
                 </div>
               )}
 
-              <div className="mt-4 bg-gray-50 p-4 rounded-lg space-y-2">
+              <div className="mt-4 space-y-2 rounded-lg bg-gray-50 p-4">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">N° de Items:</span>
                   <span className="font-medium">{calcularTotales.items}</span>
                 </div>
+
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Subtotal:</span>
                   <span className="font-medium">
@@ -1207,8 +1464,9 @@ export default function Cotizaciones() {
                     })}
                   </span>
                 </div>
+
                 {Object.keys(calcularTotales.impuestosPorPorcentaje).length > 0 && (
-                  <div className="border-t pt-2 space-y-1">
+                  <div className="space-y-1 border-t pt-2">
                     {Object.entries(calcularTotales.impuestosPorPorcentaje)
                       .sort(([a], [b]) => Number(a) - Number(b))
                       .map(([porcentaje, monto]) => (
@@ -1230,7 +1488,8 @@ export default function Cotizaciones() {
                       ))}
                   </div>
                 )}
-                <div className="flex justify-between text-lg border-t pt-2">
+
+                <div className="flex justify-between border-t pt-2 text-lg">
                   <span className="font-semibold">Total:</span>
                   <span className="font-bold text-blue-600">
                     $
@@ -1256,6 +1515,7 @@ export default function Cotizaciones() {
               />
             </div>
           </div>
+
           <DialogFooter>
             <Button variant="outline" onClick={closeToList}>
               Cancelar
@@ -1270,7 +1530,6 @@ export default function Cotizaciones() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Editar Cotización */}
       <Dialog
         open={isEditar}
         onOpenChange={(open) => {
@@ -1279,7 +1538,7 @@ export default function Cotizaciones() {
       >
         <DialogContent
           onInteractOutside={(e) => e.preventDefault()}
-          className="max-w-7xl max-h-[90vh] overflow-y-auto"
+          className="max-h-[90vh] max-w-7xl overflow-y-auto"
           aria-describedby="edit-quote-description"
         >
           <DialogHeader>
@@ -1288,10 +1547,13 @@ export default function Cotizaciones() {
               Actualiza la información de la cotización
             </DialogDescription>
           </DialogHeader>
+
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="numeroCotizacionEdit">Número de Cotización</Label>
+                <Label htmlFor="numeroCotizacionEdit">
+                  Número de Cotización
+                </Label>
                 <Input
                   id="numeroCotizacionEdit"
                   value={formData.numeroCotizacion}
@@ -1299,6 +1561,7 @@ export default function Cotizaciones() {
                   className="bg-gray-100"
                 />
               </div>
+
               <div>
                 <Label htmlFor="estadoEdit">Estado *</Label>
                 <Select
@@ -1310,6 +1573,7 @@ export default function Cotizaciones() {
                   <SelectTrigger id="estadoEdit">
                     <SelectValue />
                   </SelectTrigger>
+
                   <SelectContent>
                     <SelectItem value="Pendiente">Pendiente</SelectItem>
                     <SelectItem value="Aprobada">Aprobada</SelectItem>
@@ -1323,17 +1587,26 @@ export default function Cotizaciones() {
             <div>
               <Label htmlFor="clienteEdit">Cliente *</Label>
               <Select
-                value={formData.cliente}
-                onValueChange={(value: string) =>
-                  setFormData({ ...formData, cliente: value })
-                }
+                value={formData.idCliente}
+                onValueChange={(value: string) => {
+                  const clienteSeleccionado = clientesActivos.find(
+                    (cliente) => cliente.id === value
+                  );
+
+                  setFormData({
+                    ...formData,
+                    idCliente: value,
+                    cliente: clienteSeleccionado?.nombre ?? "",
+                  });
+                }}
               >
                 <SelectTrigger id="clienteEdit">
                   <SelectValue placeholder="Selecciona un cliente" />
                 </SelectTrigger>
+
                 <SelectContent>
                   {clientesActivos.map((cliente) => (
-                    <SelectItem key={cliente.id} value={cliente.nombre}>
+                    <SelectItem key={cliente.id} value={cliente.id}>
                       {cliente.nombre}
                     </SelectItem>
                   ))}
@@ -1353,35 +1626,42 @@ export default function Cotizaciones() {
                   }
                 />
               </div>
+
               <div>
                 <Label htmlFor="bodegaEdit">Bodega *</Label>
                 <Select
-                  value={formData.bodega}
-                  onValueChange={(value: string) =>
-                    setFormData({ ...formData, bodega: value })
-                  }
+                  value={formData.idBodega}
+                  onValueChange={(value: string) => {
+                    const bodegaSeleccionada = bodegasDisponibles.find(
+                      (bodega) => String(bodega.id) === value
+                    );
+
+                    setFormData({
+                      ...formData,
+                      idBodega: value,
+                      bodega: bodegaSeleccionada?.nombre ?? "",
+                    });
+                  }}
                 >
                   <SelectTrigger id="bodegaEdit">
                     <SelectValue />
                   </SelectTrigger>
+
                   <SelectContent>
-                    {bodegasData
-                      .filter((bodega) => bodega.estado)
-                      .map((bodega) => (
-                        <SelectItem key={bodega.id} value={bodega.nombre}>
-                          {bodega.nombre}
-                        </SelectItem>
-                      ))}
+                    {bodegasDisponibles.map((bodega) => (
+                      <SelectItem key={bodega.id} value={String(bodega.id)}>
+                        {bodega.nombre}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
-            {/* Sección de Productos */}
             <div className="border-t pt-4">
               <Label className="text-lg">Productos de la Cotización</Label>
 
-              <div className="grid grid-cols-12 gap-2 mt-3">
+              <div className="mt-3 grid grid-cols-12 gap-2">
                 <div className="col-span-5">
                   <Label htmlFor="productoEdit">Producto</Label>
                   <Select
@@ -1391,6 +1671,7 @@ export default function Cotizaciones() {
                     <SelectTrigger id="productoEdit">
                       <SelectValue placeholder="Selecciona un producto" />
                     </SelectTrigger>
+
                     <SelectContent>
                       {productosActivos.map((producto) => (
                         <SelectItem key={producto.id} value={producto.id}>
@@ -1400,18 +1681,33 @@ export default function Cotizaciones() {
                     </SelectContent>
                   </Select>
                 </div>
+
                 <div className="col-span-2">
                   <Label htmlFor="cantidadEdit">Cantidad</Label>
                   <Input
                     id="cantidadEdit"
                     type="number"
                     value={cantidadProducto}
-                    onChange={(e) =>
-                      setCantidadProducto(parseInt(e.target.value) || 1)
+                    min="0"
+                    onFocus={() => {
+                      if (cantidadProducto === "0") {
+                        setCantidadProducto("");
+                      }
+                    }}
+                    onBlur={() => {
+                      if (!cantidadProducto.trim()) {
+                        setCantidadProducto("0");
+                      }
+                    }}
+                    onChange={(e) => {
+                      setCantidadProducto(e.target.value);
+                    }}
+                    className={
+                      cantidadProducto === "0" ? "text-gray-400" : "text-gray-900"
                     }
-                    min="1"
                   />
                 </div>
+
                 <div className="col-span-3">
                   <Label htmlFor="precioEdit">Precio Unit.</Label>
                   <Input
@@ -1422,9 +1718,10 @@ export default function Cotizaciones() {
                     min="0"
                     step="0"
                     placeholder="0.00"
-                    className="h-12 sin-flechas"
+                    className="sin-flechas w-full"
                   />
                 </div>
+
                 <div className="col-span-2 flex items-end">
                   <Button
                     type="button"
@@ -1438,20 +1735,19 @@ export default function Cotizaciones() {
               </div>
 
               {productosOrden.length > 0 && (
-                <div className="mt-4 border rounded-lg overflow-hidden">
+                <div className="mt-4 overflow-hidden rounded-lg border">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-gray-50">
                         <TableHead>Producto</TableHead>
                         <TableHead className="text-center">Cantidad</TableHead>
-                        <TableHead className="text-right">
-                          Precio Unit.
-                        </TableHead>
+                        <TableHead className="text-right">Precio Unit.</TableHead>
                         <TableHead className="text-center">IVA%</TableHead>
                         <TableHead className="text-right">Subtotal</TableHead>
                         <TableHead className="text-center">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
+
                     <TableBody>
                       {productosOrden.map((item) => (
                         <TableRow key={item.producto.id}>
@@ -1491,11 +1787,12 @@ export default function Cotizaciones() {
                 </div>
               )}
 
-              <div className="mt-4 bg-gray-50 p-4 rounded-lg space-y-2">
+              <div className="mt-4 space-y-2 rounded-lg bg-gray-50 p-4">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">N° de Items:</span>
                   <span className="font-medium">{calcularTotales.items}</span>
                 </div>
+
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Subtotal:</span>
                   <span className="font-medium">
@@ -1506,8 +1803,9 @@ export default function Cotizaciones() {
                     })}
                   </span>
                 </div>
+
                 {Object.keys(calcularTotales.impuestosPorPorcentaje).length > 0 && (
-                  <div className="border-t pt-2 space-y-1">
+                  <div className="space-y-1 border-t pt-2">
                     {Object.entries(calcularTotales.impuestosPorPorcentaje)
                       .sort(([a], [b]) => Number(a) - Number(b))
                       .map(([porcentaje, monto]) => (
@@ -1529,7 +1827,8 @@ export default function Cotizaciones() {
                       ))}
                   </div>
                 )}
-                <div className="flex justify-between text-lg border-t pt-2">
+
+                <div className="flex justify-between border-t pt-2 text-lg">
                   <span className="font-semibold">Total:</span>
                   <span className="font-bold text-blue-600">
                     $
@@ -1555,6 +1854,7 @@ export default function Cotizaciones() {
               />
             </div>
           </div>
+
           <DialogFooter>
             <Button variant="outline" onClick={closeToList}>
               Cancelar
@@ -1563,13 +1863,12 @@ export default function Cotizaciones() {
               onClick={confirmEdit}
               className="bg-blue-600 hover:bg-blue-700"
             >
-              Actualizar Cotización
+              Guardar Cambios
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal Ver Detalles */}
       <Dialog
         open={isVer}
         onOpenChange={(open) => {
@@ -1578,7 +1877,7 @@ export default function Cotizaciones() {
       >
         <DialogContent
           onInteractOutside={(e) => e.preventDefault()}
-          className="max-w-7xl max-h-[90vh] overflow-y-auto"
+          className="max-h-[90vh] max-w-7xl overflow-y-auto"
           aria-describedby="view-quote-description"
         >
           <DialogHeader>
@@ -1593,8 +1892,7 @@ export default function Cotizaciones() {
 
           {cotizacionSeleccionada && (
             <div className="space-y-6">
-              {/* Información General */}
-              <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
+              <div className="grid grid-cols-2 gap-4 rounded-lg bg-gray-50 p-4">
                 <div>
                   <p className="text-sm text-gray-600">Número de Cotización</p>
                   <p className="font-medium text-blue-600">
@@ -1609,14 +1907,15 @@ export default function Cotizaciones() {
                       variant="ghost"
                       size="sm"
                       onClick={() => handleToggleEstado(cotizacionSeleccionada)}
-                      className={`h-7 px-3 ${cotizacionSeleccionada.estado === "Aprobada"
-                        ? "bg-green-100 text-green-800 hover:bg-green-200"
-                        : cotizacionSeleccionada.estado === "Pendiente"
+                      className={`h-7 px-3 ${
+                        cotizacionSeleccionada.estado === "Aprobada"
+                          ? "bg-green-100 text-green-800 hover:bg-green-200"
+                          : cotizacionSeleccionada.estado === "Pendiente"
                           ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
                           : cotizacionSeleccionada.estado === "Rechazada"
-                            ? "bg-red-100 text-red-800 hover:bg-red-200"
-                            : "bg-gray-100 text-gray-800 hover:bg-gray-200"
-                        }`}
+                          ? "bg-red-100 text-red-800 hover:bg-red-200"
+                          : "bg-gray-100 text-gray-800 hover:bg-gray-200"
+                      }`}
                     >
                       {cotizacionSeleccionada.estado}
                     </Button>
@@ -1652,17 +1951,18 @@ export default function Cotizaciones() {
                 </div>
               </div>
 
-              {/* Productos */}
               {cotizacionSeleccionada.productos &&
                 cotizacionSeleccionada.productos.length > 0 && (
                   <div>
-                    <h3 className="text-lg font-medium mb-3">Productos</h3>
-                    <div className="border rounded-lg overflow-hidden">
+                    <h3 className="mb-3 text-lg font-medium">Productos</h3>
+                    <div className="overflow-hidden rounded-lg border">
                       <Table>
                         <TableHeader>
                           <TableRow className="bg-gray-50">
                             <TableHead>Producto</TableHead>
-                            <TableHead className="text-center">Cantidad</TableHead>
+                            <TableHead className="text-center">
+                              Cantidad
+                            </TableHead>
                             <TableHead className="text-right">
                               Precio Unit.
                             </TableHead>
@@ -1670,6 +1970,7 @@ export default function Cotizaciones() {
                             <TableHead className="text-right">Subtotal</TableHead>
                           </TableRow>
                         </TableHeader>
+
                         <TableBody>
                           {cotizacionSeleccionada.productos.map((item, index) => (
                             <TableRow key={index}>
@@ -1698,9 +1999,8 @@ export default function Cotizaciones() {
                   </div>
                 )}
 
-              {/* Totales */}
               <div className="flex justify-end">
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 min-w-[300px]">
+                <div className="min-w-[300px] rounded-lg border border-blue-200 bg-blue-50 p-4">
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Subtotal:</span>
@@ -1718,7 +2018,7 @@ export default function Cotizaciones() {
                         calcularImpuestosPorPorcentaje(cotizacionSeleccionada);
 
                       return Object.keys(impuestosPorPorcentaje).length > 0 ? (
-                        <div className="border-t border-blue-200 pt-2 space-y-1">
+                        <div className="space-y-1 border-t border-blue-200 pt-2">
                           {Object.entries(impuestosPorPorcentaje)
                             .sort(([a], [b]) => Number(a) - Number(b))
                             .map(([porcentaje, monto]) => (
@@ -1742,7 +2042,7 @@ export default function Cotizaciones() {
                       ) : null;
                     })()}
 
-                    <div className="flex justify-between text-lg border-t border-blue-300 pt-2">
+                    <div className="flex justify-between border-t border-blue-300 pt-2 text-lg">
                       <span className="font-semibold text-gray-700">Total:</span>
                       <span className="font-bold text-blue-600">
                         $
@@ -1756,11 +2056,10 @@ export default function Cotizaciones() {
                 </div>
               </div>
 
-              {/* Observaciones */}
               {cotizacionSeleccionada.observaciones && (
                 <div>
-                  <h3 className="text-lg font-medium mb-2">Observaciones</h3>
-                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <h3 className="mb-2 text-lg font-medium">Observaciones</h3>
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
                     <p className="text-gray-700">
                       {cotizacionSeleccionada.observaciones}
                     </p>
@@ -1778,7 +2077,6 @@ export default function Cotizaciones() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Anular */}
       <Dialog
         open={isAnular}
         onOpenChange={(open) => {
@@ -1796,6 +2094,7 @@ export default function Cotizaciones() {
               ¿Estás seguro de que deseas anular esta cotización?
             </DialogDescription>
           </DialogHeader>
+
           {cotizacionSeleccionada && (
             <div className="py-4">
               <p className="text-sm text-gray-600">
@@ -1809,11 +2108,12 @@ export default function Cotizaciones() {
                 </span>
                 .
               </p>
-              <p className="text-sm text-red-600 mt-2">
+              <p className="mt-2 text-sm text-red-600">
                 Esta acción no se puede deshacer.
               </p>
             </div>
           )}
+
           <DialogFooter>
             <Button variant="outline" onClick={closeToList}>
               Cancelar
@@ -1825,7 +2125,6 @@ export default function Cotizaciones() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Confirmar Cambio de Estado */}
       <Dialog
         open={showConfirmEstadoModal}
         onOpenChange={setShowConfirmEstadoModal}
@@ -1839,7 +2138,7 @@ export default function Cotizaciones() {
           </DialogHeader>
 
           {cotizacionParaCambioEstado && (
-            <div className="py-4 space-y-3">
+            <div className="space-y-3 py-4">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Cotización:</span>
                 <span className="font-medium">
@@ -1890,59 +2189,33 @@ export default function Cotizaciones() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Éxito */}
-      <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-green-600">
-              <CheckCircle2 size={24} />
-              Cotización Creada Exitosamente
-            </DialogTitle>
-            <DialogDescription className="sr-only">
-              La cotización ha sido creada correctamente
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <p className="text-gray-700">
-              La cotización ha sido registrada correctamente en el sistema.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button
-              onClick={() => setShowSuccessModal(false)}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              Aceptar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal Opciones de PDF */}
       <Dialog
         open={isPdfOptionsModalOpen}
         onOpenChange={setIsPdfOptionsModalOpen}
       >
         <DialogContent
           onInteractOutside={(e) => e.preventDefault()}
-          className="max-w-md">
+          className="max-w-md"
+        >
           <DialogHeader>
             <DialogTitle>Descargar PDF</DialogTitle>
             <DialogDescription>
               Selecciona el formato del PDF que deseas descargar
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4 space-y-3">
+
+          <div className="space-y-3 py-4">
             <Button
               onClick={() => {
                 if (cotizacionParaPdf) handleDownloadPDF(cotizacionParaPdf, true);
                 setIsPdfOptionsModalOpen(false);
               }}
-              className="w-full bg-blue-600 hover:bg-blue-700 flex items-center justify-center gap-2"
+              className="flex w-full items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700"
             >
               <Download size={18} />
               Descargar con Precios
             </Button>
+
             <Button
               onClick={() => {
                 if (cotizacionParaPdf)
@@ -1950,12 +2223,13 @@ export default function Cotizaciones() {
                 setIsPdfOptionsModalOpen(false);
               }}
               variant="outline"
-              className="w-full flex items-center justify-center gap-2"
+              className="flex w-full items-center justify-center gap-2"
             >
               <Download size={18} />
               Descargar sin Precios
             </Button>
           </div>
+
           <DialogFooter>
             <Button
               variant="outline"

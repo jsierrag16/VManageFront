@@ -7,7 +7,7 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { PublicRoute } from "./components/PublicRoute";
 
 // Páginas
-import Login from "@/features/auth/pages/Login";
+import Login from "@/features/auth/pages/login";
 import RestablecerContrasena from "@/features/auth/pages/RestablecerContrasena";
 import Dashboard from "@/features/dashboard/pages/Dashboard";
 import Bodegas from "@/features/bodegas/pages/Bodegas";
@@ -21,7 +21,8 @@ import Compras from "@/features/compras/pages/Compras";
 import RemisionesCompra from "@/features/remisiones/pages/RemisionesCompra";
 import Clientes from "@/features/clientes/pages/Clientes";
 import Cotizaciones from "@/features/cotizaciones/pages/Cotizaciones";
-import Ordenes from "@/features/ordenes/pages/Ordenes";
+// import Ordenes from "@/features/ordenes/pages/Ordenes";
+import OrdenesVenta from "@/features/ordenes-venta/pages/OrdenesVenta";
 import Remisiones from "@/features/remisiones/pages/Remisiones";
 import PagosAbonos from "@/features/pagosAbonos/pages/PagosAbonos";
 
@@ -264,7 +265,7 @@ export default function RoutesModule() {
 
           {buildCrudRoutes({
             basePath: "ordenes",
-            element: <Ordenes />,
+            element: <OrdenesVenta />,
             modulo: "ventas",
             submodulo: "ordenesVenta",
             includeDelete: false,
