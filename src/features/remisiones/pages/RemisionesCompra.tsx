@@ -5,6 +5,8 @@ import {
   useParams,
   useOutletContext,
 } from "react-router-dom";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import {
   FileText,
   Search,
@@ -51,19 +53,22 @@ import {
   SelectValue,
 } from "../../../shared/components/ui/select";
 import type { AppOutletContext } from "../../../layouts/MainLayout";
+import { ESTADO_REMISION_IDS } from "../services/remisiones-compra.mapper";
 import {
-  ESTADO_REMISION_IDS,
   cambiarEstadoRemisionCompra,
   createRemisionCompra,
   getCompraById,
   getComprasOptions,
   getRemisionCompraById,
   getRemisionesCompra,
+  getSiguienteCodigoRemision,
   updateRemisionCompra,
-  type CompraDetail,
-  type CompraOption,
-  type RemisionCompraUI,
 } from "../services/remisiones-compra.services";
+import type {
+  CompraDetail,
+  CompraOption,
+  RemisionCompraUI,
+} from "../services/remisiones-compras.types";
 
 type ItemForm = {
   localId: string;
@@ -77,6 +82,22 @@ type ItemForm = {
   fecha_vencimiento: string;
   codigo_barras: string;
   nota: string;
+};
+
+type FormState = {
+  numeroRemision: string;
+  id_compra: string;
+  ordenCompra: string;
+  id_proveedor: string;
+  proveedor: string;
+  proveedorTipoDocumento: string;
+  proveedorNumeroDocumento: string;
+  id_bodega: string;
+  bodega: string;
+  fechaCreacion: string;
+  fechaVencimiento: string;
+  observaciones: string;
+  idFactura: string;
 };
 
 const makeLocalId = () => {
@@ -120,12 +141,14 @@ const normalizeText = (value: unknown) =>
     .trim()
     .toLowerCase();
 
-const buildEmptyForm = () => ({
-  numeroRemision: "Se genera automáticamente",
+const buildEmptyForm = (): FormState => ({
+  numeroRemision: "",
   id_compra: "",
   ordenCompra: "",
   id_proveedor: "",
   proveedor: "",
+  proveedorTipoDocumento: "",
+  proveedorNumeroDocumento: "",
   id_bodega: "",
   bodega: "",
   fechaCreacion: new Date().toISOString().split("T")[0],
@@ -309,6 +332,12 @@ const getStoredBodegaState = () => {
   };
 };
 
+const renderReadonlyBox = (value: string, emptyLabel = "—") => (
+  <div className="h-10 w-full rounded-md border border-input bg-gray-50 px-3 py-2 text-sm text-gray-700 flex items-center">
+    {value || emptyLabel}
+  </div>
+);
+
 export default function RemisionesCompra() {
   const { selectedBodegaId, selectedBodegaNombre } = useOutletContext<
     AppOutletContext & {
@@ -317,54 +346,54 @@ export default function RemisionesCompra() {
     }
   >();
 
-const [storedBodega, setStoredBodega] = useState<{
-  id?: number;
-  nombre: string;
-}>({
-  id: undefined,
-  nombre: "",
-});
+  const [storedBodega, setStoredBodega] = useState<{
+    id?: number;
+    nombre: string;
+  }>({
+    id: undefined,
+    nombre: "",
+  });
 
-const [bodegaReady, setBodegaReady] = useState(false);
+  const [bodegaReady, setBodegaReady] = useState(false);
 
-useEffect(() => {
-  const contextReady =
-    Number.isInteger(Number(selectedBodegaId)) ||
-    normalizeText(selectedBodegaNombre) === normalizeText("Todas las bodegas");
+  useEffect(() => {
+    const contextReady =
+      Number.isInteger(Number(selectedBodegaId)) ||
+      normalizeText(selectedBodegaNombre) === normalizeText("Todas las bodegas");
 
-  if (contextReady) {
-    setStoredBodega({
-      id: selectedBodegaId,
-      nombre: selectedBodegaNombre || "",
-    });
-    setBodegaReady(true);
-    return;
-  }
+    if (contextReady) {
+      setStoredBodega({
+        id: selectedBodegaId,
+        nombre: selectedBodegaNombre || "",
+      });
+      setBodegaReady(true);
+      return;
+    }
 
-  const timer = window.setTimeout(() => {
-    const stored = getStoredBodegaState();
-    setStoredBodega(stored);
-    setBodegaReady(true);
-  }, 0);
+    const timer = window.setTimeout(() => {
+      const stored = getStoredBodegaState();
+      setStoredBodega(stored);
+      setBodegaReady(true);
+    }, 0);
 
-  return () => window.clearTimeout(timer);
-}, [selectedBodegaId, selectedBodegaNombre]);
+    return () => window.clearTimeout(timer);
+  }, [selectedBodegaId, selectedBodegaNombre]);
 
-const effectiveSelectedBodegaNombre =
-  (selectedBodegaNombre || storedBodega.nombre || "").trim();
+  const effectiveSelectedBodegaNombre =
+    (selectedBodegaNombre || storedBodega.nombre || "").trim();
 
-const isTodasLasBodegas =
-  normalizeText(effectiveSelectedBodegaNombre) ===
-  normalizeText("Todas las bodegas");
+  const isTodasLasBodegas =
+    normalizeText(effectiveSelectedBodegaNombre) ===
+    normalizeText("Todas las bodegas");
 
-const effectiveSelectedBodegaId = isTodasLasBodegas
-  ? undefined
-  : selectedBodegaId ?? storedBodega.id;
+  const effectiveSelectedBodegaId = isTodasLasBodegas
+    ? undefined
+    : selectedBodegaId ?? storedBodega.id;
 
-const hasResolvedBodega =
-  bodegaReady &&
-  (isTodasLasBodegas ||
-    Number.isInteger(Number(effectiveSelectedBodegaId)));
+  const hasResolvedBodega =
+    bodegaReady &&
+    (isTodasLasBodegas ||
+      Number.isInteger(Number(effectiveSelectedBodegaId)));
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -377,10 +406,6 @@ const hasResolvedBodega =
   const isListRoute = location.pathname === "/app/remcompras";
 
   const closeToList = () => navigate("/app/remcompras");
-  const refreshAndGoToList = async () => {
-    await loadRemisiones();
-    navigate("/app/remcompras", { replace: true });
-  };
 
   const [loadingPage, setLoadingPage] = useState(false);
   const [loadingDetalleRemision, setLoadingDetalleRemision] = useState(false);
@@ -404,7 +429,7 @@ const hasResolvedBodega =
   const [nuevoEstadoLabel, setNuevoEstadoLabel] = useState<string | null>(null);
   const [lastCreatedCode, setLastCreatedCode] = useState("");
 
-  const [formData, setFormData] = useState(buildEmptyForm());
+  const [formData, setFormData] = useState<FormState>(buildEmptyForm());
 
   const [items, setItems] = useState<ItemForm[]>([]);
   const [currentProducto, setCurrentProducto] = useState("");
@@ -430,6 +455,18 @@ const hasResolvedBodega =
   const loadCompras = async () => {
     const data = await getComprasOptions(effectiveSelectedBodegaId);
     setComprasOptions(data);
+  };
+
+  const loadSiguienteCodigo = async () => {
+    try {
+      const codigo = await getSiguienteCodigoRemision();
+      setFormData((prev) => ({
+        ...prev,
+        numeroRemision: codigo || prev.numeroRemision,
+      }));
+    } catch {
+      //
+    }
   };
 
   const loadInitialData = async () => {
@@ -464,10 +501,13 @@ const hasResolvedBodega =
     if (!hasResolvedBodega) return;
 
     const run = async () => {
-      try {
-        await loadCompras();
-      } catch (error) {
-        toast.error(getErrorMessage(error, "No fue posible cargar las compras"));
+      const [comprasResult] = await Promise.allSettled([
+        loadCompras(),
+        loadSiguienteCodigo(),
+      ]);
+
+      if (comprasResult.status === "rejected") {
+        toast.error("No fue posible cargar las compras");
       }
     };
 
@@ -501,6 +541,56 @@ const hasResolvedBodega =
     resetForm();
   }, [isCrear]);
 
+  const applyCompraToForm = (
+    compra: CompraDetail,
+    options?: {
+      keepNumeroRemision?: boolean;
+      numeroRemisionFallback?: string;
+      keepObservaciones?: boolean;
+      observaciones?: string;
+      keepFechaVencimiento?: boolean;
+      fechaVencimiento?: string;
+      keepIdFactura?: boolean;
+      idFactura?: string;
+    }
+  ) => {
+    setSelectedCompra(compra);
+
+    setFormData((prev) => ({
+      ...prev,
+      numeroRemision:
+        options?.keepNumeroRemision === true
+          ? prev.numeroRemision ||
+            options?.numeroRemisionFallback ||
+            compra.numeroRemisionSugerido ||
+            ""
+          : compra.numeroRemisionSugerido ||
+            prev.numeroRemision ||
+            options?.numeroRemisionFallback ||
+            "",
+      id_compra: String(compra.id),
+      ordenCompra: compra.codigo,
+      id_proveedor: String(compra.proveedorId),
+      proveedor: compra.proveedorNombre,
+      proveedorTipoDocumento: compra.proveedorTipoDocumento || "",
+      proveedorNumeroDocumento: compra.proveedorNumeroDocumento || "",
+      id_bodega: String(compra.idBodega),
+      bodega: compra.bodegaNombre,
+      fechaVencimiento:
+        options?.keepFechaVencimiento === true
+          ? options?.fechaVencimiento ?? prev.fechaVencimiento
+          : prev.fechaVencimiento,
+      observaciones:
+        options?.keepObservaciones === true
+          ? options?.observaciones ?? prev.observaciones
+          : prev.observaciones,
+      idFactura:
+        options?.keepIdFactura === true
+          ? options?.idFactura ?? prev.idFactura
+          : prev.idFactura,
+    }));
+  };
+
   useEffect(() => {
     if (!isVer && !isEditar && !isAnular) {
       setSelectedRemision(null);
@@ -530,9 +620,12 @@ const hasResolvedBodega =
             ordenCompra: remision.ordenCompra,
             id_proveedor: String(remision.proveedorId),
             proveedor: remision.proveedor,
+            proveedorTipoDocumento: remision.proveedorTipoDocumento || "",
+            proveedorNumeroDocumento: remision.proveedorNumeroDocumento || "",
             id_bodega: String(remision.idBodega),
             bodega: remision.bodega,
-            fechaCreacion: remision.fecha || new Date().toISOString().split("T")[0],
+            fechaCreacion:
+              remision.fecha || new Date().toISOString().split("T")[0],
             fechaVencimiento: remision.fechaVencimiento || "",
             observaciones: remision.observaciones || "",
             idFactura: remision.idFactura ? String(remision.idFactura) : "",
@@ -556,7 +649,20 @@ const hasResolvedBodega =
 
           try {
             const compra = await getCompraById(remision.ordenCompraId);
-            if (!cancelled) setSelectedCompra(compra);
+
+            if (!cancelled) {
+              setSelectedCompra(compra);
+              applyCompraToForm(compra, {
+                keepNumeroRemision: true,
+                numeroRemisionFallback: remision.numeroRemision,
+                keepObservaciones: true,
+                observaciones: remision.observaciones || "",
+                keepFechaVencimiento: true,
+                fechaVencimiento: remision.fechaVencimiento || "",
+                keepIdFactura: true,
+                idFactura: remision.idFactura ? String(remision.idFactura) : "",
+              });
+            }
           } catch {
             //
           }
@@ -588,6 +694,8 @@ const hasResolvedBodega =
         remision.numeroRemision,
         remision.ordenCompra,
         remision.proveedor,
+        remision.proveedorTipoDocumento,
+        remision.proveedorNumeroDocumento,
         remision.estado,
         remision.bodega,
         String(remision.itemsCount),
@@ -599,7 +707,10 @@ const hasResolvedBodega =
     setCurrentPage(1);
   }, [searchTerm, effectiveSelectedBodegaNombre, effectiveSelectedBodegaId]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredRemisiones.length / itemsPerPage));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredRemisiones.length / itemsPerPage)
+  );
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const currentRemisiones = filteredRemisiones.slice(startIndex, endIndex);
@@ -680,19 +791,9 @@ const hasResolvedBodega =
     try {
       const compra = await getCompraById(compraBase.id);
 
-      setSelectedCompra(compra);
       setItems([]);
       resetItemBuilder();
-
-      setFormData((prev) => ({
-        ...prev,
-        id_compra: String(compra.id),
-        ordenCompra: compra.codigo,
-        id_proveedor: String(compra.proveedorId),
-        proveedor: compra.proveedorNombre,
-        id_bodega: String(compra.idBodega),
-        bodega: compra.bodegaNombre,
-      }));
+      applyCompraToForm(compra);
     } catch (error) {
       toast.error(
         getErrorMessage(error, "No fue posible cargar el detalle de la compra")
@@ -787,7 +888,9 @@ const hasResolvedBodega =
     e.preventDefault();
 
     const currentId = e.currentTarget.id;
-    const targetId = currentId.startsWith("edit-") ? "edit-numeroLote" : "numeroLote";
+    const targetId = currentId.startsWith("edit-")
+      ? "edit-numeroLote"
+      : "numeroLote";
 
     const loteInput = document.getElementById(targetId) as HTMLInputElement | null;
     loteInput?.focus();
@@ -854,7 +957,10 @@ const hasResolvedBodega =
     if (!selectedRemision) return;
     if (!validateBeforeSubmit()) return;
 
-    if (selectedRemision.afectaExistencias || selectedRemision.estadoKey === "APLICADA") {
+    if (
+      selectedRemision.afectaExistencias ||
+      selectedRemision.estadoKey === "APLICADA"
+    ) {
       toast.error("No puedes editar una remisión que ya aplicó existencias");
       return;
     }
@@ -891,7 +997,10 @@ const hasResolvedBodega =
       return;
     }
 
-    if (selectedRemision.afectaExistencias || selectedRemision.estadoKey === "APLICADA") {
+    if (
+      selectedRemision.afectaExistencias ||
+      selectedRemision.estadoKey === "APLICADA"
+    ) {
       toast.error("No debes anular una remisión que ya aplicó existencias");
       return;
     }
@@ -988,111 +1097,199 @@ const hasResolvedBodega =
     navigate("/app/remcompras", { replace: true });
   };
 
-  const handleDescargarRemisiones = () => {
-    try {
-      const headers = [
-        "N° Remisión",
-        "Orden de Compra",
-        "Proveedor",
-        "Fecha",
-        "Estado",
-        "Bodega",
-        "Items",
-        "Observaciones",
+const generateRemisionPDF = (remision: RemisionCompraUI) => {
+  const doc = new jsPDF();
+
+  doc.setFontSize(20);
+  doc.setFont("helvetica", "bold");
+  doc.text("REMISIÓN DE COMPRA", 105, 20, { align: "center" });
+
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "normal");
+
+  doc.text(`N° Remisión: ${remision.numeroRemision}`, 20, 40);
+  doc.text(`Proveedor: ${remision.proveedor || "-"}`, 20, 46);
+  doc.text(
+    `Tipo Doc.: ${remision.proveedorTipoDocumento || "-"}`,
+    20,
+    52
+  );
+  doc.text(
+    `N° Documento: ${remision.proveedorNumeroDocumento || "-"}`,
+    20,
+    58
+  );
+  doc.text(`Bodega: ${remision.bodega || "-"}`, 20, 64);
+
+  doc.text(
+    `Fecha: ${
+      remision.fecha
+        ? new Date(remision.fecha).toLocaleDateString("es-CO")
+        : "-"
+    }`,
+    120,
+    40
+  );
+
+  doc.text(
+    `Fecha Venc.: ${
+      remision.fechaVencimiento
+        ? new Date(remision.fechaVencimiento).toLocaleDateString("es-CO")
+        : "-"
+    }`,
+    120,
+    46
+  );
+
+  doc.text(`Estado: ${remision.estado || "-"}`, 120, 52);
+  doc.text(`Orden Compra: ${remision.ordenCompra || "-"}`, 120, 58);
+
+  doc.setLineWidth(0.5);
+  doc.line(20, 70, 190, 70);
+
+  if (remision.items && remision.items.length > 0) {
+    const tableData = remision.items.map((item) => {
+      const subtotal = Number(item.cantidad || 0) * Number(item.precio_unitario || 0);
+
+      const detalleProducto = [
+        item.productoNombre || "-",
+        item.lote ? `Lote: ${item.lote}` : null,
+        item.fecha_vencimiento
+          ? `Vence: ${new Date(item.fecha_vencimiento).toLocaleDateString("es-CO")}`
+          : null,
+        (item.codigo_barras || item.cod_barras)
+          ? `Cod. barras: ${item.codigo_barras || item.cod_barras}`
+          : null,
+        item.nota ? `Nota: ${item.nota}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      return [
+        detalleProducto,
+        String(item.cantidad),
+        `IVA (${Number(item.ivaPorcentaje || 0).toFixed(2)}%)`,
+        `$${Number(item.precio_unitario || 0).toLocaleString("es-CO", {
+          minimumFractionDigits: 2,
+        })}`,
+        `$${subtotal.toLocaleString("es-CO", {
+          minimumFractionDigits: 2,
+        })}`,
       ];
+    });
 
-      const rows = filteredRemisiones.map((remision) => [
-        remision.numeroRemision,
-        remision.ordenCompra,
-        remision.proveedor,
-        formatDate(remision.fecha),
-        remision.estado,
-        remision.bodega,
-        String(remision.itemsCount),
-        remision.observaciones || "N/A",
-      ]);
+    autoTable(doc, {
+      startY: 76,
+      head: [["Producto", "Cantidad", "IVA", "Precio Unit.", "Subtotal"]],
+      body: tableData,
+      theme: "grid",
+      styles: {
+        fontSize: 8,
+        cellPadding: 3,
+        valign: "middle",
+      },
+      headStyles: {
+        fontStyle: "bold",
+      },
+      columnStyles: {
+        0: { cellWidth: 78 },
+        1: { cellWidth: 20, halign: "center" },
+        2: { cellWidth: 22, halign: "center" },
+        3: { cellWidth: 32, halign: "right" },
+        4: { cellWidth: 32, halign: "right" },
+      },
+    });
+  }
 
-      const csvContent = [
-        headers.join(","),
-        ...rows.map((row) =>
-          row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")
-        ),
-      ].join("\n");
+  const finalY = (doc as any).lastAutoTable?.finalY || 76;
+  const totalesY = finalY + 10;
 
-      const blob = new Blob(["\ufeff" + csvContent], {
-        type: "text/csv;charset=utf-8;",
-      });
+  const subtotalGeneral = remision.items.reduce(
+    (acc, item) =>
+      acc + Number(item.cantidad || 0) * Number(item.precio_unitario || 0),
+    0
+  );
 
-      const link = document.createElement("a");
-      const url = URL.createObjectURL(blob);
+  const ivaGeneral = remision.items.reduce((acc, item) => {
+    const subtotal =
+      Number(item.cantidad || 0) * Number(item.precio_unitario || 0);
+    return acc + subtotal * (Number(item.ivaPorcentaje || 0) / 100);
+  }, 0);
 
-      link.href = url;
-      link.download = `remisiones_compra_${new Date().toISOString().split("T")[0]}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+  const totalGeneral = subtotalGeneral + ivaGeneral;
 
-      toast.success("Remisiones descargadas exitosamente");
-    } catch (error) {
-      toast.error("Error al descargar las remisiones");
-      console.error(error);
-    }
-  };
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
 
-  const handleDescargarRemision = async (remision: RemisionCompraUI) => {
-    try {
-      const detalle =
-        remision.items.length > 0 ? remision : await getRemisionCompraById(remision.id);
+  doc.text("Subtotal:", 130, totalesY);
+  doc.text(
+    `$${subtotalGeneral.toLocaleString("es-CO", {
+      minimumFractionDigits: 2,
+    })}`,
+    190,
+    totalesY,
+    { align: "right" }
+  );
 
-      const csvLines = [
-        "REMISIÓN DE COMPRA",
-        "",
-        "INFORMACIÓN GENERAL",
-        `Número de Remisión,${detalle.numeroRemision}`,
-        `Orden de Compra,${detalle.ordenCompra}`,
-        `Proveedor,${detalle.proveedor}`,
-        `Fecha,${formatDate(detalle.fecha)}`,
-        `Estado,${detalle.estado}`,
-        `Bodega,${detalle.bodega}`,
-        `Observaciones,"${(detalle.observaciones || "N/A").replace(/"/g, '""')}"`,
-        "",
-        "PRODUCTOS",
-        "Producto,Lote,Cantidad,Precio Unitario,IVA %,Fecha Vencimiento,Código Barras,Nota",
-        ...detalle.items.map(
-          (item) =>
-            `"${item.productoNombre.replace(/"/g, '""')}",` +
-            `"${item.lote}",` +
-            `${item.cantidad},` +
-            `${item.precio_unitario},` +
-            `${item.ivaPorcentaje},` +
-            `"${formatDate(item.fecha_vencimiento)}",` +
-            `"${(item.codigo_barras || item.cod_barras || "").replace(/"/g, '""')}",` +
-            `"${(item.nota || "").replace(/"/g, '""')}"`
-        ),
-      ];
+  doc.text("IVA:", 130, totalesY + 6);
+  doc.text(
+    `$${ivaGeneral.toLocaleString("es-CO", {
+      minimumFractionDigits: 2,
+    })}`,
+    190,
+    totalesY + 6,
+    { align: "right" }
+  );
 
-      const csvContent = csvLines.join("\n");
+  doc.setLineWidth(0.3);
+  doc.line(130, totalesY + 10, 190, totalesY + 10);
 
-      const blob = new Blob(["\ufeff" + csvContent], {
-        type: "text/csv;charset=utf-8;",
-      });
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.text("Total:", 130, totalesY + 16);
+  doc.text(
+    `$${totalGeneral.toLocaleString("es-CO", {
+      minimumFractionDigits: 2,
+    })}`,
+    190,
+    totalesY + 16,
+    { align: "right" }
+  );
 
-      const link = document.createElement("a");
-      const url = URL.createObjectURL(blob);
+  if (remision.observaciones) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text("Observaciones:", 20, totalesY + 30);
+    const splitObs = doc.splitTextToSize(remision.observaciones, 170);
+    doc.text(splitObs, 20, totalesY + 36);
+  }
 
-      link.href = url;
-      link.download = `remision_${detalle.numeroRemision}_${new Date()
-        .toISOString()
-        .split("T")[0]}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+  const pageHeight = doc.internal.pageSize.height;
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "italic");
+  doc.text(
+    `Generado el ${new Date().toLocaleString("es-CO")}`,
+    105,
+    pageHeight - 10,
+    { align: "center" }
+  );
 
-      toast.success(`Remisión ${detalle.numeroRemision} descargada exitosamente`);
-    } catch (error) {
-      toast.error(getErrorMessage(error, "Error al descargar la remisión"));
-    }
-  };
+  doc.save(`Remision_Compra_${remision.numeroRemision}.pdf`);
+};
+
+const handleDescargarRemision = async (remision: RemisionCompraUI) => {
+  try {
+    const detalle =
+      remision.items.length > 0
+        ? remision
+        : await getRemisionCompraById(remision.id);
+
+    generateRemisionPDF(detalle);
+    toast.success(`PDF de la remisión ${detalle.numeroRemision} descargado exitosamente`);
+  } catch (error) {
+    toast.error(getErrorMessage(error, "Error al descargar la remisión en PDF"));
+  }
+};
 
   const totalFormulario = useMemo(() => {
     return items.reduce((acc, item) => {
@@ -1174,7 +1371,7 @@ const hasResolvedBodega =
             />
             <Input
               type="text"
-              placeholder="Buscar por remisión, orden, proveedor, estado, bodega o número de items..."
+              placeholder="Buscar por remisión, orden, proveedor, documento, estado, bodega o número de items..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 w-full"
@@ -1395,13 +1592,11 @@ const hasResolvedBodega =
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="numeroRemision">Número de Remisión</Label>
-                <Input
-                  id="numeroRemision"
-                  value={formData.numeroRemision}
-                  readOnly
-                  className="bg-gray-100 cursor-not-allowed"
-                />
+                <Label>Número de Remisión</Label>
+                {renderReadonlyBox(
+                  formData.numeroRemision,
+                  "Se genera automáticamente"
+                )}
               </div>
 
               <div className="space-y-2">
@@ -1424,34 +1619,23 @@ const hasResolvedBodega =
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="proveedor">Proveedor</Label>
-                <Input
-                  id="proveedor"
-                  value={formData.proveedor}
-                  readOnly
-                  className="bg-gray-100 cursor-not-allowed"
-                />
+                <Label>Proveedor</Label>
+                {renderReadonlyBox(formData.proveedor)}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="bodega">Bodega</Label>
-                <Input
-                  id="bodega"
-                  value={formData.bodega}
-                  readOnly
-                  className="bg-gray-100 cursor-not-allowed"
-                />
+                <Label>Tipo de Documento</Label>
+                {renderReadonlyBox(formData.proveedorTipoDocumento)}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="fechaCreacion">Fecha de Creación</Label>
-                <Input
-                  id="fechaCreacion"
-                  type="date"
-                  value={formData.fechaCreacion}
-                  readOnly
-                  className="bg-gray-100 cursor-not-allowed"
-                />
+                <Label>Número de Documento</Label>
+                {renderReadonlyBox(formData.proveedorNumeroDocumento)}
+              </div>
+
+              <div className="space-y-2">
+                <Label>Bodega</Label>
+                {renderReadonlyBox(formData.bodega)}
               </div>
 
               <div className="space-y-2">
@@ -1483,7 +1667,7 @@ const hasResolvedBodega =
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="observaciones">Observaciones</Label>
                 <Input
                   id="observaciones"
@@ -1507,7 +1691,9 @@ const hasResolvedBodega =
                       Compra seleccionada: {selectedCompra.codigo}
                     </p>
                     <p className="text-sm text-blue-800">
-                      Proveedor: {selectedCompra.proveedorNombre} | Bodega:{" "}
+                      Proveedor: {selectedCompra.proveedorNombre} | Tipo Doc.:{""}
+                      {selectedCompra.proveedorTipoDocumento || ""} | N° Doc.:{" "}
+                      {selectedCompra.proveedorNumeroDocumento || ""} | Bodega:{" "}
                       {selectedCompra.bodegaNombre}
                     </p>
                   </div>
@@ -1776,43 +1962,33 @@ const hasResolvedBodega =
             <div className="space-y-4 py-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="edit-numeroRemision">Número de Remisión</Label>
-                  <Input
-                    id="edit-numeroRemision"
-                    value={formData.numeroRemision}
-                    readOnly
-                    className="bg-gray-100 cursor-not-allowed"
-                  />
+                  <Label>Número de Remisión</Label>
+                  {renderReadonlyBox(formData.numeroRemision)}
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="edit-ordenCompra">Orden de Compra</Label>
-                  <Input
-                    id="edit-ordenCompra"
-                    value={formData.ordenCompra}
-                    readOnly
-                    className="bg-gray-100 cursor-not-allowed"
-                  />
+                  <Label>Orden de Compra</Label>
+                  {renderReadonlyBox(formData.ordenCompra)}
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="edit-proveedor">Proveedor</Label>
-                  <Input
-                    id="edit-proveedor"
-                    value={formData.proveedor}
-                    readOnly
-                    className="bg-gray-100 cursor-not-allowed"
-                  />
+                  <Label>Proveedor</Label>
+                  {renderReadonlyBox(formData.proveedor)}
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="edit-bodega">Bodega</Label>
-                  <Input
-                    id="edit-bodega"
-                    value={formData.bodega}
-                    readOnly
-                    className="bg-gray-100 cursor-not-allowed"
-                  />
+                  <Label>Tipo de Documento</Label>
+                  {renderReadonlyBox(formData.proveedorTipoDocumento)}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Número de Documento</Label>
+                  {renderReadonlyBox(formData.proveedorNumeroDocumento)}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Bodega</Label>
+                  {renderReadonlyBox(formData.bodega)}
                 </div>
 
                 <div className="space-y-2">
@@ -1857,7 +2033,7 @@ const hasResolvedBodega =
                   />
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="edit-observaciones">Observaciones</Label>
                   <Input
                     id="edit-observaciones"
@@ -1876,6 +2052,12 @@ const hasResolvedBodega =
                 <div className="border rounded-lg p-4 bg-blue-50 border-blue-200">
                   <p className="font-semibold text-blue-900 mb-3">
                     Productos disponibles de la compra {selectedCompra.codigo}
+                  </p>
+                  <p className="text-sm text-blue-800 mb-3">
+                    Proveedor: {selectedCompra.proveedorNombre} | Tipo Doc.:{" "}
+                    {selectedCompra.proveedorTipoDocumento || "—"} | N° Doc.:{" "}
+                    {selectedCompra.proveedorNumeroDocumento || "—"} | Bodega:{" "}
+                    {selectedCompra.bodegaNombre}
                   </p>
 
                   <div className="border rounded-lg overflow-hidden bg-white">
@@ -2131,6 +2313,18 @@ const hasResolvedBodega =
                 <div>
                   <p className="text-sm text-gray-600">Proveedor</p>
                   <p className="font-semibold">{selectedRemision.proveedor}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Tipo de Documento</p>
+                  <p className="font-semibold">
+                    {selectedRemision.proveedorTipoDocumento || "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Número de Documento</p>
+                  <p className="font-semibold">
+                    {selectedRemision.proveedorNumeroDocumento || "—"}
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Fecha de Creación</p>
