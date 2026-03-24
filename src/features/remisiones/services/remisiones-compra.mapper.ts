@@ -189,6 +189,8 @@ export const mapRemision = (raw: RawRecord): RemisionCompraUI => {
         raw?.proveedor?.tipo_documento?.nombre_tipo_doc ??
         raw?.proveedor?.tipo_doc?.nombre_doc ??
         raw?.proveedor?.tipo_doc?.nombre_tipo_doc ??
+        raw?.proveedor?.tipoDocumento?.nombre_doc ??
+        raw?.proveedor?.tipoDocumento?.nombre ??
         raw?.proveedor?.nombre_doc ??
         raw?.proveedor?.nombre_tipo_doc
     ),
@@ -197,7 +199,8 @@ export const mapRemision = (raw: RawRecord): RemisionCompraUI => {
         raw?.numDocumentoProveedor ??
         raw?.numeroDocumentoProveedor ??
         raw?.proveedor?.num_documento ??
-        raw?.proveedor?.numero_documento
+        raw?.proveedor?.numero_documento ??
+        raw?.proveedor?.documento
     ),
 
     estadoId: toNumber(
@@ -279,29 +282,43 @@ export const mapCompraOption = (raw: RawRecord): CompraOption => {
 export const mapCompraDetailItem = (raw: RawRecord): CompraDetailItem => {
   return {
     idProducto: toNumber(
-      raw?.id_producto ?? raw?.producto?.id_producto ?? raw?.producto?.id
+      raw?.idProducto ??
+        raw?.id_producto ??
+        raw?.producto?.id_producto ??
+        raw?.producto?.id
     ),
     productoNombre: toStringSafe(
-      raw?.producto?.nombre_producto ??
+      raw?.productoNombre ??
         raw?.nombre_producto ??
-        raw?.productoNombre ??
+        raw?.producto?.nombre_producto ??
         raw?.producto?.nombre
     ),
     cantidad: toNumber(raw?.cantidad),
-    precioUnitario: toNumber(raw?.precio_unitario ?? raw?.precio),
-    idIva: toNumber(raw?.id_iva ?? raw?.iva?.id_iva ?? raw?.producto?.id_iva),
+    precioUnitario: toNumber(
+      raw?.precioUnitario ??
+        raw?.precio_unitario ??
+        raw?.precio
+    ),
+    idIva: toNumber(
+      raw?.idIva ??
+        raw?.id_iva ??
+        raw?.iva?.id_iva ??
+        raw?.producto?.id_iva
+    ),
     ivaPorcentaje: toNumber(
-      raw?.iva?.porcentaje ??
+      raw?.ivaPorcentaje ??
         raw?.iva_porcentaje ??
+        raw?.iva?.porcentaje ??
         raw?.producto?.iva?.porcentaje ??
         raw?.porcentaje
     ),
     codigoBarras: toStringSafe(
-      raw?.codigo_barras ?? raw?.cod_barras ?? raw?.codigoBarras
+      raw?.codigoBarras ??
+        raw?.codigo_barras ??
+        raw?.cod_barras
     ),
   };
 };
-
 export const mapCompraDetail = (raw: RawRecord): CompraDetail => {
   const source = (raw?.compra ?? raw) as RawRecord;
 
@@ -313,17 +330,29 @@ export const mapCompraDetail = (raw: RawRecord): CompraDetail => {
       : asArray(source?.detalles);
 
   return {
-    id: toNumber(source?.id_compra ?? source?.id),
-    codigo: toStringSafe(source?.codigo_compra ?? source?.codigo),
+    id: toNumber(
+      source?.id_compra ??
+        source?.id
+    ),
+
+    codigo: toStringSafe(
+      source?.codigo_compra ??
+        source?.codigo
+    ),
 
     proveedorId: toNumber(
-      source?.id_proveedor ?? source?.proveedor?.id_proveedor
+      source?.proveedorId ??
+        source?.id_proveedor ??
+        source?.proveedor?.id_proveedor ??
+        source?.proveedor?.id
     ),
+
     proveedorNombre: toStringSafe(
-      source?.proveedor?.nombre_empresa ??
-        source?.proveedorNombre ??
+      source?.proveedorNombre ??
+        source?.proveedor?.nombre_empresa ??
         source?.nombre_empresa
     ),
+
     proveedorTipoDocumento: toStringSafe(
       source?.proveedorTipoDocumento ??
         source?.tipoDocumentoProveedor ??
@@ -335,6 +364,7 @@ export const mapCompraDetail = (raw: RawRecord): CompraDetail => {
         source?.proveedor?.nombre_tipo_doc ??
         source?.proveedor?.nombre_doc
     ),
+
     proveedorNumeroDocumento: toStringSafe(
       source?.proveedorNumeroDocumento ??
         source?.numDocumentoProveedor ??
@@ -343,10 +373,16 @@ export const mapCompraDetail = (raw: RawRecord): CompraDetail => {
         source?.proveedor?.numero_documento
     ),
 
-    idBodega: toNumber(source?.id_bodega ?? source?.bodega?.id_bodega),
+    idBodega: toNumber(
+      source?.idBodega ??
+        source?.id_bodega ??
+        source?.bodega?.id_bodega ??
+        source?.bodega?.id
+    ),
+
     bodegaNombre: toStringSafe(
-      source?.bodega?.nombre_bodega ??
-        source?.bodegaNombre ??
+      source?.bodegaNombre ??
+        source?.bodega?.nombre_bodega ??
         source?.nombre_bodega
     ),
 

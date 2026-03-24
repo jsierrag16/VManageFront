@@ -1780,9 +1780,6 @@ export default function Compras() {
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={closeToList}>
-              Cerrar
-            </Button>
             {compraSeleccionada && (
               <Button
                 onClick={() => handleDownloadPDF(compraSeleccionada)}
@@ -1792,6 +1789,9 @@ export default function Compras() {
                 Descargar PDF
               </Button>
             )}
+            <Button variant="outline" onClick={closeToList}>
+              Cerrar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

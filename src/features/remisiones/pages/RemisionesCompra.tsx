@@ -111,11 +111,26 @@ const makeLocalId = () => {
 
 const getErrorMessage = (error: unknown, fallback: string) => {
   const err = error as any;
-  const message = err?.response?.data?.message;
 
-  if (Array.isArray(message)) return message.join(", ");
-  if (typeof message === "string") return message;
-  if (typeof err?.message === "string") return err.message;
+  console.error("ERROR COMPLETO:", err);
+  console.error("ERROR RESPONSE DATA:", err?.response?.data);
+
+  const candidates = [
+    err?.response?.data?.message,
+    err?.response?.data?.error?.message,
+    err?.response?.data?.error,
+    err?.response?.data?.detail,
+    err?.response?.data?.errors,
+  ];
+
+  for (const value of candidates) {
+    if (Array.isArray(value)) return value.join(", ");
+    if (typeof value === "string" && value.trim()) return value;
+  }
+
+  if (typeof err?.message === "string" && err.message.trim()) {
+    return err.message;
+  }
 
   return fallback;
 };
@@ -902,7 +917,10 @@ export default function RemisionesCompra() {
       return false;
     }
 
-    if (!formData.id_proveedor || !formData.id_bodega) {
+    if (
+      Number(formData.id_proveedor) <= 0 ||
+      Number(formData.id_bodega) <= 0
+    ) {
       toast.error("La compra seleccionada no tiene proveedor o bodega válidos");
       return false;
     }
@@ -2418,7 +2436,16 @@ const handleDescargarRemision = async (remision: RemisionCompraUI) => {
             </div>
           ) : null}
 
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button
+              onClick={() => selectedRemision && handleDescargarRemision(selectedRemision)}
+              className="bg-green-600 hover:bg-green-700 text-white"
+              disabled={!selectedRemision || loadingDetalleRemision}
+            >
+              <Download size={16} className="mr-2" />
+              Descargar
+            </Button>
+
             <Button variant="outline" onClick={closeToList}>
               Cerrar
             </Button>

@@ -205,11 +205,17 @@ export const remisionesCompraService = {
     const raw = await getRequestFirstSuccess([
       ...paramsVariants.map((params) => ({
         url: "/compras",
-        params,
+        params: {
+          ...(params ?? {}),
+          solo_aprobadas: true,
+        },
       })),
       ...paramsVariants.map((params) => ({
         url: "/compra",
-        params,
+        params: {
+          ...(params ?? {}),
+          solo_aprobadas: true,
+        },
       })),
     ]);
 
