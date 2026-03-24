@@ -55,44 +55,61 @@ import {
 } from "../../../shared/components/ui/dialog";
 
 import { toast } from "sonner";
-import {
-  proveedoresData as initialProveedoresData,
-  Proveedor,
-} from "../../../data/proveedores";
-import { productosData, Producto } from "../../../data/productos";
-import { bodegasData } from "../../../data/bodegas";
-import {
-  comprasData,
-  type Compra,
-} from "../../../data/compras";
-
 import type { AppOutletContext } from "../../../layouts/MainLayout";
 
+import {
+  ESTADO_COMPRA_IDS,
+  getFechaActual,
+} from "../services/compras.mapper";
+
+import {
+  comprasService,
+  type BasicOption,
+  type Compra,
+  type CompraEstado,
+  type IvaOption,
+  type ProductoOrden,
+  type CompraCreatePayload,
+  type ProveedorOption,
+} from "../services/compras.services";
+
 export default function Compras() {
-  // Estados principales
   const [searchTerm, setSearchTerm] = useState("");
-  const [compras, setCompras] = useState<Compra[]>(comprasData);
-  const [proveedores] = useState<Proveedor[]>(
-    initialProveedoresData
-  );
+  const [compras, setCompras] = useState<Compra[]>([]);
+  const [compraDetalle, setCompraDetalle] = useState<Compra | null>(null);
 
-  // Modales que NO van por URL
+  const [proveedores, setProveedores] = useState<ProveedorOption[]>([]);
+  const [productosCatalogo, setProductosCatalogo] = useState<BasicOption[]>([]);
+  const [terminosPago, setTerminosPago] = useState<BasicOption[]>([]);
+  const [ivas, setIvas] = useState<IvaOption[]>([]);
+  const [bodegas, setBodegas] = useState<BasicOption[]>([]);
+
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
-  const [compraParaCambioEstado, setCompraParaCambioEstado] = useState<Compra | null>(null);
+  const [showConfirmEstadoModal, setShowConfirmEstadoModal] =
+    useState(false);
+  const [compraParaCambioEstado, setCompraParaCambioEstado] =
+    useState<Compra | null>(null);
 
+  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Paginación
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  // Router + bodega + flags URL
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams<{ id: string }>();
 
-  const { selectedBodegaNombre } = useOutletContext<AppOutletContext>();
-  const selectedBodega = selectedBodegaNombre;
+  const outlet = useOutletContext<
+    AppOutletContext & {
+      selectedBodegaId?: number;
+      selectedBodegaNombre?: string;
+    }
+  >();
+
+  const selectedBodega = (outlet as any)?.selectedBodegaNombre ?? "";
+  const selectedBodegaId = (outlet as any)?.selectedBodegaId;
 
   const isCrear = location.pathname.endsWith("/compras/crear");
   const isVer = location.pathname.endsWith("/ver");
@@ -101,7 +118,6 @@ export default function Compras() {
 
   const closeToList = useCallback(() => navigate("/app/compras"), [navigate]);
 
-  // Navegación (modales por URL)
   const handleView = (c: Compra) => {
     navigate(`/app/compras/${c.id}/ver`);
   };
@@ -111,114 +127,222 @@ export default function Compras() {
   };
 
   const handleEdit = (c: Compra) => {
+    if (c.estado === "Aprobada") {
+      toast.error("No puedes editar una orden aprobada");
+      return;
+    }
+
+    if (c.estado === "Anulada") {
+      toast.error("No puedes editar una orden anulada");
+      return;
+    }
+
     navigate(`/app/compras/${c.id}/editar`);
   };
 
   const handleAnular = (c: Compra) => {
+    if (c.estado === "Aprobada") {
+      toast.error("No puedes anular una orden aprobada");
+      return;
+    }
+
+    if (c.estado === "Anulada") {
+      toast.error("La orden ya está anulada");
+      return;
+    }
+
     navigate(`/app/compras/${c.id}/anular`);
   };
 
-  // Compra seleccionada por URL (:id)
-  const compraSeleccionada = useMemo(() => {
-    if (!params.id) return null;
-    const id = Number(params.id);
-    if (!Number.isFinite(id)) return null;
-    return compras.find((c) => c.id === id) ?? null;
-  }, [compras, params.id]);
+  const handleCantidadProductoChange = (value: string) => {
+    const limpio = value.replace(/\D/g, "");
 
-  // Si entran a /ver, /editar o /anular con id inválido -> volver
-  useEffect(() => {
-    if (!isVer && !isEditar && !isAnular) return;
-
-    if (!compraSeleccionada) {
-      closeToList();
+    if (limpio === "") {
+      setCantidadProductoInput("");
+      setCantidadProducto(0);
+      return;
     }
-  }, [isVer, isEditar, isAnular, compraSeleccionada]);
 
-  // Formulario de orden de compra
+    const numero = parseInt(limpio, 10);
+
+    if (numero > 1000) return;
+
+    setCantidadProductoInput(String(numero));
+    setCantidadProducto(numero);
+  };
+
+  const handleCantidadProductoBlur = () => {
+    if (!cantidadProductoInput.trim()) {
+      setCantidadProductoInput("");
+      setCantidadProducto(0);
+      return;
+    }
+
+    const numero = parseInt(cantidadProductoInput, 10);
+
+    if (Number.isNaN(numero) || numero <= 0) {
+      setCantidadProductoInput("");
+      setCantidadProducto(0);
+      return;
+    }
+
+    setCantidadProductoInput(String(numero));
+    setCantidadProducto(numero);
+  };
+
+  const handlePrecioProductoChange = (value: string) => {
+    let limpio = value.replace(",", ".").replace(/[^\d.]/g, "");
+
+    if (limpio === "") {
+      setPrecioProducto("");
+      return;
+    }
+
+    const partes = limpio.split(".");
+    if (partes.length > 2) return;
+
+    const entero = partes[0] ?? "";
+    const decimal = partes[1] ?? "";
+
+    if (entero.length > 12) return;
+    if (decimal.length > 2) return;
+
+    setPrecioProducto(limpio);
+  };
+
   const [formData, setFormData] = useState({
     numeroOrden: "",
-    proveedor: "",
+    proveedorId: "",
+    proveedorTipoDocumento: "",
+    proveedorNumeroDocumento: "",
+    terminoPagoId: "",
     fecha: "",
     fechaEntrega: "",
-    estado: "Pendiente" as "Pendiente" | "Aprobada" | "Anulada",
-    items: 0,
-    subtotal: 0,
-    impuestos: 0,
+    estado: "Pendiente" as CompraEstado,
     observaciones: "",
     bodega: "",
+    bodegaId: "",
   });
 
-  // Manejo de productos en la orden
   const [selectedProductoId, setSelectedProductoId] = useState("");
-  const [cantidadProducto, setCantidadProducto] = useState(1);
+  const [selectedIvaId, setSelectedIvaId] = useState("");
+  const [cantidadProducto, setCantidadProducto] = useState(0);
+  const [cantidadProductoInput, setCantidadProductoInput] = useState("");
   const [precioProducto, setPrecioProducto] = useState<string>("");
-  const [productosOrden, setProductosOrden] = useState<
-    Array<{
-      producto: Producto;
-      cantidad: number;
-      precio: number;
-      subtotal: number;
-    }>
-  >([]);
+  const [productosOrden, setProductosOrden] = useState<ProductoOrden[]>([]);
 
-  // Productos activos
   const productosActivos = useMemo(() => {
-    return productosData.filter((p) => p.estado);
-  }, []);
+    return productosCatalogo.filter((p) => p.estado !== false);
+  }, [productosCatalogo]);
 
-  // Proveedores activos
+  const bodegasActivas = useMemo(() => {
+    return bodegas.filter((b) => b.estado !== false);
+  }, [bodegas]);
+
   const proveedoresActivos = useMemo(() => {
-    return proveedores.filter((p) => p.estado === "Activo");
+    return proveedores.filter((p) => p.estado !== false);
   }, [proveedores]);
 
-  // Generar número de orden consecutivo
-  const generarNumeroOrden = () => {
-    const maxNum = compras.reduce((max, c) => {
-      const match = /^OC-(\d+)$/.exec(c.numeroOrden);
-      const num = match ? Number(match[1]) : 0;
-      return Number.isFinite(num) ? Math.max(max, num) : max;
-    }, 0);
+  const terminosPagoActivos = useMemo(() => {
+    return terminosPago.filter((t) => t.estado !== false);
+  }, [terminosPago]);
 
-    return `OC-${String(maxNum + 1).padStart(3, "0")}`;
-  };
+  const ivasActivos = useMemo(() => {
+    return ivas.filter((i) => i.estado !== false);
+  }, [ivas]);
 
-  // Fecha actual YYYY-MM-DD
-  const getFechaActual = () => {
-    return new Date().toISOString().split("T")[0];
-  };
+  const calcularTotales = useMemo(() => {
+    const subtotal = productosOrden.reduce((sum, item) => sum + item.subtotal, 0);
 
-  // Filtrado por bodega + búsqueda
+    const impuestos = productosOrden.reduce(
+      (sum, item) => sum + (item.subtotal * item.ivaPorcentaje) / 100,
+      0
+    );
+
+    const total = subtotal + impuestos;
+    const items = productosOrden.length;
+
+    return {
+      subtotal: Number(subtotal.toFixed(2)),
+      impuestos: Number(impuestos.toFixed(2)),
+      total: Number(total.toFixed(2)),
+      items,
+    };
+  }, [productosOrden]);
+
+  const loadCompras = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const rows = await comprasService.getAll(selectedBodegaId);
+      setCompras(rows);
+    } catch (error) {
+      console.error("Error cargando compras:", error);
+      toast.error("No se pudieron cargar las órdenes de compra");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedBodegaId]);
+
+  const loadCompraDetalle = useCallback(
+    async (id: number) => {
+      try {
+        setIsLoadingDetail(true);
+        const compra = await comprasService.getById(id);
+        setCompraDetalle(compra);
+      } catch (error) {
+        console.error("Error cargando detalle de compra:", error);
+        toast.error("No se pudo cargar el detalle de la orden");
+        closeToList();
+      } finally {
+        setIsLoadingDetail(false);
+      }
+    },
+    [closeToList]
+  );
+
+  const loadCatalogos = useCallback(async () => {
+    try {
+      const result = await comprasService.getCatalogos();
+
+      setProveedores(result.proveedores);
+      setProductosCatalogo(result.productos);
+      setTerminosPago(result.terminosPago);
+      setIvas(result.ivas);
+      setBodegas(result.bodegas ?? []);
+
+      if (result.huboError) {
+        toast.error(
+          "Uno o más catálogos no se pudieron cargar. Revisa la consola."
+        );
+      }
+    } catch (error) {
+      console.error("Error inesperado cargando catálogos:", error);
+      toast.error("No se pudieron cargar los catálogos");
+    }
+  }, []);
+
   const filteredCompras = useMemo(() => {
     const s = searchTerm.toLowerCase();
 
-    return compras
-      .filter((c) => {
-        if (selectedBodega === "Todas las bodegas") return true;
-        return c.bodega === selectedBodega;
-      })
-      .filter((c) => {
-        return (
-          c.numeroOrden.toLowerCase().includes(s) ||
-          c.proveedor.toLowerCase().includes(s) ||
-          c.estado.toLowerCase().includes(s) ||
-          String(c.items).includes(s)
-        );
-      });
-  }, [compras, searchTerm, selectedBodega]);
+    return compras.filter((c) => {
+      return (
+        c.numeroOrden.toLowerCase().includes(s) ||
+        c.proveedor.toLowerCase().includes(s) ||
+        c.estado.toLowerCase().includes(s) ||
+        String(c.items).includes(s)
+      );
+    });
+  }, [compras, searchTerm]);
 
-  // Resetear página cuando cambia filtro
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedBodega]);
+  }, [searchTerm, selectedBodegaId, selectedBodega]);
 
-  // Paginación
   const totalPages = Math.ceil(filteredCompras.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const currentCompras = filteredCompras.slice(startIndex, endIndex);
 
-  // Estadísticas
   const stats = useMemo(() => {
     const totalCompras = compras.length;
     const pendientes = compras.filter((c) => c.estado === "Pendiente").length;
@@ -228,22 +352,10 @@ export default function Compras() {
     return { totalCompras, pendientes, aprobadas, anuladas };
   }, [compras]);
 
-  // Totales dinámicos
-  const calcularTotales = useMemo(() => {
-    const subtotal = productosOrden.reduce((sum, item) => sum + item.subtotal, 0);
-    const impuestos = subtotal * 0.19;
-    const total = subtotal + impuestos;
-    const items = productosOrden.length;
-
-    return { subtotal, impuestos, total, items };
-  }, [productosOrden]);
-
-  // Cambiar página
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
   };
 
-  // Confirmación cambio de estado
   const handleToggleEstado = (c: Compra) => {
     if (c.estado === "Anulada") {
       toast.error("No puedes cambiar el estado de una orden anulada");
@@ -259,7 +371,23 @@ export default function Compras() {
     setShowConfirmEstadoModal(true);
   };
 
-  const handleConfirmEstado = () => {
+  const buildCompraPayload = (): CompraCreatePayload => {
+    return {
+      id_bodega: Number(formData.bodegaId),
+      id_proveedor: Number(formData.proveedorId),
+      id_termino_pago: Number(formData.terminoPagoId),
+      descripcion: formData.observaciones.trim() || undefined,
+      fecha_entrega: formData.fechaEntrega || undefined,
+      detalle: productosOrden.map((item) => ({
+        id_producto: item.producto.id,
+        cantidad: item.cantidad,
+        precio_unitario: item.precio,
+        id_iva: item.idIva,
+      })),
+    };
+  };
+
+  const handleConfirmEstado = async () => {
     if (!compraParaCambioEstado) return;
 
     if (compraParaCambioEstado.estado !== "Pendiente") {
@@ -269,19 +397,26 @@ export default function Compras() {
       return;
     }
 
-    setCompras(
-      compras.map((c) =>
-        c.id === compraParaCambioEstado.id ? { ...c, estado: "Aprobada" } : c
-      )
-    );
+    try {
+      await comprasService.aprobar(compraParaCambioEstado.id);
 
-    toast.success("Orden aprobada exitosamente");
-    setShowConfirmEstadoModal(false);
-    setCompraParaCambioEstado(null);
+      await loadCompras();
+
+      if (compraDetalle?.id === compraParaCambioEstado.id) {
+        await loadCompraDetalle(compraParaCambioEstado.id);
+      }
+
+      toast.success("Orden aprobada exitosamente");
+    } catch (error) {
+      console.error("Error aprobando compra:", error);
+      toast.error("No se pudo cambiar el estado");
+    } finally {
+      setShowConfirmEstadoModal(false);
+      setCompraParaCambioEstado(null);
+    }
   };
 
-  // Descargar PDF
-  const handleDownloadPDF = (compra: Compra) => {
+  const generateCompraPDF = (compra: Compra) => {
     const doc = new jsPDF();
 
     doc.setFontSize(20);
@@ -293,27 +428,35 @@ export default function Compras() {
 
     doc.text(`N° Orden: ${compra.numeroOrden}`, 20, 40);
     doc.text(`Proveedor: ${compra.proveedor}`, 20, 46);
-    doc.text(`Bodega: ${compra.bodega}`, 20, 52);
+    doc.text(`Término de pago: ${compra.terminoPago || "-"}`, 20, 52);
+    doc.text(`Bodega: ${compra.bodega || "-"}`, 20, 58);
 
     doc.text(
-      `Fecha: ${new Date(compra.fecha).toLocaleDateString("es-CO")}`,
+      `Fecha: ${
+        compra.fecha ? new Date(compra.fecha).toLocaleDateString("es-CO") : "-"
+      }`,
       120,
       40
     );
     doc.text(
-      `Fecha Entrega: ${new Date(compra.fechaEntrega).toLocaleDateString("es-CO")}`,
+      `Fecha Entrega: ${
+        compra.fechaEntrega
+          ? new Date(compra.fechaEntrega).toLocaleDateString("es-CO")
+          : "-"
+      }`,
       120,
       46
     );
     doc.text(`Estado: ${compra.estado}`, 120, 52);
 
     doc.setLineWidth(0.5);
-    doc.line(20, 58, 190, 58);
+    doc.line(20, 64, 190, 64);
 
     if (compra.productos && compra.productos.length > 0) {
       const tableData = compra.productos.map((item) => [
         item.producto.nombre,
         String(item.cantidad),
+        `${item.ivaNombre} (${item.ivaPorcentaje.toFixed(2)}%)`,
         `$${item.precio.toLocaleString("es-CO", {
           minimumFractionDigits: 2,
         })}`,
@@ -323,21 +466,22 @@ export default function Compras() {
       ]);
 
       autoTable(doc, {
-        startY: 65,
-        head: [["Producto", "Cantidad", "Precio Unit.", "Subtotal"]],
+        startY: 70,
+        head: [["Producto", "Cantidad", "IVA", "Precio Unit.", "Subtotal"]],
         body: tableData,
         theme: "grid",
-        styles: { fontSize: 9, cellPadding: 3 },
+        styles: { fontSize: 8, cellPadding: 3 },
         columnStyles: {
-          0: { cellWidth: 80 },
-          1: { cellWidth: 30, halign: "center" },
-          2: { cellWidth: 40, halign: "right" },
-          3: { cellWidth: 40, halign: "right" },
+          0: { cellWidth: 58 },
+          1: { cellWidth: 22, halign: "center" },
+          2: { cellWidth: 32, halign: "center" },
+          3: { cellWidth: 38, halign: "right" },
+          4: { cellWidth: 40, halign: "right" },
         },
       });
     }
 
-    const finalY = (doc as any).lastAutoTable?.finalY || 65;
+    const finalY = (doc as any).lastAutoTable?.finalY || 70;
     const totalesY = finalY + 10;
 
     doc.text("Subtotal:", 130, totalesY);
@@ -350,7 +494,7 @@ export default function Compras() {
       { align: "right" }
     );
 
-    doc.text("Impuestos (19%):", 130, totalesY + 6);
+    doc.text("IVA:", 130, totalesY + 6);
     doc.text(
       `$${compra.impuestos.toLocaleString("es-CO", {
         minimumFractionDigits: 2,
@@ -390,139 +534,229 @@ export default function Compras() {
       `Generado el ${new Date().toLocaleString("es-CO")}`,
       105,
       pageHeight - 10,
-      {
-        align: "center",
-      }
+      { align: "center" }
     );
 
     doc.save(`Orden_Compra_${compra.numeroOrden}.pdf`);
     toast.success("PDF descargado exitosamente");
   };
 
+  const handleDownloadPDF = async (compra: Compra) => {
+    try {
+      if (compra.productos?.length) {
+        generateCompraPDF(compra);
+        return;
+      }
 
-  // Limpiar formulario de compra
+      const compraFull = await comprasService.getById(compra.id);
+      generateCompraPDF(compraFull);
+    } catch (error) {
+      console.error("Error generando PDF:", error);
+      toast.error("No se pudo generar el PDF de la compra");
+    }
+  };
+
   const resetCompraForm = () => {
     setFormData({
-      numeroOrden: generarNumeroOrden(),
-      proveedor: "",
+      numeroOrden: "",
+      proveedorId: "",
+      proveedorTipoDocumento: "",
+      proveedorNumeroDocumento: "",
+      terminoPagoId: "",
       fecha: getFechaActual(),
       fechaEntrega: "",
       estado: "Pendiente",
-      items: 0,
-      subtotal: 0,
-      impuestos: 0,
       observaciones: "",
       bodega:
         selectedBodega && selectedBodega !== "Todas las bodegas"
           ? selectedBodega
           : "",
+      bodegaId: selectedBodegaId ? String(selectedBodegaId) : "",
     });
 
     setSelectedProductoId("");
-    setCantidadProducto(1);
+    setSelectedIvaId("");
+    setCantidadProducto(0);
+    setCantidadProductoInput("");
     setPrecioProducto("");
     setProductosOrden([]);
   };
 
-  // Al entrar a /crear, limpiar el form
   useEffect(() => {
     if (!isCrear) return;
-
     resetCompraForm();
-  }, [isCrear, selectedBodega]);
+  }, [isCrear, selectedBodega, selectedBodegaId]);
 
-  // Al entrar a /editar, precargar el formulario
   useEffect(() => {
     if (!isEditar) return;
-    if (!compraSeleccionada) return;
+    if (!compraDetalle) return;
 
     setFormData({
-      numeroOrden: compraSeleccionada.numeroOrden,
-      proveedor: compraSeleccionada.proveedor,
-      fecha: compraSeleccionada.fecha,
-      fechaEntrega: compraSeleccionada.fechaEntrega,
-      estado: compraSeleccionada.estado,
-      items: compraSeleccionada.items,
-      subtotal: compraSeleccionada.subtotal,
-      impuestos: compraSeleccionada.impuestos,
-      observaciones: compraSeleccionada.observaciones,
-      bodega: compraSeleccionada.bodega,
+      numeroOrden: compraDetalle.numeroOrden,
+      proveedorId: String(compraDetalle.proveedorId || ""),
+      proveedorTipoDocumento: compraDetalle.proveedorTipoDocumento || "",
+      proveedorNumeroDocumento: compraDetalle.proveedorNumeroDocumento || "",
+      terminoPagoId: String(compraDetalle.terminoPagoId || ""),
+      fecha: compraDetalle.fecha,
+      fechaEntrega: compraDetalle.fechaEntrega,
+      estado: compraDetalle.estado,
+      observaciones: compraDetalle.observaciones,
+      bodega: compraDetalle.bodega || "",
+      bodegaId: String(compraDetalle.bodegaId || ""),
     });
 
-    setProductosOrden(compraSeleccionada.productos ?? []);
+    setProductosOrden(compraDetalle.productos ?? []);
     setSelectedProductoId("");
-    setCantidadProducto(1);
+    setSelectedIvaId("");
+    setCantidadProducto(0);
+    setCantidadProductoInput("");
     setPrecioProducto("");
-  }, [isEditar, compraSeleccionada]);
+  }, [isEditar, compraDetalle]);
 
-  // Agregar producto a la orden
+  useEffect(() => {
+    loadCompras();
+  }, [loadCompras]);
+
+  useEffect(() => {
+    loadCatalogos();
+  }, [loadCatalogos]);
+
+  useEffect(() => {
+    const id = Number(params.id);
+
+    if (!params.id || Number.isNaN(id)) {
+      setCompraDetalle(null);
+      return;
+    }
+
+    if (isVer || isEditar || isAnular) {
+      loadCompraDetalle(id);
+    }
+  }, [params.id, isVer, isEditar, isAnular, loadCompraDetalle]);
+
+  const handleProveedorChange = useCallback(
+    (value: string) => {
+      const proveedorSeleccionado = proveedoresActivos.find(
+        (proveedor) => String(proveedor.id) === value
+      );
+
+      setFormData((prev) => ({
+        ...prev,
+        proveedorId: value,
+        proveedorTipoDocumento: proveedorSeleccionado?.tipoDocumento || "",
+        proveedorNumeroDocumento:
+          proveedorSeleccionado?.numeroDocumento || "",
+      }));
+    },
+    [proveedoresActivos]
+  );
+
   const handleAgregarProducto = () => {
     if (!selectedProductoId) {
-      toast.error("Debes seleccionar un producto");
+      toast.error("Selecciona un producto");
       return;
     }
 
-    if (cantidadProducto <= 0) {
-      toast.error("La cantidad debe ser mayor a 0");
+    const cantidadNormalizada = Number(cantidadProductoInput.replace(",", "."));
+    const precioNormalizado = Number(precioProducto.replace(",", "."));
+
+    if (
+      !cantidadProductoInput.trim() ||
+      Number.isNaN(cantidadNormalizada) ||
+      cantidadNormalizada <= 0
+    ) {
+      toast.error("Ingresa una cantidad válida");
       return;
     }
 
-    const precio = parseFloat(precioProducto) || 0;
-
-    if (!precioProducto.trim() || Number.isNaN(precio) || precio <= 0) {
-      toast.error("El precio debe ser mayor a 0");
+    if (cantidadNormalizada > 1000) {
+      toast.error("La cantidad máxima permitida es 1000");
       return;
     }
 
-    const productoSeleccionado = productosData.find(
-      (p) => String(p.id) === String(selectedProductoId)
+    if (!selectedIvaId) {
+      toast.error("Selecciona un IVA");
+      return;
+    }
+
+    if (
+      !precioProducto.trim() ||
+      Number.isNaN(precioNormalizado) ||
+      precioNormalizado <= 0
+    ) {
+      toast.error("Ingresa un precio unitario válido");
+      return;
+    }
+
+    const productoSeleccionado = productosActivos.find(
+      (producto) => String(producto.id) === selectedProductoId
     );
 
     if (!productoSeleccionado) {
-      toast.error("Producto no encontrado");
+      toast.error("El producto seleccionado no es válido");
+      return;
+    }
+
+    const ivaSeleccionado = ivasActivos.find(
+      (iva) => String(iva.id) === selectedIvaId
+    );
+
+    if (!ivaSeleccionado) {
+      toast.error("El IVA seleccionado no es válido");
       return;
     }
 
     const yaExiste = productosOrden.some(
-      (item) => String(item.producto.id) === String(productoSeleccionado.id)
+      (item) => String(item.producto.id) === selectedProductoId
     );
 
     if (yaExiste) {
-      toast.error("Este producto ya fue agregado a la orden");
+      toast.error("Ese producto ya fue agregado a la orden");
       return;
     }
 
-    const nuevoProducto = {
+    const subtotal = cantidadNormalizada * precioNormalizado;
+
+    const nuevoProducto: ProductoOrden = {
       producto: productoSeleccionado,
-      cantidad: cantidadProducto,
-      precio,
-      subtotal: cantidadProducto * precio,
+      cantidad: cantidadNormalizada,
+      precio: precioNormalizado,
+      subtotal,
+      idIva: ivaSeleccionado.id,
+      ivaNombre: ivaSeleccionado.nombre,
+      ivaPorcentaje: ivaSeleccionado.porcentaje,
     };
 
-    setProductosOrden([...productosOrden, nuevoProducto]);
+    setProductosOrden((prev) => [...prev, nuevoProducto]);
+
     setSelectedProductoId("");
-    setCantidadProducto(1);
+    setSelectedIvaId("");
+    setCantidadProducto(0);
+    setCantidadProductoInput("");
     setPrecioProducto("");
   };
 
-  // Eliminar producto de la orden
   const handleEliminarProducto = (productoId: string | number) => {
-    setProductosOrden(
-      productosOrden.filter(
-        (item) => String(item.producto.id) !== String(productoId)
-      )
+    setProductosOrden((prev) =>
+      prev.filter((item) => String(item.producto.id) !== String(productoId))
     );
   };
 
-  // Crear compra
-  const confirmCreate = () => {
-    if (!formData.proveedor.trim()) {
+  const confirmCreate = async () => {
+    if (isSaving) return;
+
+    if (!formData.bodegaId) {
+      toast.error("Debes seleccionar una bodega");
+      return;
+    }
+
+    if (!formData.proveedorId) {
       toast.error("Debes seleccionar un proveedor");
       return;
     }
 
-    if (!formData.fecha) {
-      toast.error("Debes ingresar la fecha de la orden");
+    if (!formData.terminoPagoId) {
+      toast.error("Debes seleccionar un término de pago");
       return;
     }
 
@@ -531,53 +765,52 @@ export default function Compras() {
       return;
     }
 
-    if (!formData.bodega.trim()) {
-      toast.error("Debes seleccionar una bodega");
-      return;
-    }
-
     if (productosOrden.length === 0) {
       toast.error("Debes agregar al menos un producto");
       return;
     }
 
-    const nuevaCompra: Compra = {
-      id: compras.length > 0 ? Math.max(...compras.map((c) => c.id)) + 1 : 1,
-      numeroOrden: formData.numeroOrden || generarNumeroOrden(),
-      proveedor: formData.proveedor,
-      fecha: formData.fecha,
-      fechaEntrega: formData.fechaEntrega,
-      estado: formData.estado,
-      items: calcularTotales.items,
-      subtotal: Number(calcularTotales.subtotal.toFixed(2)),
-      impuestos: Number(calcularTotales.impuestos.toFixed(2)),
-      total: Number(calcularTotales.total.toFixed(2)),
-      observaciones: formData.observaciones,
-      bodega: formData.bodega,
-      productos: productosOrden,
-    };
+    try {
+      setIsSaving(true);
 
-    setCompras([...compras, nuevaCompra]);
-    closeToList();
-    setShowSuccessModal(true);
+      await comprasService.create(buildCompraPayload());
+
+      await loadCompras();
+      closeToList();
+      setShowSuccessModal(true);
+    } catch (error) {
+      console.error("Error creando compra:", error);
+      toast.error("No se pudo crear la orden de compra");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  // Editar compra
-  const confirmEdit = () => {
-    if (!compraSeleccionada) return;
+  const confirmEdit = async () => {
+    if (!compraDetalle || isSaving) return;
 
-    if (compraSeleccionada.estado === "Anulada") {
+    if (!formData.bodegaId) {
+      toast.error("Debes seleccionar una bodega");
+      return;
+    }
+
+    if (compraDetalle.estado === "Anulada") {
       toast.error("No puedes editar una orden anulada");
       return;
     }
 
-    if (!formData.proveedor.trim()) {
+    if (compraDetalle.estado === "Aprobada") {
+      toast.error("No puedes editar una orden aprobada");
+      return;
+    }
+
+    if (!formData.proveedorId) {
       toast.error("Debes seleccionar un proveedor");
       return;
     }
 
-    if (!formData.fecha) {
-      toast.error("Debes ingresar la fecha de la orden");
+    if (!formData.terminoPagoId) {
+      toast.error("Debes seleccionar un término de pago");
       return;
     }
 
@@ -586,79 +819,80 @@ export default function Compras() {
       return;
     }
 
-    if (!formData.bodega.trim()) {
-      toast.error("Debes seleccionar una bodega");
-      return;
-    }
-
     if (productosOrden.length === 0) {
       toast.error("Debes agregar al menos un producto");
       return;
     }
 
-    setCompras(
-      compras.map((c) =>
-        c.id === compraSeleccionada.id
-          ? {
-            ...c,
-            numeroOrden: formData.numeroOrden,
-            proveedor: formData.proveedor,
-            fecha: formData.fecha,
-            fechaEntrega: formData.fechaEntrega,
-            estado: formData.estado,
-            items: calcularTotales.items,
-            subtotal: Number(calcularTotales.subtotal.toFixed(2)),
-            impuestos: Number(calcularTotales.impuestos.toFixed(2)),
-            total: Number(calcularTotales.total.toFixed(2)),
-            observaciones: formData.observaciones,
-            bodega: formData.bodega,
-            productos: productosOrden,
-          }
-          : c
-      )
-    );
+    try {
+      setIsSaving(true);
 
-    toast.success("Orden actualizada exitosamente");
-    closeToList();
-  };
+      await comprasService.update(compraDetalle.id, {
+        ...buildCompraPayload(),
+        id_estado_compra: ESTADO_COMPRA_IDS[formData.estado],
+      });
 
-  // Anular compra
-  const confirmAnular = () => {
-    if (!compraSeleccionada) return;
-
-    if (compraSeleccionada.estado === "Anulada") {
-      toast.error("La orden ya está anulada");
-      return;
+      await loadCompras();
+      toast.success("Orden actualizada exitosamente");
+      closeToList();
+    } catch (error) {
+      console.error("Error actualizando compra:", error);
+      toast.error("No se pudo actualizar la orden");
+    } finally {
+      setIsSaving(false);
     }
-
-    setCompras(
-      compras.map((c) =>
-        c.id === compraSeleccionada.id
-          ? { ...c, estado: "Anulada" }
-          : c
-      )
-    );
-
-    toast.success("Orden anulada exitosamente");
-    closeToList();
   };
 
   const handleSuccessModalClose = () => {
     setShowSuccessModal(false);
   };
 
+  const confirmAnular = async () => {
+    if (!compraDetalle) return;
+
+    if (compraDetalle.estado === "Anulada") {
+      toast.error("La orden ya está anulada");
+      return;
+    }
+
+    if (compraDetalle.estado === "Aprobada") {
+      toast.error("No puedes anular una orden aprobada");
+      return;
+    }
+
+    try {
+      await comprasService.anular(compraDetalle.id);
+
+      await loadCompras();
+      toast.success("Orden anulada exitosamente");
+      closeToList();
+    } catch (error) {
+      console.error("Error anulando compra:", error);
+      toast.error("No se pudo anular la orden");
+    }
+  };
+
+  const compraSeleccionada = compraDetalle;
+
+  const fieldClass =
+    "h-11 rounded-lg border-gray-300 bg-white shadow-none focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:border-blue-500";
+
+  const readonlyFieldClass =
+    "h-11 rounded-lg border-gray-200 bg-gray-100 cursor-not-allowed shadow-none";
+
+  const numberFieldClass =
+    "h-11 rounded-lg border-gray-300 bg-white text-right shadow-none [appearance:textfield] focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:border-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
+
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h2 className="text-gray-900">Órdenes de Compra</h2>
         <p className="text-gray-600 mt-1">
-          Gestiona las órdenes de compra de productos
+          Administra la información de tus órdenes de compra  
         </p>
       </div>
 
-      {/* Estadísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-lg border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
@@ -670,6 +904,7 @@ export default function Compras() {
             <ShoppingCart className="text-blue-600" size={32} />
           </div>
         </div>
+
         <div className="bg-white p-4 rounded-lg border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
@@ -681,6 +916,7 @@ export default function Compras() {
             <Clock className="text-yellow-600" size={32} />
           </div>
         </div>
+
         <div className="bg-white p-4 rounded-lg border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
@@ -692,9 +928,20 @@ export default function Compras() {
             <CheckCircle2 className="text-blue-600" size={32} />
           </div>
         </div>
+
+        <div className="bg-white p-4 rounded-lg border border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">Anuladas</p>
+              <p className="text-2xl font-semibold text-gray-900">
+                {stats.anuladas}
+              </p>
+            </div>
+            <Ban className="text-red-600" size={32} />
+          </div>
+        </div>
       </div>
 
-      {/* Barra de búsqueda y botón crear */}
       <div className="flex items-center gap-4">
         <div className="relative flex-1">
           <Search
@@ -708,13 +955,13 @@ export default function Compras() {
             className="pl-10"
           />
         </div>
+
         <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
           <Plus size={18} className="mr-2" />
           Nueva Orden
         </Button>
       </div>
 
-      {/* Tabla */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <Table>
@@ -730,8 +977,15 @@ export default function Compras() {
                 <TableHead className="text-center">Acciones</TableHead>
               </TableRow>
             </TableHeader>
+
             <TableBody>
-              {filteredCompras.length === 0 ? (
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                    Cargando órdenes de compra...
+                  </TableCell>
+                </TableRow>
+              ) : filteredCompras.length === 0 ? (
                 <TableRow>
                   <TableCell
                     colSpan={8}
@@ -752,10 +1006,14 @@ export default function Compras() {
                     </TableCell>
                     <TableCell>{compra.proveedor}</TableCell>
                     <TableCell>
-                      {new Date(compra.fecha).toLocaleDateString("es-CO")}
+                      {compra.fecha
+                        ? new Date(compra.fecha).toLocaleDateString("es-CO")
+                        : "-"}
                     </TableCell>
                     <TableCell>
-                      {new Date(compra.fechaEntrega).toLocaleDateString("es-CO")}
+                      {compra.fechaEntrega
+                        ? new Date(compra.fechaEntrega).toLocaleDateString("es-CO")
+                        : "-"}
                     </TableCell>
                     <TableCell>{compra.items}</TableCell>
                     <TableCell className="text-center">
@@ -764,12 +1022,13 @@ export default function Compras() {
                         size="sm"
                         onClick={() => handleToggleEstado(compra)}
                         disabled={compra.estado === "Anulada"}
-                        className={`h-7 ${compra.estado === "Aprobada"
-                          ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
-                          : compra.estado === "Pendiente"
+                        className={`h-7 ${
+                          compra.estado === "Aprobada"
+                            ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
+                            : compra.estado === "Pendiente"
                             ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
                             : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
-                          }`}
+                        }`}
                       >
                         {compra.estado}
                       </Button>
@@ -785,6 +1044,7 @@ export default function Compras() {
                         >
                           <Eye size={16} className="text-blue-600" />
                         </Button>
+
                         <Button
                           variant="ghost"
                           size="sm"
@@ -794,23 +1054,49 @@ export default function Compras() {
                         >
                           <Download size={16} className="text-green-600" />
                         </Button>
+
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleEdit(compra)}
                           className="hover:bg-yellow-50"
                           title="Editar"
+                          disabled={
+                            compra.estado === "Aprobada" ||
+                            compra.estado === "Anulada"
+                          }
                         >
-                          <Edit size={16} className="text-yellow-600" />
+                          <Edit
+                            size={16}
+                            className={
+                              compra.estado === "Aprobada" ||
+                              compra.estado === "Anulada"
+                                ? "text-gray-400"
+                                : "text-yellow-600"
+                            }
+                          />
                         </Button>
+
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleAnular(compra)}
                           className="hover:bg-red-50"
                           title="Anular"
+                          disabled={
+                            compra.estado === "Aprobada" ||
+                            compra.estado === "Anulada"
+                          }
                         >
-                          <Ban size={16} className="text-red-600" />
+                          <Ban
+                            size={16}
+                            className={
+                              compra.estado === "Aprobada" ||
+                              compra.estado === "Anulada"
+                                ? "text-gray-400"
+                                : "text-red-600"
+                            }
+                          />
                         </Button>
                       </div>
                     </TableCell>
@@ -821,7 +1107,6 @@ export default function Compras() {
           </Table>
         </div>
 
-        {/* Paginación */}
         {filteredCompras.length > 0 && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
             <div className="text-sm text-gray-600">
@@ -829,6 +1114,7 @@ export default function Compras() {
               {Math.min(endIndex, filteredCompras.length)} de{" "}
               {filteredCompras.length} órdenes
             </div>
+
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
@@ -840,21 +1126,21 @@ export default function Compras() {
                 <ChevronLeft size={16} />
                 Anterior
               </Button>
+
               <div className="flex items-center gap-1">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map(
-                  (page) => (
-                    <Button
-                      key={page}
-                      variant={currentPage === page ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => handlePageChange(page)}
-                      className="h-8 w-8 p-0"
-                    >
-                      {page}
-                    </Button>
-                  )
-                )}
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                  <Button
+                    key={page}
+                    variant={currentPage === page ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handlePageChange(page)}
+                    className="h-8 w-8 p-0"
+                  >
+                    {page}
+                  </Button>
+                ))}
               </div>
+
               <Button
                 variant="outline"
                 size="sm"
@@ -870,7 +1156,6 @@ export default function Compras() {
         )}
       </div>
 
-      {/* Modal Crear Orden de Compra */}
       <Dialog
         open={isCrear}
         onOpenChange={(open) => {
@@ -878,276 +1163,431 @@ export default function Compras() {
         }}
       >
         <DialogContent
-          className="max-w-6xl max-h-[85vh] overflow-y-auto"
-          aria-describedby="view-proveedor-description"
+          className="max-w-6xl max-h-[90vh] overflow-y-auto"
+          aria-describedby="create-order-description"
           onInteractOutside={(e) => e.preventDefault()}
         >
           <DialogHeader>
-            <DialogTitle>Nueva Orden de Compra</DialogTitle>
-            <DialogDescription id="create-order-description">
-              Completa la información para crear una nueva orden de compra
-            </DialogDescription>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <DialogTitle>Nueva Orden de Compra</DialogTitle>
+                <DialogDescription
+                  id="create-order-description"
+                  className="text-sm text-gray-500"
+                >
+                  Completa la información para crear una nueva orden de compra
+                </DialogDescription>
+              </div>
+
+              {formData.numeroOrden ? (
+                <div className="text-right">
+                  <p className="text-xs text-gray-500">Número de Orden</p>
+                  <p className="font-semibold text-gray-900">
+                    {formData.numeroOrden}
+                  </p>
+                </div>
+              ) : null}
+            </div>
           </DialogHeader>
-          <div className="space-y-6 py-4 px-2">
-            <div className="grid grid-cols-4 gap-6">
-              <div className="space-y-2">
-                <Label htmlFor="numeroOrden">Número de Orden *</Label>
-                <Input
-                  id="numeroOrden"
-                  value={formData.numeroOrden}
-                  disabled
-                  className="bg-gray-100 h-12"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="fecha">Fecha *</Label>
-                <Input
-                  id="fecha"
-                  type="date"
-                  value={formData.fecha}
-                  onChange={(e) =>
-                    setFormData({ ...formData, fecha: e.target.value })
-                  }
-                  className="h-12"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="fechaEntrega">Fecha de Entrega *</Label>
-                <Input
-                  id="fechaEntrega"
-                  type="date"
-                  value={formData.fechaEntrega}
-                  onChange={(e) =>
-                    setFormData({ ...formData, fechaEntrega: e.target.value })
-                  }
-                  className="h-12"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="bodega">Bodega *</Label>
-                <Select
-                  value={formData.bodega}
-                  onValueChange={(value: string) =>
-                    setFormData({ ...formData, bodega: value })
-                  }
-                >
-                  <SelectTrigger id="bodega" className="h-12">
-                    <SelectValue placeholder="Selecciona una bodega" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {bodegasData
-                      .filter((bodega) => bodega.estado)
-                      .map((bodega) => (
-                        <SelectItem key={bodega.id} value={bodega.nombre}>
-                          {bodega.nombre}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="proveedor">Proveedor *</Label>
-              <div className="flex gap-4">
-                <Select
-                  value={formData.proveedor}
-                  onValueChange={(value: string) =>
-                    setFormData({ ...formData, proveedor: value })
-                  }
-                >
-                  <SelectTrigger id="proveedor" className="flex-1 h-12">
-                    <SelectValue placeholder="Selecciona un proveedor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {proveedoresActivos.length === 0 ? (
-                      <div className="px-2 py-2 text-sm text-gray-500">
-                        No hay proveedores activos disponibles
-                      </div>
-                    ) : (
-                      proveedoresActivos.map((proveedor) => (
-                        <SelectItem key={proveedor.id} value={proveedor.nombre}>
-                          {proveedor.nombre}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => navigate("/app/proveedores/crear")}
-                  className="border-blue-600 text-blue-600 hover:bg-blue-50 px-8 h-12"
-                >
-                  <Plus size={18} className="mr-2" />
-                  Nuevo Proveedor
-                </Button>
+          <div className="space-y-5 py-4">
+            <div className="space-y-4">
+              <div className="flex items-center justify-end border-b pb-2">
+                <p className="text-sm font-semibold text-green-600">
+                  {formData.fecha}
+                </p>
               </div>
-            </div>
 
-            {/* Sección de Productos */}
-            <div className="border-t pt-6 mt-6">
-              <Label className="text-lg mb-4 block">Productos de la Orden</Label>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="fechaEntrega">Fecha de Entrega *</Label>
+                  <Input
+                    id="fechaEntrega"
+                    type="date"
+                    value={formData.fechaEntrega}
+                    onChange={(e) =>
+                      setFormData({ ...formData, fechaEntrega: e.target.value })
+                    }
+                    className={fieldClass}
+                  />
+                </div>
 
-              {/* Formulario para agregar productos */}
-              <div className="grid grid-cols-12 gap-4">
-                <div className="col-span-4 space-y-2">
-                  <Label htmlFor="producto">Producto</Label>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="bodega">Bodega *</Label>
                   <Select
-                    value={selectedProductoId}
-                    onValueChange={setSelectedProductoId}
+                    value={formData.bodegaId}
+                    onValueChange={(value: string) => {
+                      const bodegaSeleccionada = bodegasActivas.find(
+                        (bodega) => String(bodega.id) === value
+                      );
+
+                      setFormData({
+                        ...formData,
+                        bodegaId: value,
+                        bodega: bodegaSeleccionada?.nombre || "",
+                      });
+                    }}
                   >
-                    <SelectTrigger id="producto" className="h-12">
-                      <SelectValue placeholder="Selecciona un producto" />
+                    <SelectTrigger id="bodega" className={fieldClass}>
+                      <SelectValue placeholder="Selecciona una bodega" />
                     </SelectTrigger>
                     <SelectContent>
-                      {productosActivos.map((producto) => (
-                        <SelectItem key={producto.id} value={producto.id}>
-                          {producto.nombre}
-                        </SelectItem>
-                      ))}
+                      {bodegasActivas.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-gray-500">
+                          No hay bodegas disponibles
+                        </div>
+                      ) : (
+                        bodegasActivas.map((bodega) => (
+                          <SelectItem key={bodega.id} value={String(bodega.id)}>
+                            {bodega.nombre}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="col-span-2 space-y-2">
-                  <Label htmlFor="cantidad">Cantidad</Label>
-                  <Input
-                    id="cantidad"
-                    type="number"
-                    value={cantidadProducto}
-                    onChange={(e) =>
-                      setCantidadProducto(parseInt(e.target.value) || 1)
-                    }
-                    min="1"
-                    className="h-12"
-                  />
+              </div>
+            </div>
+
+            <div className="border-t pt-6 mt-6">
+              <div className="space-y-1 mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Proveedor y Condiciones
+                </h3>
+                <p className="text-sm text-gray-500">
+                  Selecciona proveedor y término de pago
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
+                <div className="space-y-2">
+                  <Label htmlFor="proveedor">Proveedor *</Label>
+                  <Select
+                    value={formData.proveedorId}
+                    onValueChange={handleProveedorChange}
+                  >
+                    <SelectTrigger id="proveedor" className={fieldClass}>
+                      <SelectValue placeholder="Selecciona un proveedor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {proveedoresActivos.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-gray-500">
+                          No hay proveedores activos disponibles
+                        </div>
+                      ) : (
+                        proveedoresActivos.map((proveedor) => (
+                          <SelectItem
+                            key={proveedor.id}
+                            value={String(proveedor.id)}
+                          >
+                            {proveedor.nombre}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="col-span-3 space-y-2">
-                  <Label htmlFor="precio">Precio Unitario</Label>
-                  <Input
-                    id="precio"
-                    type="number"
-                    value={precioProducto}
-                    onChange={(e) => setPrecioProducto(e.target.value)}
-                    min="0"
-                    step="0"
-                    placeholder="0.00"
-                    className="h-12 sin-flechas"
-                  />
-                </div>
-                <div className="col-span-3 flex items-end">
+
+                <div className="flex items-end lg:pt-7">
                   <Button
                     type="button"
-                    onClick={handleAgregarProducto}
-                    className="w-full bg-green-600 hover:bg-green-700 h-12"
+                    variant="outline"
+                    onClick={() => navigate("/app/proveedores/crear")}
+                    className="h-11 w-full border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
                   >
-                    <Plus size={18} className="mr-2" />
-                    Agregar
+                    <Plus size={16} className="mr-2" />
+                    Nuevo Proveedor
                   </Button>
                 </div>
               </div>
 
-              {/* Tabla de productos agregados */}
-              {productosOrden.length > 0 && (
-                <div className="mt-4 border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-gray-50">
-                        <TableHead>Producto</TableHead>
-                        <TableHead className="text-center">Cantidad</TableHead>
-                        <TableHead className="text-right">
-                          Precio Unit.
-                        </TableHead>
-                        <TableHead className="text-right">Subtotal</TableHead>
-                        <TableHead className="text-center">Acciones</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {productosOrden.map((item) => (
-                        <TableRow key={item.producto.id}>
-                          <TableCell className="font-medium">
-                            {item.producto.nombre}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {item.cantidad}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            ${item.precio.toLocaleString()}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            ${item.subtotal.toLocaleString()}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                handleEliminarProducto(item.producto.id)
-                              }
-                              className="hover:bg-red-50"
-                            >
-                              <Trash2 size={16} className="text-red-600" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="proveedorTipoDocumento">Tipo de Documento</Label>
+                  <Input
+                    id="proveedorTipoDocumento"
+                    value={formData.proveedorTipoDocumento}
+                    readOnly
+                    className={readonlyFieldClass}
+                    placeholder="Se completa al seleccionar proveedor"
+                  />
                 </div>
-              )}
 
-              {/* Totales calculados automáticamente */}
-              <div className="mt-4 bg-gray-50 p-4 rounded-lg space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">N° de Items:</span>
-                  <span className="font-medium">{calcularTotales.items}</span>
+                <div className="space-y-2">
+                  <Label htmlFor="proveedorNumeroDocumento">Documento / NIT</Label>
+                  <Input
+                    id="proveedorNumeroDocumento"
+                    value={formData.proveedorNumeroDocumento}
+                    readOnly
+                    className={readonlyFieldClass}
+                    placeholder="Se completa al seleccionar proveedor"
+                  />
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Subtotal:</span>
-                  <span className="font-medium">
-                    ${calcularTotales.subtotal.toLocaleString()}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Impuestos (19%):</span>
-                  <span className="font-medium">
-                    ${calcularTotales.impuestos.toLocaleString()}
-                  </span>
-                </div>
-                <div className="flex justify-between text-lg border-t pt-2">
-                  <span className="font-semibold">Total:</span>
-                  <span className="font-bold text-blue-600">
-                    ${calcularTotales.total.toLocaleString()}
-                  </span>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="terminoPago">Término de Pago *</Label>
+                  <Select
+                    value={formData.terminoPagoId}
+                    onValueChange={(value: string) =>
+                      setFormData({ ...formData, terminoPagoId: value })
+                    }
+                  >
+                    <SelectTrigger id="terminoPago" className={fieldClass}>
+                      <SelectValue placeholder="Selecciona un término de pago" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {terminosPagoActivos.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-gray-500">
+                          No hay términos de pago disponibles
+                        </div>
+                      ) : (
+                        terminosPagoActivos.map((termino) => (
+                          <SelectItem key={termino.id} value={String(termino.id)}>
+                            {termino.nombre}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </div>
 
-            <div>
-              <Label htmlFor="observaciones">Observaciones</Label>
-              <Textarea
-                id="observaciones"
-                value={formData.observaciones}
-                onChange={(e) =>
-                  setFormData({ ...formData, observaciones: e.target.value })
-                }
-                placeholder="Escribe cualquier observación sobre la orden de compra..."
-                rows={3}
-              />
+            <div className="border-t pt-6 mt-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Package size={20} className="text-blue-600" />
+                <h3 className="font-semibold text-gray-900">
+                  Productos de la Orden
+                </h3>
+              </div>
+
+              <div className="bg-gray-50 p-4 rounded-lg space-y-4 mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="producto">Producto *</Label>
+                    <Select
+                      value={selectedProductoId}
+                      onValueChange={setSelectedProductoId}
+                    >
+                      <SelectTrigger id="producto" className={fieldClass}>
+                        <SelectValue placeholder="Selecciona un producto" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {productosActivos.map((producto) => (
+                          <SelectItem key={producto.id} value={String(producto.id)}>
+                            {producto.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="cantidad">Cantidad *</Label>
+                    <Input
+                      id="cantidad"
+                      type="text"
+                      inputMode="numeric"
+                      value={cantidadProductoInput}
+                      onChange={(e) =>
+                        handleCantidadProductoChange(e.target.value)
+                      }
+                      onBlur={handleCantidadProductoBlur}
+                      placeholder="Ej: 50"
+                      className={numberFieldClass}
+                    />
+                    <p className="text-xs text-gray-500">
+                      Máximo 1000 unidades.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="iva">IVA *</Label>
+                    <Select value={selectedIvaId} onValueChange={setSelectedIvaId}>
+                      <SelectTrigger id="iva" className={fieldClass}>
+                        <SelectValue placeholder="Selecciona IVA" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ivasActivos.map((iva) => (
+                          <SelectItem key={iva.id} value={String(iva.id)}>
+                            {iva.nombre} ({iva.porcentaje}%)
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="precio">Precio Unitario *</Label>
+                    <Input
+                      id="precio"
+                      type="text"
+                      inputMode="decimal"
+                      value={precioProducto}
+                      onChange={(e) =>
+                        handlePrecioProductoChange(e.target.value)
+                      }
+                      placeholder="Ej: 25000"
+                      className={numberFieldClass}
+                    />
+                  </div>
+                </div>
+
+                <Button
+                  type="button"
+                  onClick={handleAgregarProducto}
+                  className="bg-green-600 hover:bg-green-700 w-full h-11"
+                >
+                  <Plus size={16} className="mr-2" />
+                  Agregar Producto
+                </Button>
+              </div>
+
+              {productosOrden.length > 0 ? (
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="max-h-[260px] overflow-y-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-gray-50">
+                          <TableHead>Producto</TableHead>
+                          <TableHead className="text-center">Cantidad</TableHead>
+                          <TableHead className="text-center">IVA</TableHead>
+                          <TableHead className="text-right">Precio Unitario</TableHead>
+                          <TableHead className="text-right">Subtotal</TableHead>
+                          <TableHead className="w-16"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+
+                      <TableBody>
+                        {productosOrden.map((item) => (
+                          <TableRow key={item.producto.id}>
+                            <TableCell>{item.producto.nombre}</TableCell>
+                            <TableCell className="text-center">
+                              {item.cantidad}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {item.ivaNombre} ({item.ivaPorcentaje}%)
+                            </TableCell>
+                            <TableCell className="text-right">
+                              ${item.precio.toLocaleString("es-CO")}
+                            </TableCell>
+                            <TableCell className="text-right font-medium">
+                              ${item.subtotal.toLocaleString("es-CO")}
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  handleEliminarProducto(item.producto.id)
+                                }
+                                className="hover:bg-red-50"
+                              >
+                                <Trash2 size={16} className="text-red-600" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+
+                        <TableRow className="bg-gray-50">
+                          <TableCell colSpan={4} className="text-right font-semibold">
+                            Total
+                          </TableCell>
+                          <TableCell className="text-right font-semibold text-blue-600">
+                            ${calcularTotales.total.toLocaleString("es-CO")}
+                          </TableCell>
+                          <TableCell />
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500 border rounded-lg border-dashed">
+                  <Package size={44} className="mx-auto mb-2 text-gray-300" />
+                  <p>No hay productos agregados</p>
+                  <p className="text-sm">
+                    Selecciona un producto y agrégalo a la orden
+                  </p>
+                </div>
+              )}
+
+              <div className="mt-4 ml-auto w-full max-w-sm rounded-lg border bg-gray-50 p-4">
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">N° de Items</span>
+                    <span className="font-medium">{calcularTotales.items}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Subtotal</span>
+                    <span className="font-medium">
+                      ${calcularTotales.subtotal.toLocaleString("es-CO")}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">IVA</span>
+                    <span className="font-medium">
+                      ${calcularTotales.impuestos.toLocaleString("es-CO")}
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-t pt-3 mt-3">
+                    <span className="font-semibold">Total</span>
+                    <span className="font-semibold text-blue-600">
+                      ${calcularTotales.total.toLocaleString("es-CO")}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t pt-6 mt-6">
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Observaciones
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    Notas adicionales para esta orden
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="observaciones">Notas adicionales</Label>
+                  <Textarea
+                    id="observaciones"
+                    value={formData.observaciones}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        observaciones: e.target.value,
+                      })
+                    }
+                    placeholder="Escribe cualquier observación sobre la orden de compra..."
+                    rows={4}
+                    className="rounded-lg border-gray-300 resize-none shadow-none focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:border-blue-500"
+                  />
+                </div>
+              </div>
             </div>
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={closeToList}>
+            <Button variant="outline" onClick={closeToList} disabled={isSaving}>
               Cancelar
             </Button>
-            <Button onClick={confirmCreate} className="bg-blue-600 hover:bg-blue-700">
-              Crear Orden
+            <Button
+              onClick={confirmCreate}
+              className="bg-blue-600 hover:bg-blue-700"
+              disabled={isSaving}
+            >
+              {isSaving ? "Creando..." : "Crear Orden"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal Ver Detalles */}
       <Dialog
         open={isVer}
         onOpenChange={(open) => {
@@ -1156,7 +1596,7 @@ export default function Compras() {
       >
         <DialogContent
           className="max-w-6xl max-h-[85vh] overflow-y-auto"
-          aria-describedby="view-proveedor-description"
+          aria-describedby="view-order-description"
           onInteractOutside={(e) => e.preventDefault()}
         >
           <DialogHeader>
@@ -1165,13 +1605,19 @@ export default function Compras() {
               Información completa de la orden de compra
             </DialogDescription>
           </DialogHeader>
-          {compraSeleccionada && (
+
+          {isLoadingDetail ? (
+            <div className="py-8 text-center text-gray-500">
+              Cargando detalle de la orden...
+            </div>
+          ) : compraSeleccionada ? (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-gray-600">N° de Orden</Label>
                   <p className="font-medium">{compraSeleccionada.numeroOrden}</p>
                 </div>
+
                 <div>
                   <Label className="text-gray-600">Estado</Label>
                   <div className="mt-1">
@@ -1179,70 +1625,109 @@ export default function Compras() {
                       variant="ghost"
                       size="sm"
                       onClick={() => handleToggleEstado(compraSeleccionada)}
-                      className={`h-7 px-3 ${compraSeleccionada.estado === "Aprobada"
-                        ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
-                        : "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                        }`}
+                      disabled={compraSeleccionada.estado === "Anulada"}
+                      className={`h-7 px-3 ${
+                        compraSeleccionada.estado === "Aprobada"
+                          ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
+                          : compraSeleccionada.estado === "Pendiente"
+                          ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                          : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
+                      }`}
                     >
                       {compraSeleccionada.estado}
                     </Button>
                   </div>
                 </div>
+
                 <div>
                   <Label className="text-gray-600">Proveedor</Label>
                   <p className="font-medium">{compraSeleccionada.proveedor}</p>
                 </div>
+
+                <div>
+                  <Label className="text-gray-600">Tipo de Documento</Label>
+                  <p className="font-medium">
+                    {compraSeleccionada.proveedorTipoDocumento || "-"}
+                  </p>
+                </div>
+
+                <div>
+                  <Label className="text-gray-600">Documento / NIT</Label>
+                  <p className="font-medium">
+                    {compraSeleccionada.proveedorNumeroDocumento || "-"}
+                  </p>
+                </div>
+
                 <div>
                   <Label className="text-gray-600">Bodega</Label>
-                  <p className="font-medium">{compraSeleccionada.bodega}</p>
+                  <p className="font-medium">{compraSeleccionada.bodega || "-"}</p>
                 </div>
+
+                <div>
+                  <Label className="text-gray-600">Término de Pago</Label>
+                  <p className="font-medium">
+                    {compraSeleccionada.terminoPago || "-"}
+                  </p>
+                </div>
+
                 <div>
                   <Label className="text-gray-600">Fecha de Orden</Label>
                   <p className="font-medium">
-                    {new Date(compraSeleccionada.fecha).toLocaleDateString("es-CO")}
+                    {compraSeleccionada.fecha
+                      ? new Date(compraSeleccionada.fecha).toLocaleDateString(
+                          "es-CO"
+                        )
+                      : "-"}
                   </p>
                 </div>
+
                 <div>
                   <Label className="text-gray-600">Fecha de Entrega</Label>
                   <p className="font-medium">
-                    {new Date(compraSeleccionada.fechaEntrega).toLocaleDateString(
-                      "es-CO"
-                    )}
+                    {compraSeleccionada.fechaEntrega
+                      ? new Date(compraSeleccionada.fechaEntrega).toLocaleDateString(
+                          "es-CO"
+                        )
+                      : "-"}
                   </p>
                 </div>
               </div>
 
-              {/* Tabla de productos */}
               {compraSeleccionada.productos &&
                 compraSeleccionada.productos.length > 0 && (
                   <div className="border-t pt-4">
-                    <Label className="text-gray-600 mb-2 block">Productos</Label>
+                    <Label className="text-gray-600 mb-2 block">
+                      Productos
+                    </Label>
                     <div className="border rounded-lg overflow-hidden">
                       <Table>
                         <TableHeader>
                           <TableRow className="bg-gray-50">
                             <TableHead>Producto</TableHead>
                             <TableHead className="text-center">Cantidad</TableHead>
-                            <TableHead className="text-right">
-                              Precio Unit.
-                            </TableHead>
+                            <TableHead className="text-center">IVA</TableHead>
+                            <TableHead className="text-right">Precio Unit.</TableHead>
                             <TableHead className="text-right">Subtotal</TableHead>
                           </TableRow>
                         </TableHeader>
+
                         <TableBody>
                           {compraSeleccionada.productos.map((item, index) => (
-                            <TableRow key={index}>
+                            <TableRow key={`${item.producto.id}-${index}`}>
                               <TableCell className="font-medium">
                                 {item.producto.nombre}
                               </TableCell>
                               <TableCell className="text-center">
                                 {item.cantidad}
                               </TableCell>
-                              <TableCell className="text-right">
-                                ${item.precio.toLocaleString()}
+                              <TableCell className="text-center">
+                                {item.ivaNombre} ({item.ivaPorcentaje}%)
                               </TableCell>
                               <TableCell className="text-right">
-                                ${item.subtotal.toLocaleString()}
+                                ${item.precio.toLocaleString("es-CO")}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                ${item.subtotal.toLocaleString("es-CO")}
                               </TableCell>
                             </TableRow>
                           ))}
@@ -1261,19 +1746,19 @@ export default function Compras() {
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Subtotal:</span>
                     <span className="font-medium">
-                      ${compraSeleccionada.subtotal.toLocaleString()}
+                      ${compraSeleccionada.subtotal.toLocaleString("es-CO")}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Impuestos (19%):</span>
+                    <span className="text-gray-600">IVA:</span>
                     <span className="font-medium">
-                      ${compraSeleccionada.impuestos.toLocaleString()}
+                      ${compraSeleccionada.impuestos.toLocaleString("es-CO")}
                     </span>
                   </div>
                   <div className="flex justify-between text-lg border-t pt-2 mt-2">
                     <span className="font-semibold">Total:</span>
                     <span className="font-bold text-blue-600">
-                      ${compraSeleccionada.total.toLocaleString()}
+                      ${compraSeleccionada.total.toLocaleString("es-CO")}
                     </span>
                   </div>
                 </div>
@@ -1288,11 +1773,13 @@ export default function Compras() {
                 </div>
               )}
             </div>
+          ) : (
+            <div className="py-8 text-center text-gray-500">
+              No se encontró la orden de compra
+            </div>
           )}
+
           <DialogFooter>
-            <Button variant="outline" onClick={closeToList}>
-              Cerrar
-            </Button>
             {compraSeleccionada && (
               <Button
                 onClick={() => handleDownloadPDF(compraSeleccionada)}
@@ -1302,11 +1789,13 @@ export default function Compras() {
                 Descargar PDF
               </Button>
             )}
+            <Button variant="outline" onClick={closeToList}>
+              Cerrar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal Editar */}
       <Dialog
         open={isEditar}
         onOpenChange={(open) => {
@@ -1315,7 +1804,7 @@ export default function Compras() {
       >
         <DialogContent
           className="max-w-6xl max-h-[85vh] overflow-y-auto"
-          aria-describedby="view-proveedor-description"
+          aria-describedby="edit-order-description"
           onInteractOutside={(e) => e.preventDefault()}
         >
           <DialogHeader>
@@ -1324,268 +1813,369 @@ export default function Compras() {
               Modifica la información de la orden de compra
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-6 py-4 px-2">
-            <div className="grid grid-cols-4 gap-6">
-              <div className="space-y-2">
-                <Label htmlFor="edit-numeroOrden">Número de Orden *</Label>
-                <Input
-                  id="edit-numeroOrden"
-                  value={formData.numeroOrden}
-                  disabled
-                  className="bg-gray-100 h-12"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-fecha">Fecha *</Label>
-                <Input
-                  id="edit-fecha"
-                  type="date"
-                  value={formData.fecha}
-                  onChange={(e) =>
-                    setFormData({ ...formData, fecha: e.target.value })
-                  }
-                  className="h-12"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-fechaEntrega">Fecha de Entrega *</Label>
-                <Input
-                  id="edit-fechaEntrega"
-                  type="date"
-                  value={formData.fechaEntrega}
-                  onChange={(e) =>
-                    setFormData({ ...formData, fechaEntrega: e.target.value })
-                  }
-                  className="h-12"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-estado">Estado *</Label>
-                <Select
-                  value={formData.estado}
-                  onValueChange={(value: "Pendiente" | "Aprobada") =>
-                    setFormData({ ...formData, estado: value })
-                  }
-                >
-                  <SelectTrigger id="edit-estado" className="h-12">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Pendiente">Pendiente</SelectItem>
-                    <SelectItem value="Aprobada">Aprobada</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+
+          {isLoadingDetail ? (
+            <div className="py-8 text-center text-gray-500">
+              Cargando información de la orden...
             </div>
+          ) : (
+            <div className="space-y-6 py-4 px-2">
+              <div className="grid grid-cols-4 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-numeroOrden">Número de Orden</Label>
+                  <Input
+                    id="edit-numeroOrden"
+                    value={formData.numeroOrden}
+                    disabled
+                    className="bg-gray-100 h-12"
+                  />
+                </div>
 
-            <div className="grid grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label htmlFor="edit-proveedor">Proveedor *</Label>
-                <Select
-                  value={formData.proveedor}
-                  onValueChange={(value: string) =>
-                    setFormData({ ...formData, proveedor: value })
-                  }
-                >
-                  <SelectTrigger id="edit-proveedor" className="h-12">
-                    <SelectValue placeholder="Selecciona un proveedor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {proveedoresActivos.map((proveedor) => (
-                      <SelectItem key={proveedor.id} value={proveedor.nombre}>
-                        {proveedor.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-bodega">Bodega *</Label>
-                <Select
-                  value={formData.bodega}
-                  onValueChange={(value: string) =>
-                    setFormData({ ...formData, bodega: value })
-                  }
-                >
-                  <SelectTrigger id="edit-bodega" className="h-12">
-                    <SelectValue placeholder="Selecciona una bodega" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {bodegasData
-                      .filter((bodega) => bodega.estado)
-                      .map((bodega) => (
-                        <SelectItem key={bodega.id} value={bodega.nombre}>
-                          {bodega.nombre}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-fecha">Fecha</Label>
+                  <Input
+                    id="edit-fecha"
+                    type="date"
+                    value={formData.fecha}
+                    disabled
+                    className="bg-gray-100 h-12"
+                  />
+                </div>
 
-            {/* Sección de Productos */}
-            <div className="border-t pt-6 mt-6">
-              <Label className="text-lg mb-4 block">Productos de la Orden</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-fechaEntrega">Fecha de Entrega *</Label>
+                  <Input
+                    id="edit-fechaEntrega"
+                    type="date"
+                    value={formData.fechaEntrega}
+                    onChange={(e) =>
+                      setFormData({ ...formData, fechaEntrega: e.target.value })
+                    }
+                    className="h-12"
+                  />
+                </div>
 
-              {/* Formulario para agregar productos */}
-              <div className="grid grid-cols-12 gap-4">
-                <div className="col-span-4 space-y-2">
-                  <Label htmlFor="edit-producto">Producto</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-estado">Estado *</Label>
                   <Select
-                    value={selectedProductoId}
-                    onValueChange={setSelectedProductoId}
+                    value={formData.estado}
+                    onValueChange={(value) =>
+                      setFormData({
+                        ...formData,
+                        estado: value as CompraEstado,
+                      })
+                    }
                   >
-                    <SelectTrigger id="edit-producto" className="h-12">
-                      <SelectValue placeholder="Selecciona un producto" />
+                    <SelectTrigger id="edit-estado" className="h-12">
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {productosActivos.map((producto) => (
-                        <SelectItem key={producto.id} value={producto.id}>
-                          {producto.nombre}
+                      <SelectItem value="Pendiente">Pendiente</SelectItem>
+                      <SelectItem value="Aprobada">Aprobada</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-proveedor">Proveedor *</Label>
+                  <Select
+                    value={formData.proveedorId}
+                    onValueChange={handleProveedorChange}
+                  >
+                    <SelectTrigger id="edit-proveedor" className="h-12">
+                      <SelectValue placeholder="Selecciona un proveedor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {proveedoresActivos.map((proveedor) => (
+                        <SelectItem key={proveedor.id} value={String(proveedor.id)}>
+                          {proveedor.nombre}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="col-span-2 space-y-2">
-                  <Label htmlFor="edit-cantidad">Cantidad</Label>
-                  <Input
-                    id="edit-cantidad"
-                    type="number"
-                    value={cantidadProducto}
-                    onChange={(e) =>
-                      setCantidadProducto(parseInt(e.target.value) || 1)
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-terminoPago">Término de Pago *</Label>
+                  <Select
+                    value={formData.terminoPagoId}
+                    onValueChange={(value: string) =>
+                      setFormData({ ...formData, terminoPagoId: value })
                     }
-                    min="1"
-                    className="h-12"
-                  />
-                </div>
-                <div className="col-span-3 space-y-2">
-                  <Label htmlFor="edit-precio">Precio Unitario</Label>
-                  <Input
-                    id="edit-precio"
-                    type="number"
-                    value={precioProducto}
-                    onChange={(e) => setPrecioProducto(e.target.value)}
-                    min="0"
-                    step="0"
-                    placeholder="0.00"
-                    className="h-12 sin-flechas"
-                  />
-                </div>
-                <div className="col-span-3 flex items-end">
-                  <Button
-                    type="button"
-                    onClick={handleAgregarProducto}
-                    className="w-full bg-green-600 hover:bg-green-700 h-12"
                   >
-                    <Plus size={18} className="mr-2" />
-                    Agregar
-                  </Button>
-                </div>
-              </div>
-
-              {/* Tabla de productos agregados */}
-              {productosOrden.length > 0 && (
-                <div className="mt-4 border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-gray-50">
-                        <TableHead>Producto</TableHead>
-                        <TableHead className="text-center">Cantidad</TableHead>
-                        <TableHead className="text-right">
-                          Precio Unit.
-                        </TableHead>
-                        <TableHead className="text-right">Subtotal</TableHead>
-                        <TableHead className="text-center">Acciones</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {productosOrden.map((item) => (
-                        <TableRow key={item.producto.id}>
-                          <TableCell className="font-medium">
-                            {item.producto.nombre}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {item.cantidad}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            ${item.precio.toLocaleString()}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            ${item.subtotal.toLocaleString()}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                handleEliminarProducto(item.producto.id)
-                              }
-                              className="hover:bg-red-50"
-                            >
-                              <Trash2 size={16} className="text-red-600" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
+                    <SelectTrigger id="edit-terminoPago" className="h-12">
+                      <SelectValue placeholder="Selecciona un término de pago" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {terminosPagoActivos.map((termino) => (
+                        <SelectItem key={termino.id} value={String(termino.id)}>
+                          {termino.nombre}
+                        </SelectItem>
                       ))}
-                    </TableBody>
-                  </Table>
+                    </SelectContent>
+                  </Select>
                 </div>
-              )}
 
-              {/* Totales calculados automáticamente */}
-              <div className="mt-4 bg-gray-50 p-4 rounded-lg space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">N° de Items:</span>
-                  <span className="font-medium">{calcularTotales.items}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Subtotal:</span>
-                  <span className="font-medium">
-                    ${calcularTotales.subtotal.toLocaleString()}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Impuestos (19%):</span>
-                  <span className="font-medium">
-                    ${calcularTotales.impuestos.toLocaleString()}
-                  </span>
-                </div>
-                <div className="flex justify-between text-lg border-t pt-2">
-                  <span className="font-semibold">Total:</span>
-                  <span className="font-bold text-yellow-600">
-                    ${calcularTotales.total.toLocaleString()}
-                  </span>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-bodega">Bodega *</Label>
+                  <Select
+                    value={formData.bodegaId}
+                    onValueChange={(value: string) => {
+                      const bodegaSeleccionada = bodegasActivas.find(
+                        (bodega) => String(bodega.id) === value
+                      );
+
+                      setFormData({
+                        ...formData,
+                        bodegaId: value,
+                        bodega: bodegaSeleccionada?.nombre || "",
+                      });
+                    }}
+                  >
+                    <SelectTrigger id="edit-bodega" className="h-12">
+                      <SelectValue placeholder="Selecciona una bodega" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {bodegasActivas.length === 0 ? (
+                        <div className="px-2 py-2 text-sm text-gray-500">
+                          No hay bodegas disponibles
+                        </div>
+                      ) : (
+                        bodegasActivas.map((bodega) => (
+                          <SelectItem key={bodega.id} value={String(bodega.id)}>
+                            {bodega.nombre}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-            </div>
 
-            <div>
-              <Label htmlFor="edit-observaciones">Observaciones</Label>
-              <Textarea
-                id="edit-observaciones"
-                value={formData.observaciones}
-                onChange={(e) =>
-                  setFormData({ ...formData, observaciones: e.target.value })
-                }
-                placeholder="Escribe cualquier observación sobre la orden de compra..."
-                rows={3}
-              />
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-proveedorTipoDocumento">
+                    Tipo de Documento
+                  </Label>
+                  <Input
+                    id="edit-proveedorTipoDocumento"
+                    value={formData.proveedorTipoDocumento}
+                    readOnly
+                    className="bg-gray-100 h-12"
+                    placeholder="Se completa al seleccionar proveedor"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-proveedorNumeroDocumento">
+                    Documento / NIT
+                  </Label>
+                  <Input
+                    id="edit-proveedorNumeroDocumento"
+                    value={formData.proveedorNumeroDocumento}
+                    readOnly
+                    className="bg-gray-100 h-12"
+                    placeholder="Se completa al seleccionar proveedor"
+                  />
+                </div>
+              </div>
+
+              <div className="border-t pt-10 mt-10">
+                <Label className="text-lg mb-4 block">Productos de la Orden</Label>
+
+                <div className="grid grid-cols-12 gap-4">
+                  <div className="col-span-4 space-y-2">
+                    <Label htmlFor="edit-producto">Producto</Label>
+                    <Select
+                      value={selectedProductoId}
+                      onValueChange={setSelectedProductoId}
+                    >
+                      <SelectTrigger id="edit-producto" className="h-12">
+                        <SelectValue placeholder="Selecciona un producto" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {productosActivos.map((producto) => (
+                          <SelectItem key={producto.id} value={String(producto.id)}>
+                            {producto.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="col-span-2 space-y-2">
+                    <Label htmlFor="edit-cantidad">Cantidad</Label>
+                    <Input
+                      id="edit-cantidad"
+                      type="number"
+                      value={cantidadProducto}
+                      onChange={(e) =>
+                        setCantidadProducto(parseInt(e.target.value) || 1)
+                      }
+                      min="1"
+                      className="h-12"
+                    />
+                  </div>
+
+                  <div className="col-span-2 space-y-2">
+                    <Label htmlFor="edit-iva">IVA</Label>
+                    <Select value={selectedIvaId} onValueChange={setSelectedIvaId}>
+                      <SelectTrigger id="edit-iva" className="h-12">
+                        <SelectValue placeholder="Selecciona IVA" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ivasActivos.map((iva) => (
+                          <SelectItem key={iva.id} value={String(iva.id)}>
+                            {iva.nombre} ({iva.porcentaje}%)
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="col-span-2 space-y-2">
+                    <Label htmlFor="edit-precio">Precio Unitario</Label>
+                    <Input
+                      id="edit-precio"
+                      type="number"
+                      value={precioProducto}
+                      onChange={(e) => setPrecioProducto(e.target.value)}
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      className="h-12 sin-flechas"
+                    />
+                  </div>
+
+                  <div className="col-span-2 flex items-end">
+                    <Button
+                      type="button"
+                      onClick={handleAgregarProducto}
+                      className="w-full bg-green-600 hover:bg-green-700 h-12"
+                    >
+                      <Plus size={18} className="mr-2" />
+                      Agregar
+                    </Button>
+                  </div>
+                </div>
+
+                {productosOrden.length > 0 && (
+                  <div className="mt-4 border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-gray-50">
+                          <TableHead>Producto</TableHead>
+                          <TableHead className="text-center">Cantidad</TableHead>
+                          <TableHead className="text-center">IVA</TableHead>
+                          <TableHead className="text-right">Precio Unit.</TableHead>
+                          <TableHead className="text-right">Subtotal</TableHead>
+                          <TableHead className="text-center">Acciones</TableHead>
+                        </TableRow>
+                      </TableHeader>
+
+                      <TableBody>
+                        {productosOrden.map((item) => (
+                          <TableRow key={item.producto.id}>
+                            <TableCell className="font-medium">
+                              {item.producto.nombre}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {item.cantidad}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {item.ivaNombre} ({item.ivaPorcentaje}%)
+                            </TableCell>
+                            <TableCell className="text-right">
+                              ${item.precio.toLocaleString("es-CO")}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              ${item.subtotal.toLocaleString("es-CO")}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  handleEliminarProducto(item.producto.id)
+                                }
+                                className="hover:bg-red-50"
+                              >
+                                <Trash2 size={16} className="text-red-600" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+
+                <div className="mt-4 bg-gray-50 p-4 rounded-lg space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">N° de Items:</span>
+                    <span className="font-medium">{calcularTotales.items}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Subtotal:</span>
+                    <span className="font-medium">
+                      ${calcularTotales.subtotal.toLocaleString("es-CO")}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">IVA:</span>
+                    <span className="font-medium">
+                      ${calcularTotales.impuestos.toLocaleString("es-CO")}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-lg border-t pt-2">
+                    <span className="font-semibold">Total:</span>
+                    <span className="font-bold text-yellow-600">
+                      ${calcularTotales.total.toLocaleString("es-CO")}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="edit-observaciones">Observaciones</Label>
+                <Textarea
+                  id="edit-observaciones"
+                  value={formData.observaciones}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      observaciones: e.target.value,
+                    })
+                  }
+                  placeholder="Escribe cualquier observación sobre la orden de compra..."
+                  rows={3}
+                />
+              </div>
             </div>
-          </div>
+          )}
+
           <DialogFooter>
             <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
-            <Button onClick={confirmEdit} className="bg-yellow-600 hover:bg-yellow-700">
-              Actualizar
+            <Button
+              onClick={confirmEdit}
+              disabled={
+                isSaving ||
+                isLoadingDetail ||
+                compraDetalle?.estado === "Aprobada" ||
+                compraDetalle?.estado === "Anulada"
+              }
+              className="bg-yellow-600 hover:bg-yellow-700"
+            >
+              {isSaving ? "Actualizando..." : "Actualizar"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal Eliminar */}
       <Dialog
         open={isAnular}
         onOpenChange={(open) => {
@@ -1594,7 +2184,7 @@ export default function Compras() {
       >
         <DialogContent
           className="max-w-6xl max-h-[85vh] overflow-y-auto"
-          aria-describedby="view-proveedor-description"
+          aria-describedby="delete-order-description"
           onInteractOutside={(e) => e.preventDefault()}
         >
           <DialogHeader>
@@ -1603,38 +2193,67 @@ export default function Compras() {
               ¿Estás seguro de que deseas anular esta orden de compra?
             </DialogDescription>
           </DialogHeader>
-          {compraSeleccionada && (
+
+          {isLoadingDetail ? (
+            <div className="py-8 text-center text-gray-500">
+              Cargando información de la orden...
+            </div>
+          ) : compraSeleccionada ? (
             <div className="py-4">
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-                <p className="text-sm text-yellow-800">
-                  Esta acción no se puede deshacer. La orden{" "}
-                  <strong>{compraSeleccionada.numeroOrden}</strong> será anulada
-                  permanentemente.
-                </p>
-              </div>
+              {compraSeleccionada.estado === "Aprobada" ? (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                  <p className="text-sm text-red-800">
+                    La orden <strong>{compraSeleccionada.numeroOrden}</strong>{" "}
+                    está aprobada y no puede ser anulada.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                  <p className="text-sm text-yellow-800">
+                    Esta acción no se puede deshacer. La orden{" "}
+                    <strong>{compraSeleccionada.numeroOrden}</strong> será anulada.
+                  </p>
+                </div>
+              )}
+
               <div className="space-y-2 text-sm">
                 <p>
                   <strong>Proveedor:</strong> {compraSeleccionada.proveedor}
                 </p>
                 <p>
                   <strong>Total:</strong> $
-                  {compraSeleccionada.total.toLocaleString()}
+                  {compraSeleccionada.total.toLocaleString("es-CO")}
+                </p>
+                <p>
+                  <strong>Estado:</strong> {compraSeleccionada.estado}
                 </p>
               </div>
             </div>
+          ) : (
+            <div className="py-8 text-center text-gray-500">
+              No se encontró la orden de compra
+            </div>
           )}
+
           <DialogFooter>
             <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
-            <Button onClick={confirmAnular} className="bg-red-600 hover:bg-red-700">
+            <Button
+              onClick={confirmAnular}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={
+                !compraSeleccionada ||
+                compraSeleccionada.estado === "Aprobada" ||
+                compraSeleccionada.estado === "Anulada"
+              }
+            >
               Anular
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal Confirmación Cambio de Estado */}
       <Dialog
         open={showConfirmEstadoModal}
         onOpenChange={setShowConfirmEstadoModal}
@@ -1668,10 +2287,11 @@ export default function Compras() {
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Estado Actual:</span>
               <span
-                className={`font-medium ${compraParaCambioEstado?.estado === "Aprobada"
-                  ? "text-blue-700"
-                  : "text-yellow-700"
-                  }`}
+                className={`font-medium ${
+                  compraParaCambioEstado?.estado === "Aprobada"
+                    ? "text-blue-700"
+                    : "text-yellow-700"
+                }`}
               >
                 {compraParaCambioEstado?.estado}
               </span>
@@ -1679,16 +2299,7 @@ export default function Compras() {
 
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Nuevo Estado:</span>
-              <span
-                className={`font-medium ${compraParaCambioEstado?.estado === "Pendiente"
-                  ? "text-blue-700"
-                  : "text-yellow-700"
-                  }`}
-              >
-                {compraParaCambioEstado?.estado === "Pendiente"
-                  ? "Aprobada"
-                  : "Pendiente"}
-              </span>
+              <span className="font-medium text-blue-700">Aprobada</span>
             </div>
           </div>
 
@@ -1710,11 +2321,7 @@ export default function Compras() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Éxito */}
-      <Dialog
-        open={showSuccessModal}
-        onOpenChange={handleSuccessModalClose}
-      >
+      <Dialog open={showSuccessModal} onOpenChange={handleSuccessModalClose}>
         <DialogContent
           className="max-w-md"
           onPointerDownOutside={(e) => e.preventDefault()}
@@ -1728,12 +2335,14 @@ export default function Compras() {
             <X className="h-4 w-4" />
             <span className="sr-only">Cerrar</span>
           </button>
+
           <DialogHeader className="sr-only">
             <DialogTitle>Registro Exitoso</DialogTitle>
             <DialogDescription id="success-order-description">
               La orden de compra se ha creado correctamente
             </DialogDescription>
           </DialogHeader>
+
           <div className="flex flex-col items-center justify-center py-6">
             <div className="rounded-full bg-green-100 p-3 mb-4">
               <CheckCircle2 className="h-12 w-12 text-green-600" />
@@ -1753,6 +2362,6 @@ export default function Compras() {
           </div>
         </DialogContent>
       </Dialog>
-    </div >
+    </div>
   );
 }

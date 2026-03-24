@@ -9,13 +9,16 @@ interface PublicRouteProps {
 export const PublicRoute = ({ children }: PublicRouteProps) => {
   const { usuario, isAuthLoading } = useAuth();
 
+  const token = localStorage.getItem("token");
+  const usuarioGuardado = localStorage.getItem("usuario");
+
   if (isAuthLoading) {
     return null;
   }
 
-  if (usuario) {
+  if (usuario || (token && usuarioGuardado)) {
     return <Navigate to="/app" replace />;
   }
 
-  return children;
+  return <>{children}</>;
 };

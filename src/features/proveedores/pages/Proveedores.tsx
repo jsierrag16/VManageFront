@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate, useOutletContext, useParams } from "react-router-dom";
-import type { AppOutletContext } from "@/layouts/MainLayout";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   Search,
   Eye,
@@ -14,8 +13,8 @@ import {
   Mail,
   MapPin,
   User,
-  FileText,
   Phone,
+  Loader2,
 } from "lucide-react";
 import { Button } from "../../../shared/components/ui/button";
 import { Input } from "../../../shared/components/ui/input";
@@ -44,797 +43,711 @@ import {
 } from "../../../shared/components/ui/select";
 import { Label } from "../../../shared/components/ui/label";
 import { Badge } from "../../../shared/components/ui/badge";
-import { Textarea } from "../../../shared/components/ui/textarea";
 import { toast } from "sonner";
-import { proveedoresData as initialProveedoresData, Proveedor } from "../../../data/proveedores";
+import {
+  createProveedor,
+  disableProveedor,
+  enableProveedor,
+  getMunicipiosOptions,
+  getProveedorById,
+  getProveedores,
+  getTiposDocumentoOptions,
+  getTiposProveedorOptions,
+  updateProveedor,
+  type CatalogOption,
+  type MunicipioOption,
+  type ProveedorItem,
+  type SaveProveedorPayload,
+} from "../services/proveedores.services";
 
-// Categorías disponibles en el sistema
-const CATEGORIAS_PROVEEDOR = [
-  "Medicamentos",
-  "Equipos Médicos",
-  "Material de Curación",
-  "Alimentos",
-  "Suplementos",
-  "Insumos Veterinarios",
-  "Otros",
-] as const;
+type FormState = {
+  tipoDocId: string;
+  numeroDoc: string;
+  nombre: string;
+  email: string;
+  telefono: string;
+  direccion: string;
+  municipioId: string;
+  tipoProveedorId: string;
+  contacto: string;
+};
 
-// Países disponibles
-const PAISES = [
-  "Colombia",
-  "Argentina",
-  "Brasil",
-  "Chile",
-  "Ecuador",
-  "México",
-  "Perú",
-  "Venezuela",
-  "Estados Unidos",
-  "España",
-  "Otro",
-] as const;
+type FormErrors = Record<keyof FormState, string>;
+type FormTouched = Record<keyof FormState, boolean>;
 
-// Ubicaciones por país
-const UBICACIONES_POR_PAIS: Record<string, Record<string, string[]>> = {
-  Colombia: {
-    Antioquia: ["Medellín", "Envigado", "Itagüí", "Bello", "Rionegro"],
-    Cundinamarca: ["Bogotá", "Soacha", "Chía", "Zipaquirá", "Facatativá"],
-    ValleDelCauca: ["Cali", "Palmira", "Buenaventura", "Tuluá", "Jamundí"],
-    Atlántico: ["Barranquilla", "Soledad", "Malambo", "Puerto Colombia"],
-    Bolívar: ["Cartagena", "Magangué", "Turbaco", "Arjona"],
-    Santander: ["Bucaramanga", "Floridablanca", "Girón", "Piedecuesta"],
-    NorteDeSantander: ["Cúcuta", "Villa del Rosario", "Los Patios", "Ocaña"],
-    Risaralda: ["Pereira", "Dosquebradas", "Santa Rosa de Cabal"],
-    Magdalena: ["Santa Marta", "Ciénaga", "Fundación"],
-    Tolima: ["Ibagué", "Espinal", "Melgar"],
-    Nariño: ["Pasto", "Ipiales", "Tumaco"],
-    Caldas: ["Manizales", "La Dorada", "Chinchiná"],
-    Huila: ["Neiva", "Pitalito", "Garzón"],
-    Meta: ["Villavicencio", "Acacías", "Granada"],
-    Quindío: ["Armenia", "Calarcá", "La Tebaida"],
-    Cesar: ["Valledupar", "Aguachica", "Codazzi"],
-    Córdoba: ["Montería", "Lorica", "Cereté"],
-    Cauca: ["Popayán", "Santander de Quilichao", "Puerto Tejada"],
-    Sucre: ["Sincelejo", "Corozal", "Sampués"],
-    Boyacá: ["Tunja", "Duitama", "Sogamoso"],
-    Otro: ["Otra"],
+const ITEMS_PER_PAGE = 10;
+
+const EMPTY_FORM: FormState = {
+  tipoDocId: "",
+  numeroDoc: "",
+  nombre: "",
+  email: "",
+  telefono: "",
+  direccion: "",
+  municipioId: "",
+  tipoProveedorId: "",
+  contacto: "",
+};
+
+const EMPTY_ERRORS: FormErrors = {
+  tipoDocId: "",
+  numeroDoc: "",
+  nombre: "",
+  email: "",
+  telefono: "",
+  direccion: "",
+  municipioId: "",
+  tipoProveedorId: "",
+  contacto: "",
+};
+
+const EMPTY_TOUCHED: FormTouched = {
+  tipoDocId: false,
+  numeroDoc: false,
+  nombre: false,
+  email: false,
+  telefono: false,
+  direccion: false,
+  municipioId: false,
+  tipoProveedorId: false,
+  contacto: false,
+};
+
+const getErrorMessage = (error: any, fallback: string) => {
+  const message =
+    error?.response?.data?.message ??
+    error?.response?.data?.error?.message ??
+    error?.response?.data?.error ??
+    error?.message;
+
+  if (Array.isArray(message)) return message.join(", ");
+  if (typeof message === "string" && message.trim()) return message.trim();
+
+  return fallback;
+};
+
+const validators: Record<keyof FormState, (value: string) => string> = {
+  tipoDocId: (value) => (!value ? "El tipo de documento es requerido" : ""),
+
+  numeroDoc: (value) => {
+    if (!value.trim()) return "El número de documento es requerido";
+    if (!/^[a-zA-Z0-9-]+$/.test(value.trim())) {
+      return "Solo se permiten letras, números y guiones";
+    }
+    if (value.trim().length < 3) return "Mínimo 3 caracteres";
+    if (value.trim().length > 50) return "Máximo 50 caracteres";
+    return "";
   },
 
-  Argentina: {
-    BuenosAires: ["Buenos Aires", "La Plata", "Mar del Plata", "Bahía Blanca"],
-    Córdoba: ["Córdoba", "Villa Carlos Paz", "Río Cuarto"],
-    SantaFe: ["Rosario", "Santa Fe", "Rafaela"],
-    Otro: ["Otra"],
+  nombre: (value) => {
+    if (!value.trim()) return "El nombre o razón social es requerido";
+    if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s.&,-]+$/.test(value.trim())) {
+      return "Solo se permiten letras, números, espacios y . , - &";
+    }
+    if (value.trim().length < 3) return "Mínimo 3 caracteres";
+    if (value.trim().length > 150) return "Máximo 150 caracteres";
+    return "";
   },
 
-  Brasil: {
-    SaoPaulo: ["São Paulo", "Campinas", "Santos"],
-    RioDeJaneiro: ["Río de Janeiro", "Niterói", "Petrópolis"],
-    MinasGerais: ["Belo Horizonte", "Uberlândia", "Contagem"],
-    Otro: ["Otra"],
+  email: (value) => {
+    if (!value.trim()) return "";
+    if (value.trim().length > 100) return "Máximo 100 caracteres";
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(value.trim())) return "Formato de email inválido";
+    return "";
   },
 
-  Chile: {
-    RegionMetropolitana: ["Santiago", "Puente Alto", "Maipú"],
-    Valparaiso: ["Valparaíso", "Viña del Mar", "Quilpué"],
-    Biobio: ["Concepción", "Talcahuano", "Los Ángeles"],
-    Otro: ["Otra"],
+  telefono: (value) => {
+    if (!value.trim()) return "";
+    if (value.trim().length > 20) return "Máximo 20 caracteres";
+    if (!/^[0-9+\-\s()]+$/.test(value.trim())) {
+      return "Solo se permiten números, espacios, +, -, y paréntesis";
+    }
+    return "";
   },
 
-  Ecuador: {
-    Pichincha: ["Quito", "Cayambe", "Rumiñahui"],
-    Guayas: ["Guayaquil", "Durán", "Samborondón"],
-    Azuay: ["Cuenca", "Gualaceo", "Paute"],
-    Otro: ["Otra"],
+  direccion: (value) => {
+    if (!value.trim()) return "";
+    if (value.trim().length > 255) return "Máximo 255 caracteres";
+    return "";
   },
 
-  México: {
-    CDMX: ["Ciudad de México"],
-    Jalisco: ["Guadalajara", "Zapopan", "Tlaquepaque"],
-    NuevoLeon: ["Monterrey", "San Nicolás", "Guadalupe"],
-    Otro: ["Otra"],
-  },
+  municipioId: (value) => (!value ? "El municipio es requerido" : ""),
 
-  Perú: {
-    Lima: ["Lima", "Miraflores", "San Isidro"],
-    Arequipa: ["Arequipa", "Camaná", "Mollendo"],
-    LaLibertad: ["Trujillo", "Chepén", "Pacasmayo"],
-    Otro: ["Otra"],
-  },
+  tipoProveedorId: (value) => (!value ? "El tipo de proveedor es requerido" : ""),
 
-  Venezuela: {
-    DistritoCapital: ["Caracas"],
-    Zulia: ["Maracaibo", "Cabimas", "Ciudad Ojeda"],
-    Carabobo: ["Valencia", "Puerto Cabello", "Naguanagua"],
-    Otro: ["Otra"],
-  },
-
-  "Estados Unidos": {
-    Florida: ["Miami", "Orlando", "Tampa"],
-    Texas: ["Houston", "Dallas", "Austin"],
-    California: ["Los Ángeles", "San Diego", "San Francisco"],
-    Otro: ["Otra"],
-  },
-
-  España: {
-    Madrid: ["Madrid", "Alcalá de Henares", "Getafe"],
-    Cataluña: ["Barcelona", "Hospitalet", "Sabadell"],
-    Valencia: ["Valencia", "Alicante", "Elche"],
-    Otro: ["Otra"],
-  },
-
-  Otro: {
-    Otro: ["Otra"],
+  contacto: (value) => {
+    if (!value.trim()) return "";
+    if (value.trim().length > 255) return "Máximo 255 caracteres";
+    return "";
   },
 };
 
 export default function Proveedores() {
-
-  // ✅ estados base
-
-  const [searchTerm, setSearchTerm] = useState("");
-  const [formDepartamento, setFormDepartamento] = useState("");
-  const [proveedores, setProveedores] = useState<Proveedor[]>(initialProveedoresData);
-
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
-  const [proveedorParaCambioEstado, setProveedorParaCambioEstado] = useState<Proveedor | null>(null);
-
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
-
-
-  // ✅ router + bodega + flags URL (igual que Usuarios)
-
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams<{ id: string }>();
-
-  const { selectedBodegaNombre } = useOutletContext<AppOutletContext>();
-  const selectedBodega = selectedBodegaNombre;
 
   const isCrear = location.pathname.endsWith("/proveedores/crear");
   const isVer = location.pathname.endsWith("/ver");
   const isEditar = location.pathname.endsWith("/editar");
   const isEliminar = location.pathname.endsWith("/eliminar");
 
-  const closeToList = () => navigate("/app/proveedores");
+  const closeToList = useCallback(() => {
+    navigate("/app/proveedores");
+  }, [navigate]);
 
+  const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
-  // ✅ proveedor seleccionado por URL (:id)
+  const [proveedores, setProveedores] = useState<ProveedorItem[]>([]);
+  const [proveedorDetalle, setProveedorDetalle] = useState<ProveedorItem | null>(null);
+  const [proveedorParaCambioEstado, setProveedorParaCambioEstado] =
+    useState<ProveedorItem | null>(null);
 
-  const proveedorSeleccionado = useMemo(() => {
-    if (!params.id) return null;
-    return proveedores.find((p) => p.id === params.id) ?? null;
-  }, [proveedores, params.id]);
+  const [tiposDocumento, setTiposDocumento] = useState<CatalogOption[]>([]);
+  const [tiposProveedor, setTiposProveedor] = useState<CatalogOption[]>([]);
+  const [municipios, setMunicipios] = useState<MunicipioOption[]>([]);
 
-  // ✅ Si entran a /ver, /editar o /eliminar con id inválido → volver
-  useEffect(() => {
-    if (!isVer && !isEditar && !isEliminar) return;
+  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [errors, setErrors] = useState<FormErrors>(EMPTY_ERRORS);
+  const [touched, setTouched] = useState<FormTouched>(EMPTY_TOUCHED);
 
-    if (!proveedorSeleccionado) {
-      closeToList();
-      return;
-    }
-  }, [isVer, isEditar, isEliminar, proveedorSeleccionado, closeToList]);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
 
-
-  // ✅ Form states
-
-  const [formTipoDoc, setFormTipoDoc] = useState("NIT");
-  const [formNumeroDoc, setFormNumeroDoc] = useState("");
-  const [formNombre, setFormNombre] = useState("");
-  const [formEmail, setFormEmail] = useState("");
-  const [formTelefono, setFormTelefono] = useState("");
-  const [formDireccion, setFormDireccion] = useState("");
-  const [formCiudad, setFormCiudad] = useState("");
-  const [formPais, setFormPais] = useState("");
-  const [formCategoria, setFormCategoria] = useState("");
-  const [formContacto, setFormContacto] = useState("");
-  const [formNotas, setFormNotas] = useState("");
-
-  const [errors, setErrors] = useState({
-    tipoDoc: "",
-    numeroDoc: "",
-    nombre: "",
-    email: "",
-    telefono: "",
-    direccion: "",
-    pais: "",
-    departamento: "",
-    ciudad: "",
-    categoria: "",
-    contacto: "",
-    notas: "",
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: ITEMS_PER_PAGE,
+    total: 0,
+    pages: 1,
   });
 
-  const [touched, setTouched] = useState({
-    tipoDoc: false,
-    numeroDoc: false,
-    nombre: false,
-    email: false,
-    telefono: false,
-    direccion: false,
-    pais: false,
-    departamento: false,
-    ciudad: false,
-    categoria: false,
-    contacto: false,
-    notas: false,
-  });
+  const [isLoadingList, setIsLoadingList] = useState(false);
+  const [isLoadingDetalle, setIsLoadingDetalle] = useState(false);
+  const [isLoadingCatalogos, setIsLoadingCatalogos] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const selectedMunicipio = useMemo(
+    () => municipios.find((m) => m.value === form.municipioId) ?? null,
+    [municipios, form.municipioId]
+  );
 
-  // ✅ Validaciones (DEBEN IR ANTES de usarse en handlers)
+  const tipoDocMap = useMemo(
+    () =>
+      Object.fromEntries(
+        tiposDocumento.map((item) => [Number(item.value), item.label])
+      ) as Record<number, string>,
+    [tiposDocumento]
+  );
 
-  const validateTipoDoc = (value: string) => {
-    if (!value) return "El tipo de documento es requerido";
-    return "";
-  };
+  const tipoProveedorMap = useMemo(
+    () =>
+      Object.fromEntries(
+        tiposProveedor.map((item) => [Number(item.value), item.label])
+      ) as Record<number, string>,
+    [tiposProveedor]
+  );
 
-  const validateNumeroDoc = (value: string) => {
-    if (!value.trim()) return "El número de documento es requerido";
-    const validPattern = /^[0-9-]+$/;
-    if (!validPattern.test(value)) return "Solo se permiten números y guiones";
-    if (value.length < 6) return "Mínimo 6 caracteres";
-    if (value.length > 20) return "Máximo 20 caracteres";
-    return "";
-  };
+  const municipioMap = useMemo(
+    () =>
+      Object.fromEntries(
+        municipios.map((item) => [Number(item.value), item])
+      ) as Record<number, MunicipioOption>,
+    [municipios]
+  );
 
-  const validateNombre = (value: string) => {
-    if (!value.trim()) return "El nombre del proveedor es requerido";
-    const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s.\-&]+$/;
-    if (!validPattern.test(value)) {
-      return "Solo se permiten letras, números, espacios, puntos, guiones y &";
+  const getTipoDocumentoLabel = useCallback(
+    (proveedor: ProveedorItem) =>
+      proveedor.tipoDocumento || tipoDocMap[proveedor.idTipoDocumento] || "—",
+    [tipoDocMap]
+  );
+
+  const getTipoProveedorLabel = useCallback(
+    (proveedor: ProveedorItem) =>
+      proveedor.tipoProveedor || tipoProveedorMap[proveedor.idTipoProveedor] || "—",
+    [tipoProveedorMap]
+  );
+
+  const getMunicipioLabel = useCallback(
+    (proveedor: ProveedorItem) =>
+      proveedor.ciudad || municipioMap[proveedor.idMunicipio]?.nombre || "—",
+    [municipioMap]
+  );
+
+  const getDepartamentoLabel = useCallback(
+    (proveedor: ProveedorItem) =>
+      proveedor.departamento || municipioMap[proveedor.idMunicipio]?.departamento || "—",
+    [municipioMap]
+  );
+
+  const resetForm = useCallback(() => {
+    setForm(EMPTY_FORM);
+    setErrors(EMPTY_ERRORS);
+    setTouched(EMPTY_TOUCHED);
+  }, []);
+
+  const setFieldValue = <K extends keyof FormState>(field: K, value: FormState[K]) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+
+    if (touched[field]) {
+      setErrors((prev) => ({
+        ...prev,
+        [field]: validators[field](value),
+      }));
     }
-    if (value.trim().length < 3) return "Mínimo 3 caracteres";
-    if (value.trim().length > 100) return "Máximo 100 caracteres";
-    return "";
   };
 
-  const validateEmail = (value: string) => {
-    if (!value.trim()) return "El email es requerido";
-    if (!value.includes("@")) return "El email debe contener un @";
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(value)) return "Formato de email inválido";
-    return "";
-  };
-
-  const validateTelefono = (value: string) => {
-    if (!value.trim()) return "El teléfono es requerido";
-    const diezNumeros = /^[0-9]{10}$/;
-    if (!diezNumeros.test(value)) return "Debe tener exactamente 10 números";
-    return "";
-  };
-
-  const validateDireccion = (value: string) => {
-    if (!value.trim()) return "La dirección es requerida";
-    const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s\-,#.]+$/;
-    if (!validPattern.test(value)) {
-      return "Solo se permiten letras, números, espacios, guiones, comas, puntos y #";
-    }
-    if (value.trim().length < 5) return "Mínimo 5 caracteres";
-    if (value.trim().length > 200) return "Máximo 200 caracteres";
-    return "";
-  };
-
-  const validateCiudad = (value: string) => {
-    if (!value || value === "") return "La ciudad es requerida";
-    return "";
-  };
-
-  const validatePais = (value: string) => {
-    if (!value) return "El país es requerido";
-    return "";
-  };
-
-  const validateCategoria = (value: string) => {
-    if (!value.trim()) return "La categoría es requerida";
-    const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s]+$/;
-    if (!validPattern.test(value)) return "Solo se permiten letras, números y espacios";
-    if (value.trim().length < 3) return "Mínimo 3 caracteres";
-    if (value.trim().length > 50) return "Máximo 50 caracteres";
-    return "";
-  };
-
-  const validateContacto = (value: string) => {
-    if (!value.trim()) return "El nombre del contacto es requerido";
-    const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/;
-    if (!validPattern.test(value)) return "Solo se permiten letras y espacios";
-    if (value.trim().length < 3) return "Mínimo 3 caracteres";
-    if (value.trim().length > 100) return "Máximo 100 caracteres";
-    return "";
-  };
-
-  const validateNotas = (value: string) => {
-    if (!value.trim()) return ""; // opcional
-    const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s.,;:()\-¿?¡!]+$/;
-    if (!validPattern.test(value)) {
-      return "Solo se permiten letras, números, espacios y puntuación básica";
-    }
-    if (value.trim().length > 500) return "Máximo 500 caracteres";
-    return "";
-  };
-
-  const validateDepartamento = (value: string) => {
-    if (!value || value === "") return "El departamento es requerido";
-    return "";
-  };
-
-
-  // ✅ Handlers con validación en tiempo real (Inputs)
-
-  const handleNumeroDocChange = (value: string) => {
-    setFormNumeroDoc(value);
-    if (touched.numeroDoc) setErrors({ ...errors, numeroDoc: validateNumeroDoc(value) });
-  };
-
-  const handleNombreChange = (value: string) => {
-    setFormNombre(value);
-    if (touched.nombre) setErrors({ ...errors, nombre: validateNombre(value) });
-  };
-
-  const handleEmailChange = (value: string) => {
-    setFormEmail(value);
-    if (touched.email) setErrors({ ...errors, email: validateEmail(value) });
-  };
-
-  const handleTelefonoChange = (value: string) => {
-    setFormTelefono(value);
-    if (touched.telefono) setErrors({ ...errors, telefono: validateTelefono(value) });
-  };
-
-  const handleDireccionChange = (value: string) => {
-    setFormDireccion(value);
-    if (touched.direccion) setErrors({ ...errors, direccion: validateDireccion(value) });
-  };
-
-  const handleContactoChange = (value: string) => {
-    setFormContacto(value);
-    if (touched.contacto) setErrors({ ...errors, contacto: validateContacto(value) });
-  };
-
-  const handleNotasChange = (value: string) => {
-    setFormNotas(value);
-    if (touched.notas) setErrors({ ...errors, notas: validateNotas(value) });
-  };
-
-  const handleTipoDocChange = (value: string) => {
-    setFormTipoDoc(value);
-    setTouched((t) => ({ ...t, tipoDoc: true }));
-    setErrors((e) => ({ ...e, tipoDoc: validateTipoDoc(value) }));
-  };
-
-  const handleCiudadChange = (value: string) => {
-    setFormCiudad(value);
-    setTouched((t) => ({ ...t, ciudad: true }));
-    setErrors((e) => ({ ...e, ciudad: validateCiudad(value) }));
-  };
-
-  const handlePaisChange = (value: string) => {
-    setFormPais(value);
-    setFormDepartamento("");
-    setFormCiudad("");
-
-    setTouched((t) => ({
-      ...t,
-      pais: true,
-      departamento: false,
-      ciudad: false,
-    }));
-
-    setErrors((e) => ({
-      ...e,
-      pais: validatePais(value),
-      departamento: "",
-      ciudad: "",
+  const handleBlur = (field: keyof FormState) => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+    setErrors((prev) => ({
+      ...prev,
+      [field]: validators[field](form[field]),
     }));
   };
 
-  const handleDepartamentoChange = (value: string) => {
-    setFormDepartamento(value);
-    setFormCiudad("");
-
-    setTouched((t) => ({
-      ...t,
-      departamento: true,
-      ciudad: false,
-    }));
-
-    setErrors((e) => ({
-      ...e,
-      departamento: validateDepartamento(value),
-      ciudad: "",
-    }));
-  };
-
-  const handleCategoriaChange = (value: string) => {
-    setFormCategoria(value);
-    setTouched((t) => ({ ...t, categoria: true }));
-    setErrors((e) => ({ ...e, categoria: validateCategoria(value) }));
-  };
-
-
-  // ✅ Handlers onBlur (Inputs)
-
-  const handleNumeroDocBlur = () => {
-    setTouched({ ...touched, numeroDoc: true });
-    setErrors({ ...errors, numeroDoc: validateNumeroDoc(formNumeroDoc) });
-  };
-
-  const handleNombreBlur = () => {
-    setTouched({ ...touched, nombre: true });
-    setErrors({ ...errors, nombre: validateNombre(formNombre) });
-  };
-
-  const handleEmailBlur = () => {
-    setTouched({ ...touched, email: true });
-    setErrors({ ...errors, email: validateEmail(formEmail) });
-  };
-
-  const handleTelefonoBlur = () => {
-    setTouched({ ...touched, telefono: true });
-    setErrors({ ...errors, telefono: validateTelefono(formTelefono) });
-  };
-
-  const handleDireccionBlur = () => {
-    setTouched({ ...touched, direccion: true });
-    setErrors({ ...errors, direccion: validateDireccion(formDireccion) });
-  };
-
-  const handleContactoBlur = () => {
-    setTouched({ ...touched, contacto: true });
-    setErrors({ ...errors, contacto: validateContacto(formContacto) });
-  };
-
-  const handleNotasBlur = () => {
-    setTouched({ ...touched, notas: true });
-    setErrors({ ...errors, notas: validateNotas(formNotas) });
-  };
-
-  // ✅ Al entrar a /editar, precargar el formulario
-  useEffect(() => {
-    if (!isEditar) return;
-    if (!proveedorSeleccionado) return;
-
-    setFormTipoDoc(proveedorSeleccionado.tipoDocumento);
-    setFormNumeroDoc(proveedorSeleccionado.numeroDocumento);
-    setFormNombre(proveedorSeleccionado.nombre);
-    setFormEmail(proveedorSeleccionado.email);
-    setFormTelefono(proveedorSeleccionado.telefono);
-    setFormDireccion(proveedorSeleccionado.direccion);
-    setFormCiudad(proveedorSeleccionado.ciudad);
-    setFormDepartamento(proveedorSeleccionado.departamento || "");
-    setFormPais(proveedorSeleccionado.pais);
-    setFormCategoria(proveedorSeleccionado.categoria);
-    setFormContacto(proveedorSeleccionado.contacto);
-    setFormNotas(proveedorSeleccionado.notas || "");
-
-    setErrors({
-      tipoDoc: "",
-      numeroDoc: "",
-      nombre: "",
-      email: "",
-      telefono: "",
-      direccion: "",
-      ciudad: "",
-      pais: "",
-      departamento: "",
-      categoria: "",
-      contacto: "",
-      notas: "",
-    });
-    setTouched({
-      tipoDoc: false,
-      numeroDoc: false,
-      nombre: false,
-      email: false,
-      telefono: false,
-      direccion: false,
-      ciudad: false,
-      departamento: false,
-      pais: false,
-      categoria: false,
-      contacto: false,
-      notas: false,
-    });
-  }, [isEditar, proveedorSeleccionado]);
-
-  // Al entrar a /crear, limpiar el form
-  useEffect(() => {
-    if (!isCrear) return;
-
-    setFormTipoDoc("NIT");
-    setFormNumeroDoc("");
-    setFormNombre("");
-    setFormEmail("");
-    setFormTelefono("");
-    setFormDireccion("");
-    setFormCiudad("");
-    setFormPais("");
-    setFormDepartamento("");
-    setFormCategoria("");
-    setFormContacto("");
-    setFormNotas("");
-
-    setErrors({
-      tipoDoc: "",
-      numeroDoc: "",
-      nombre: "",
-      email: "",
-      telefono: "",
-      direccion: "",
-      ciudad: "",
-      departamento: "",
-      pais: "",
-      categoria: "",
-      contacto: "",
-      notas: "",
-    });
-
-    setTouched({
-      tipoDoc: false,
-      numeroDoc: false,
-      nombre: false,
-      email: false,
-      telefono: false,
-      direccion: false,
-      ciudad: false,
-      departamento: false,
-      pais: false,
-      categoria: false,
-      contacto: false,
-      notas: false,
-    });
-  }, [isCrear]);
-
-  // Filtrado por bodega + búsqueda
-  const filteredProveedores = useMemo(() => {
-    const s = searchTerm.toLowerCase();
-
-    return proveedores.filter((p) => {
-      return (
-        p.id.toLowerCase().includes(s) ||
-        p.nombre.toLowerCase().includes(s) ||
-        p.tipoDocumento.toLowerCase().includes(s) ||
-        p.numeroDocumento.toLowerCase().includes(s) ||
-        p.email.toLowerCase().includes(s) ||
-        p.telefono.toLowerCase().includes(s) ||
-        p.categoria.toLowerCase().includes(s) ||
-        p.estado.toLowerCase().includes(s)
-      );
-    });
-  }, [proveedores, searchTerm]);
-
-  // Resetear a página 1 cuando cambia filtro
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, selectedBodega]);
-
-  // Paginación
-  const totalPages = Math.ceil(filteredProveedores.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentProveedores = filteredProveedores.slice(startIndex, endIndex);
-
-  const departamentosDisponibles = useMemo(() => {
-    if (!formPais) return [];
-    return Object.keys(UBICACIONES_POR_PAIS[formPais] || {});
-  }, [formPais]);
-
-  const ciudadesDisponibles = useMemo(() => {
-    if (!formPais || !formDepartamento) return [];
-    return UBICACIONES_POR_PAIS[formPais]?.[formDepartamento] || [];
-  }, [formPais, formDepartamento]);
-
-  // Confirmación cambio de estado
-  const handleToggleEstado = (p: Proveedor) => {
-    setProveedorParaCambioEstado(p);
-    setShowConfirmEstadoModal(true);
-  };
-
-  const handleConfirmEstado = () => {
-    if (!proveedorParaCambioEstado) return;
-
-    const nuevoEstado =
-      proveedorParaCambioEstado.estado === "Activo" ? "Inactivo" : "Activo";
-
-    setProveedores(
-      proveedores.map((p) =>
-        p.id === proveedorParaCambioEstado.id ? { ...p, estado: nuevoEstado } : p
-      )
-    );
-
-    toast.success(
-      `Proveedor ${nuevoEstado === "Activo" ? "activado" : "desactivado"
-      } exitosamente`
-    );
-
-    setShowConfirmEstadoModal(false);
-    setProveedorParaCambioEstado(null);
-  };
-
-  // Navegación (modales por URL)
-  const handleView = (p: Proveedor) => {
-    navigate(`/app/proveedores/${p.id}/ver`);
-  };
-
-  const handleCreate = () => {
-    navigate("/app/proveedores/crear");
-  };
-
-  const handleEdit = (p: Proveedor) => {
-    navigate(`/app/proveedores/${p.id}/editar`);
-  };
-
-  const handleDelete = (p: Proveedor) => {
-    navigate(`/app/proveedores/${p.id}/eliminar`);
-  };
-
-  // Validación general del formulario
   const validateForm = () => {
-    setTouched({
-      tipoDoc: true,
+    const nextTouched: FormTouched = {
+      tipoDocId: true,
       numeroDoc: true,
       nombre: true,
       email: true,
       telefono: true,
       direccion: true,
-      ciudad: true,
-      departamento: true,
-      pais: true,
-      categoria: true,
+      municipioId: true,
+      tipoProveedorId: true,
       contacto: true,
-      notas: true,
-    });
+    };
 
-    const tipoDocError = validateTipoDoc(formTipoDoc);
-    const numeroDocError = validateNumeroDoc(formNumeroDoc);
-    const nombreError = validateNombre(formNombre);
-    const emailError = validateEmail(formEmail);
-    const telefonoError = validateTelefono(formTelefono);
-    const direccionError = validateDireccion(formDireccion);
-    const ciudadError = validateCiudad(formCiudad);
-    const departamentoError = validateDepartamento(formDepartamento);
-    const paisError = validatePais(formPais);
-    const categoriaError = validateCategoria(formCategoria);
-    const contactoError = validateContacto(formContacto);
-    const notasError = validateNotas(formNotas);
+    const nextErrors: FormErrors = {
+      tipoDocId: validators.tipoDocId(form.tipoDocId),
+      numeroDoc: validators.numeroDoc(form.numeroDoc),
+      nombre: validators.nombre(form.nombre),
+      email: validators.email(form.email),
+      telefono: validators.telefono(form.telefono),
+      direccion: validators.direccion(form.direccion),
+      municipioId: validators.municipioId(form.municipioId),
+      tipoProveedorId: validators.tipoProveedorId(form.tipoProveedorId),
+      contacto: validators.contacto(form.contacto),
+    };
 
-    setErrors({
-      tipoDoc: tipoDocError,
-      numeroDoc: numeroDocError,
-      nombre: nombreError,
-      email: emailError,
-      telefono: telefonoError,
-      direccion: direccionError,
-      ciudad: ciudadError,
-      departamento: departamentoError,
-      pais: paisError,
-      categoria: categoriaError,
-      contacto: contactoError,
-      notas: notasError,
-    });
+    setTouched(nextTouched);
+    setErrors(nextErrors);
 
-    if (
-      tipoDocError ||
-      numeroDocError ||
-      nombreError ||
-      emailError ||
-      telefonoError ||
-      direccionError ||
-      ciudadError ||
-      departamentoError ||
-      paisError ||
-      categoriaError ||
-      contactoError ||
-      notasError
-    ) {
-      toast.error("Por favor corrige los errores en el formulario");
+    const hasErrors = Object.values(nextErrors).some(Boolean);
+    if (hasErrors) {
+      toast.error("Por favor corrige los errores del formulario");
       return false;
     }
 
     return true;
   };
 
-  // Generar ID consecutivo robusto
-  const getNextProveedorId = () => {
-    const maxNum = proveedores.reduce((max, p) => {
-      const match = /^PROV-(\d+)$/.exec(p.id);
-      const num = match ? Number(match[1]) : 0;
-      return Number.isFinite(num) ? Math.max(max, num) : max;
-    }, 0);
+  const buildPayload = (): SaveProveedorPayload => ({
+    num_documento: form.numeroDoc.trim(),
+    nombre_empresa: form.nombre.trim(),
+    email: form.email.trim() || undefined,
+    telefono: form.telefono.trim() || undefined,
+    direccion: form.direccion.trim() || undefined,
+    nombre_contacto: form.contacto.trim() || undefined,
+    id_tipo_proveedor: Number(form.tipoProveedorId),
+    id_tipo_doc: Number(form.tipoDocId),
+    id_municipio: Number(form.municipioId),
+  });
 
-    return `PROV-${String(maxNum + 1).padStart(3, "0")}`;
+  const getSearchFilters = useCallback((term: string) => {
+    const normalized = term.trim().toLowerCase();
+
+    if (!normalized) return {};
+
+    if (["activo", "activos"].includes(normalized)) {
+      return { estado: "true" as const };
+    }
+
+    if (["inactivo", "inactivos", "desactivado", "desactivados"].includes(normalized)) {
+      return { estado: "false" as const };
+    }
+
+    return { q: term.trim() };
+  }, []);
+
+  const loadCatalogos = useCallback(async () => {
+    try {
+      setIsLoadingCatalogos(true);
+
+      const [tiposDocRes, tiposProveedorRes, municipiosRes] = await Promise.allSettled([
+        getTiposDocumentoOptions(),
+        getTiposProveedorOptions(),
+        getMunicipiosOptions(),
+      ]);
+
+      if (tiposDocRes.status === "fulfilled") {
+        setTiposDocumento(tiposDocRes.value);
+      } else {
+        console.error("Error cargando tipos de documento:", tiposDocRes.reason);
+        toast.error("No se pudieron cargar los tipos de documento");
+      }
+
+      if (tiposProveedorRes.status === "fulfilled") {
+        setTiposProveedor(tiposProveedorRes.value);
+      } else {
+        console.error("Error cargando tipos de proveedor:", tiposProveedorRes.reason);
+        toast.error("No se pudieron cargar los tipos de proveedor");
+      }
+
+      if (municipiosRes.status === "fulfilled") {
+        setMunicipios(municipiosRes.value);
+      } else {
+        console.error("Error cargando municipios:", municipiosRes.reason);
+        toast.error("No se pudieron cargar los municipios");
+      }
+    } finally {
+      setIsLoadingCatalogos(false);
+    }
+  }, []);
+
+  const loadProveedores = useCallback(
+    async (page: number, term: string) => {
+      try {
+        setIsLoadingList(true);
+
+        const response = await getProveedores({
+          page,
+          limit: ITEMS_PER_PAGE,
+          ...getSearchFilters(term),
+        });
+
+        setProveedores(response.data);
+        setPagination({
+          page: response.page,
+          limit: response.limit,
+          total: response.total,
+          pages: response.pages,
+        });
+
+        if (response.pages > 0 && page > response.pages) {
+          setCurrentPage(response.pages);
+        }
+      } catch (error) {
+        toast.error(getErrorMessage(error, "No se pudieron cargar los proveedores"));
+      } finally {
+        setIsLoadingList(false);
+      }
+    },
+    [getSearchFilters]
+  );
+
+  const loadProveedorDetalle = useCallback(
+    async (id: number) => {
+      try {
+        setIsLoadingDetalle(true);
+        const data = await getProveedorById(id);
+        setProveedorDetalle(data);
+      } catch (error) {
+        setProveedorDetalle(null);
+        toast.error(getErrorMessage(error, "No se pudo cargar el proveedor"));
+        closeToList();
+      } finally {
+        setIsLoadingDetalle(false);
+      }
+    },
+    [closeToList]
+  );
+
+  useEffect(() => {
+    void loadCatalogos();
+  }, [loadCatalogos]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearch(searchTerm.trim());
+    }, 300);
+
+    return () => window.clearTimeout(timeout);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch]);
+
+  useEffect(() => {
+    void loadProveedores(currentPage, debouncedSearch);
+  }, [currentPage, debouncedSearch, loadProveedores]);
+
+  useEffect(() => {
+    if (!isVer && !isEditar && !isEliminar) {
+      setProveedorDetalle(null);
+      return;
+    }
+
+    const id = Number(params.id);
+    if (!id || Number.isNaN(id)) {
+      closeToList();
+      return;
+    }
+
+    void loadProveedorDetalle(id);
+  }, [isVer, isEditar, isEliminar, params.id, loadProveedorDetalle, closeToList]);
+
+  useEffect(() => {
+    if (!isCrear) return;
+    resetForm();
+  }, [isCrear, resetForm]);
+
+  useEffect(() => {
+    if (!isEditar || !proveedorDetalle) return;
+
+    setForm({
+      tipoDocId: String(proveedorDetalle.idTipoDocumento),
+      numeroDoc: proveedorDetalle.numeroDocumento,
+      nombre: proveedorDetalle.nombre,
+      email: proveedorDetalle.email,
+      telefono: proveedorDetalle.telefono,
+      direccion: proveedorDetalle.direccion,
+      municipioId: String(proveedorDetalle.idMunicipio),
+      tipoProveedorId: String(proveedorDetalle.idTipoProveedor),
+      contacto: proveedorDetalle.contacto,
+    });
+
+    setErrors(EMPTY_ERRORS);
+    setTouched(EMPTY_TOUCHED);
+  }, [isEditar, proveedorDetalle]);
+
+  const totalPages = Math.max(pagination.pages || 1, 1);
+  const startIndex =
+    pagination.total === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
+  const endIndex =
+    pagination.total === 0 ? 0 : startIndex + proveedores.length - 1;
+
+  const handleView = (proveedor: ProveedorItem) => {
+    navigate(`/app/proveedores/${proveedor.id}/ver`);
   };
 
-  // Crear proveedor
-  const confirmCreate = () => {
+  const handleCreate = () => {
+    navigate("/app/proveedores/crear");
+  };
+
+  const handleEdit = (proveedor: ProveedorItem) => {
+    navigate(`/app/proveedores/${proveedor.id}/editar`);
+  };
+
+  const handleDelete = (proveedor: ProveedorItem) => {
+    navigate(`/app/proveedores/${proveedor.id}/eliminar`);
+  };
+
+  const handleToggleEstado = (proveedor: ProveedorItem) => {
+    setProveedorParaCambioEstado(proveedor);
+    setShowConfirmEstadoModal(true);
+  };
+
+  const handleConfirmEstado = async () => {
+    if (!proveedorParaCambioEstado || isSubmitting) return;
+
+    try {
+      setIsSubmitting(true);
+
+      if (proveedorParaCambioEstado.estado === "Activo") {
+        await disableProveedor(proveedorParaCambioEstado.id);
+        toast.success("Proveedor desactivado exitosamente");
+      } else {
+        await enableProveedor(proveedorParaCambioEstado.id);
+        toast.success("Proveedor activado exitosamente");
+      }
+
+      setShowConfirmEstadoModal(false);
+      setProveedorParaCambioEstado(null);
+
+      await loadProveedores(currentPage, debouncedSearch);
+
+      if (proveedorDetalle?.id === proveedorParaCambioEstado.id) {
+        await loadProveedorDetalle(proveedorParaCambioEstado.id);
+      }
+    } catch (error) {
+      toast.error(getErrorMessage(error, "No se pudo cambiar el estado del proveedor"));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const confirmCreate = async () => {
+    if (isSubmitting) return;
     if (!validateForm()) return;
 
-    const newProveedor: Proveedor = {
-      id: getNextProveedorId(),
-      tipoDocumento: formTipoDoc,
-      numeroDocumento: formNumeroDoc.trim(),
-      nombre: formNombre.trim(),
-      email: formEmail.trim(),
-      telefono: formTelefono.trim(),
-      direccion: formDireccion.trim(),
-      ciudad: formCiudad.trim(),
-      pais: formPais.trim(),
-      departamento: formDepartamento.trim(),
-      categoria: formCategoria.trim(),
-      contacto: formContacto.trim(),
-      notas: formNotas.trim(),
-      estado: "Activo",
-      fechaRegistro: new Date().toISOString().split("T")[0],
-      bodega: selectedBodega,
-    };
+    try {
+      setIsSubmitting(true);
 
-    setProveedores([...proveedores, newProveedor]);
-    closeToList();
-    setShowSuccessModal(true);
+      await createProveedor({
+        ...buildPayload(),
+        estado: true,
+      });
+
+      resetForm();
+      setSearchTerm("");
+      setDebouncedSearch("");
+      setCurrentPage(1);
+      await loadProveedores(1, "");
+
+      closeToList();
+      setShowSuccessModal(true);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "No se pudo crear el proveedor"));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  // Editar proveedor
-  const confirmEdit = () => {
-    if (!proveedorSeleccionado || !validateForm()) return;
+  const confirmEdit = async () => {
+    if (!proveedorDetalle || isSubmitting) return;
+    if (!validateForm()) return;
 
-    setProveedores(
-      proveedores.map((p) =>
-        p.id === proveedorSeleccionado.id
-          ? {
-            ...p,
-            tipoDocumento: formTipoDoc,
-            numeroDocumento: formNumeroDoc.trim(),
-            nombre: formNombre.trim(),
-            email: formEmail.trim(),
-            telefono: formTelefono.trim(),
-            direccion: formDireccion.trim(),
-            ciudad: formCiudad.trim(),
-            departamento: formDepartamento.trim(),
-            pais: formPais.trim(),
-            categoria: formCategoria.trim(),
-            contacto: formContacto.trim(),
-            notas: formNotas.trim(),
-          }
-          : p
-      )
+    try {
+      setIsSubmitting(true);
+
+      await updateProveedor(proveedorDetalle.id, buildPayload());
+
+      toast.success("Proveedor actualizado exitosamente");
+      await loadProveedores(currentPage, debouncedSearch);
+      closeToList();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "No se pudo actualizar el proveedor"));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!proveedorDetalle || isSubmitting) return;
+
+    try {
+      setIsSubmitting(true);
+
+      await disableProveedor(proveedorDetalle.id);
+
+      toast.success("Proveedor desactivado exitosamente");
+      await loadProveedores(currentPage, debouncedSearch);
+      closeToList();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "No se pudo desactivar el proveedor"));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const renderDetalleBody = () => {
+    if (isLoadingDetalle) {
+      return (
+        <div className="py-10 flex items-center justify-center gap-2 text-gray-500">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Cargando proveedor...
+        </div>
+      );
+    }
+
+    if (!proveedorDetalle) return null;
+
+    return (
+      <div className="space-y-4">
+        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-100">
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">
+            {proveedorDetalle.nombre}
+          </h3>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="bg-white text-xs">
+              {getTipoDocumentoLabel(proveedorDetalle)}: {proveedorDetalle.numeroDocumento}
+            </Badge>
+
+            <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100 text-xs">
+              {getTipoProveedorLabel(proveedorDetalle)}
+            </Badge>
+
+            <Badge
+              className={
+                proveedorDetalle.estado === "Activo"
+                  ? "bg-green-100 text-green-800 hover:bg-green-100 text-xs"
+                  : "bg-red-100 text-red-800 hover:bg-red-100 text-xs"
+              }
+            >
+              {proveedorDetalle.estado}
+            </Badge>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+            <div className="flex items-center gap-2 mb-1">
+              <Mail className="h-3.5 w-3.5 text-blue-600" />
+              <Label className="text-xs text-gray-500">Email</Label>
+            </div>
+            <p className="text-sm font-medium text-gray-900">
+              {proveedorDetalle.email || "No registrado"}
+            </p>
+          </div>
+
+          <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+            <div className="flex items-center gap-2 mb-1">
+              <Phone className="h-3.5 w-3.5 text-blue-600" />
+              <Label className="text-xs text-gray-500">Teléfono</Label>
+            </div>
+            <p className="text-sm font-medium text-gray-900">
+              {proveedorDetalle.telefono || "No registrado"}
+            </p>
+          </div>
+
+          <div className="col-span-2 bg-gray-50 rounded-lg p-3 border border-gray-200">
+            <div className="flex items-center gap-2 mb-1">
+              <User className="h-3.5 w-3.5 text-blue-600" />
+              <Label className="text-xs text-gray-500">Contacto Principal</Label>
+            </div>
+            <p className="text-sm font-medium text-gray-900">
+              {proveedorDetalle.contacto || "No registrado"}
+            </p>
+          </div>
+
+          <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+            <div className="flex items-center gap-2 mb-1">
+              <MapPin className="h-3.5 w-3.5 text-blue-600" />
+              <Label className="text-xs text-gray-500">Municipio</Label>
+            </div>
+            <p className="text-sm font-medium text-gray-900">
+              {getMunicipioLabel(proveedorDetalle)}
+            </p>
+          </div>
+
+          <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+            <div className="flex items-center gap-2 mb-1">
+              <MapPin className="h-3.5 w-3.5 text-blue-600" />
+              <Label className="text-xs text-gray-500">Departamento</Label>
+            </div>
+            <p className="text-sm font-medium text-gray-900">
+              {getDepartamentoLabel(proveedorDetalle)}
+            </p>
+          </div>
+
+          <div className="col-span-2 bg-gray-50 rounded-lg p-3 border border-gray-200">
+            <div className="flex items-center gap-2 mb-1">
+              <MapPin className="h-3.5 w-3.5 text-blue-600" />
+              <Label className="text-xs text-gray-500">Dirección</Label>
+            </div>
+            <p className="text-sm font-medium text-gray-900">
+              {proveedorDetalle.direccion || "No registrada"}
+            </p>
+          </div>
+        </div>
+      </div>
     );
-
-    toast.success("Proveedor actualizado exitosamente");
-    closeToList();
-  };
-
-  // Eliminar proveedor
-  const confirmDelete = () => {
-    if (!proveedorSeleccionado) return;
-
-    setProveedores(
-      proveedores.filter((p) => p.id !== proveedorSeleccionado.id)
-    );
-
-    toast.success("Proveedor eliminado exitosamente");
-    closeToList();
-  };
-
-  // Paginación
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-  };
-
-  const handleSuccessModalClose = () => {
-    setShowSuccessModal(false);
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h2 className="text-gray-900">Gestión de Proveedores</h2>
-        <p className="text-gray-600 mt-1">Administra la información de tus proveedores</p>
+        <p className="text-gray-600 mt-1">
+          Administra la información de tus proveedores
+        </p>
       </div>
 
-      {/* Search Bar and Action Buttons */}
       <div className="flex items-center gap-4">
         <div className="relative flex-1">
           <Search
@@ -842,7 +755,7 @@ export default function Proveedores() {
             size={20}
           />
           <Input
-            placeholder="Buscar por nombre, documento, email, categoría o estado (Activo/Inactivo)..."
+            placeholder="Buscar por nombre, documento, email, teléfono, contacto o estado..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
@@ -855,7 +768,6 @@ export default function Proveedores() {
         </Button>
       </div>
 
-      {/* Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <Table>
@@ -867,43 +779,57 @@ export default function Proveedores() {
                 <TableHead>N° Documento</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Teléfono</TableHead>
-                <TableHead>Categoría</TableHead>
+                <TableHead>Tipo Proveedor</TableHead>
                 <TableHead className="text-center">Estado</TableHead>
                 <TableHead className="text-right w-32">Acciones</TableHead>
               </TableRow>
             </TableHeader>
 
             <TableBody>
-              {currentProveedores.length === 0 ? (
+              {isLoadingList ? (
+                <TableRow>
+                  <TableCell colSpan={9} className="text-center py-8 text-gray-500">
+                    <div className="flex items-center justify-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Cargando proveedores...
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : proveedores.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={9} className="text-center py-8 text-gray-500">
                     No se encontraron proveedores
                   </TableCell>
                 </TableRow>
               ) : (
-                currentProveedores.map((proveedor, index) => (
+                proveedores.map((proveedor, index) => (
                   <TableRow key={proveedor.id} className="hover:bg-gray-50">
-                    <TableCell>{startIndex + index + 1}</TableCell>
+                    <TableCell>{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</TableCell>
 
                     <TableCell className="font-medium text-gray-900">
                       {proveedor.nombre}
                     </TableCell>
 
-                    <TableCell>{proveedor.tipoDocumento}</TableCell>
+                    <TableCell>{getTipoDocumentoLabel(proveedor)}</TableCell>
 
                     <TableCell className="font-mono text-sm">
                       {proveedor.numeroDocumento}
                     </TableCell>
 
-                    <TableCell className="text-gray-700">{proveedor.email}</TableCell>
-                    <TableCell className="text-gray-700">{proveedor.telefono}</TableCell>
+                    <TableCell className="text-gray-700">
+                      {proveedor.email || "—"}
+                    </TableCell>
+
+                    <TableCell className="text-gray-700">
+                      {proveedor.telefono || "—"}
+                    </TableCell>
 
                     <TableCell>
                       <Badge
                         variant="outline"
                         className="bg-blue-50 text-blue-700 border-blue-200"
                       >
-                        {proveedor.categoria}
+                        {getTipoProveedorLabel(proveedor)}
                       </Badge>
                     </TableCell>
 
@@ -912,10 +838,11 @@ export default function Proveedores() {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleToggleEstado(proveedor)}
-                        className={`h-7 ${proveedor.estado === "Activo"
-                          ? "bg-green-100 text-green-800 hover:bg-green-200"
-                          : "bg-red-100 text-red-800 hover:bg-red-200"
-                          }`}
+                        className={`h-7 ${
+                          proveedor.estado === "Activo"
+                            ? "bg-green-100 text-green-800 hover:bg-green-200"
+                            : "bg-red-100 text-red-800 hover:bg-red-200"
+                        }`}
                       >
                         {proveedor.estado}
                       </Button>
@@ -948,7 +875,7 @@ export default function Proveedores() {
                           size="icon"
                           onClick={() => handleDelete(proveedor)}
                           className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                          title="Eliminar"
+                          title="Desactivar"
                         >
                           <Trash2 size={16} />
                         </Button>
@@ -961,20 +888,18 @@ export default function Proveedores() {
           </Table>
         </div>
 
-        {/* Paginación */}
-        {filteredProveedores.length > 0 && (
+        {pagination.total > 0 && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
             <div className="text-sm text-gray-600">
-              Mostrando {startIndex + 1} - {Math.min(endIndex, filteredProveedores.length)} de{" "}
-              {filteredProveedores.length} proveedores
+              Mostrando {startIndex} - {endIndex} de {pagination.total} proveedores
             </div>
 
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1}
+                onClick={() => setCurrentPage((prev) => prev - 1)}
+                disabled={currentPage === 1 || isLoadingList}
                 className="h-8"
               >
                 <ChevronLeft size={16} />
@@ -987,8 +912,9 @@ export default function Proveedores() {
                     key={page}
                     variant={currentPage === page ? "default" : "outline"}
                     size="sm"
-                    onClick={() => handlePageChange(page)}
+                    onClick={() => setCurrentPage(page)}
                     className="h-8 w-8 p-0"
+                    disabled={isLoadingList}
                   >
                     {page}
                   </Button>
@@ -998,8 +924,8 @@ export default function Proveedores() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage((prev) => prev + 1)}
+                disabled={currentPage === totalPages || isLoadingList}
                 className="h-8"
               >
                 Siguiente
@@ -1010,7 +936,6 @@ export default function Proveedores() {
         )}
       </div>
 
-      {/* Modal Ver Detalles */}
       <Dialog
         open={isVer}
         onOpenChange={(open) => {
@@ -1032,113 +957,7 @@ export default function Proveedores() {
             </DialogDescription>
           </DialogHeader>
 
-          {proveedorSeleccionado && (
-            <div className="space-y-4">
-              {/* Información Principal */}
-              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-100">
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  {proveedorSeleccionado.nombre}
-                </h3>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline" className="bg-white text-xs">
-                    {proveedorSeleccionado.tipoDocumento}:{" "}
-                    {proveedorSeleccionado.numeroDocumento}
-                  </Badge>
-
-                  <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100 text-xs">
-                    {proveedorSeleccionado.categoria}
-                  </Badge>
-
-                  <Badge
-                    className={
-                      proveedorSeleccionado.estado === "Activo"
-                        ? "bg-green-100 text-green-800 hover:bg-green-100 text-xs"
-                        : "bg-red-100 text-red-800 hover:bg-red-100 text-xs"
-                    }
-                  >
-                    {proveedorSeleccionado.estado}
-                  </Badge>
-                </div>
-              </div>
-
-              {/* Grid de información */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Mail className="h-3.5 w-3.5 text-blue-600" />
-                    <Label className="text-xs text-gray-500">Email</Label>
-                  </div>
-                  <p className="text-sm font-medium text-gray-900">
-                    {proveedorSeleccionado.email}
-                  </p>
-                </div>
-
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Phone className="h-3.5 w-3.5 text-blue-600" />
-                    <Label className="text-xs text-gray-500">Teléfono</Label>
-                  </div>
-                  <p className="text-sm font-medium text-gray-900">
-                    {proveedorSeleccionado.telefono}
-                  </p>
-                </div>
-
-                <div className="col-span-2 bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <div className="flex items-center gap-2 mb-1">
-                    <User className="h-3.5 w-3.5 text-blue-600" />
-                    <Label className="text-xs text-gray-500">Contacto Principal</Label>
-                  </div>
-                  <p className="text-sm font-medium text-gray-900">
-                    {proveedorSeleccionado.contacto}
-                  </p>
-                </div>
-
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <div className="flex items-center gap-2 mb-1">
-                    <MapPin className="h-3.5 w-3.5 text-blue-600" />
-                    <Label className="text-xs text-gray-500">Ciudad</Label>
-                  </div>
-                  <p className="text-sm font-medium text-gray-900">
-                    {proveedorSeleccionado.ciudad}
-                  </p>
-                </div>
-
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <div className="flex items-center gap-2 mb-1">
-                    <MapPin className="h-3.5 w-3.5 text-blue-600" />
-                    <Label className="text-xs text-gray-500">Departamento</Label>
-                  </div>
-                  <p className="text-sm font-medium text-gray-900">
-                    {proveedorSeleccionado.departamento || "N/A"}
-                  </p>
-                </div>
-
-                <div className="col-span-2 bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <div className="flex items-center gap-2 mb-1">
-                    <MapPin className="h-3.5 w-3.5 text-blue-600" />
-                    <Label className="text-xs text-gray-500">Dirección</Label>
-                  </div>
-                  <p className="text-sm font-medium text-gray-900">
-                    {proveedorSeleccionado.direccion}
-                  </p>
-                </div>
-              </div>
-
-              {/* Notas */}
-              {proveedorSeleccionado.notas && (
-                <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
-                  <div className="flex items-center gap-2 mb-1">
-                    <FileText className="h-3.5 w-3.5 text-amber-600" />
-                    <Label className="text-xs text-gray-600">Notas</Label>
-                  </div>
-                  <p className="text-sm text-gray-700">
-                    {proveedorSeleccionado.notas}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
+          {renderDetalleBody()}
 
           <DialogFooter>
             <Button variant="outline" onClick={closeToList}>
@@ -1148,7 +967,6 @@ export default function Proveedores() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Crear Proveedor */}
       <Dialog
         open={isCrear}
         onOpenChange={(open) => {
@@ -1171,19 +989,40 @@ export default function Proveedores() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="create-tipo-doc">Tipo de Documento *</Label>
-                <Select value={formTipoDoc} onValueChange={handleTipoDocChange}>
-                  <SelectTrigger id="create-tipo-doc">
-                    <SelectValue />
+                <Select
+                  value={form.tipoDocId}
+                  onValueChange={(value) => {
+                    setFieldValue("tipoDocId", value);
+                    setTouched((prev) => ({ ...prev, tipoDocId: true }));
+                    setErrors((prev) => ({
+                      ...prev,
+                      tipoDocId: validators.tipoDocId(value),
+                    }));
+                  }}
+                  disabled={isLoadingCatalogos}
+                >
+                  <SelectTrigger
+                    id="create-tipo-doc"
+                    className={errors.tipoDocId && touched.tipoDocId ? "border-red-500" : ""}
+                  >
+                    <SelectValue
+                      placeholder={
+                        isLoadingCatalogos
+                          ? "Cargando tipos..."
+                          : "Selecciona un tipo de documento"
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="NIT">NIT</SelectItem>
-                    <SelectItem value="CC">Cédula de Ciudadanía</SelectItem>
-                    <SelectItem value="CE">Cédula de Extranjería</SelectItem>
-                    <SelectItem value="Pasaporte">Pasaporte</SelectItem>
+                    {tiposDocumento.map((tipo) => (
+                      <SelectItem key={tipo.value} value={tipo.value}>
+                        {tipo.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
-                {errors.tipoDoc && touched.tipoDoc && (
-                  <p className="text-red-500 text-sm mt-1">{errors.tipoDoc}</p>
+                {errors.tipoDocId && touched.tipoDocId && (
+                  <p className="text-red-500 text-sm mt-1">{errors.tipoDocId}</p>
                 )}
               </div>
 
@@ -1191,9 +1030,9 @@ export default function Proveedores() {
                 <Label htmlFor="create-numero-doc">N° de Documento *</Label>
                 <Input
                   id="create-numero-doc"
-                  value={formNumeroDoc}
-                  onChange={(e) => handleNumeroDocChange(e.target.value)}
-                  onBlur={handleNumeroDocBlur}
+                  value={form.numeroDoc}
+                  onChange={(e) => setFieldValue("numeroDoc", e.target.value)}
+                  onBlur={() => handleBlur("numeroDoc")}
                   placeholder="Ej: 900123456-7"
                   className={errors.numeroDoc && touched.numeroDoc ? "border-red-500" : ""}
                 />
@@ -1207,9 +1046,9 @@ export default function Proveedores() {
               <Label htmlFor="create-nombre">Nombre o Razón Social *</Label>
               <Input
                 id="create-nombre"
-                value={formNombre}
-                onChange={(e) => handleNombreChange(e.target.value)}
-                onBlur={handleNombreBlur}
+                value={form.nombre}
+                onChange={(e) => setFieldValue("nombre", e.target.value)}
+                onBlur={() => handleBlur("nombre")}
                 placeholder="Ej: Distribuciones Médicas S.A.S."
                 className={errors.nombre && touched.nombre ? "border-red-500" : ""}
               />
@@ -1220,13 +1059,13 @@ export default function Proveedores() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="create-email">Email *</Label>
+                <Label htmlFor="create-email">Email</Label>
                 <Input
                   id="create-email"
                   type="email"
-                  value={formEmail}
-                  onChange={(e) => handleEmailChange(e.target.value)}
-                  onBlur={handleEmailBlur}
+                  value={form.email}
+                  onChange={(e) => setFieldValue("email", e.target.value)}
+                  onBlur={() => handleBlur("email")}
                   placeholder="correo@ejemplo.com"
                   className={errors.email && touched.email ? "border-red-500" : ""}
                 />
@@ -1236,12 +1075,12 @@ export default function Proveedores() {
               </div>
 
               <div>
-                <Label htmlFor="create-telefono">Teléfono *</Label>
+                <Label htmlFor="create-telefono">Teléfono</Label>
                 <Input
                   id="create-telefono"
-                  value={formTelefono}
-                  onChange={(e) => handleTelefonoChange(e.target.value)}
-                  onBlur={handleTelefonoBlur}
+                  value={form.telefono}
+                  onChange={(e) => setFieldValue("telefono", e.target.value)}
+                  onBlur={() => handleBlur("telefono")}
                   placeholder="3001234567"
                   className={errors.telefono && touched.telefono ? "border-red-500" : ""}
                 />
@@ -1251,123 +1090,57 @@ export default function Proveedores() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <Label htmlFor="create-pais">País *</Label>
-                <Select value={formPais} onValueChange={handlePaisChange}>
-                  <SelectTrigger
-                    id="create-pais"
-                    className={errors.pais && touched.pais ? "border-red-500" : ""}
-                  >
-                    <SelectValue placeholder="Selecciona un país" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PAISES.map((pais) => (
-                      <SelectItem key={pais} value={pais}>
-                        {pais}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.pais && touched.pais && (
-                  <p className="text-red-500 text-sm mt-1">{errors.pais}</p>
-                )}
-              </div>
-
-              <div>
-                <Label htmlFor="create-departamento">Departamento *</Label>
-                <Select
-                  value={formDepartamento}
-                  onValueChange={handleDepartamentoChange}
-                  disabled={!formPais}
-                >
-                  <SelectTrigger
-                    id="create-departamento"
-                    className={errors.departamento && touched.departamento ? "border-red-500" : ""}
-                  >
-                    <SelectValue
-                      placeholder={
-                        !formPais
-                          ? "Primero selecciona un país"
-                          : "Selecciona un departamento"
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {departamentosDisponibles.map((departamento) => (
-                      <SelectItem key={departamento} value={departamento}>
-                        {departamento}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.departamento && touched.departamento && (
-                  <p className="text-red-500 text-sm mt-1">{errors.departamento}</p>
-                )}
-              </div>
-
-              <div>
-                <Label htmlFor="create-ciudad">Ciudad *</Label>
-                <Select
-                  value={formCiudad}
-                  onValueChange={handleCiudadChange}
-                  disabled={!formPais || !formDepartamento}
-                >
-                  <SelectTrigger
-                    id="create-ciudad"
-                    className={errors.ciudad && touched.ciudad ? "border-red-500" : ""}
-                  >
-                    <SelectValue
-                      placeholder={
-                        !formPais
-                          ? "Primero selecciona un país"
-                          : !formDepartamento
-                            ? "Primero selecciona un departamento"
-                            : "Selecciona una ciudad"
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ciudadesDisponibles.map((ciudad) => (
-                      <SelectItem key={ciudad} value={ciudad}>
-                        {ciudad}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.ciudad && touched.ciudad && (
-                  <p className="text-red-500 text-sm mt-1">{errors.ciudad}</p>
-                )}
-              </div>
-            </div>
-
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="create-categoria">Categoría *</Label>
-                <Select value={formCategoria} onValueChange={handleCategoriaChange}>
-                  <SelectTrigger id="create-categoria">
-                    <SelectValue placeholder="Selecciona una categoría" />
+                <Label htmlFor="create-tipo-proveedor">Tipo de Proveedor *</Label>
+                <Select
+                  value={form.tipoProveedorId}
+                  onValueChange={(value) => {
+                    setFieldValue("tipoProveedorId", value);
+                    setTouched((prev) => ({ ...prev, tipoProveedorId: true }));
+                    setErrors((prev) => ({
+                      ...prev,
+                      tipoProveedorId: validators.tipoProveedorId(value),
+                    }));
+                  }}
+                  disabled={isLoadingCatalogos}
+                >
+                  <SelectTrigger
+                    id="create-tipo-proveedor"
+                    className={
+                      errors.tipoProveedorId && touched.tipoProveedorId
+                        ? "border-red-500"
+                        : ""
+                    }
+                  >
+                    <SelectValue
+                      placeholder={
+                        isLoadingCatalogos
+                          ? "Cargando tipos..."
+                          : "Selecciona un tipo de proveedor"
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
-                    {CATEGORIAS_PROVEEDOR.map((categoria) => (
-                      <SelectItem key={categoria} value={categoria}>
-                        {categoria}
+                    {tiposProveedor.map((tipo) => (
+                      <SelectItem key={tipo.value} value={tipo.value}>
+                        {tipo.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {errors.categoria && touched.categoria && (
-                  <p className="text-red-500 text-sm mt-1">{errors.categoria}</p>
+                {errors.tipoProveedorId && touched.tipoProveedorId && (
+                  <p className="text-red-500 text-sm mt-1">{errors.tipoProveedorId}</p>
                 )}
               </div>
 
               <div>
-                <Label htmlFor="create-contacto">Contacto Principal *</Label>
+                <Label htmlFor="create-contacto">Contacto Principal</Label>
                 <Input
                   id="create-contacto"
-                  value={formContacto}
-                  onChange={(e) => handleContactoChange(e.target.value)}
-                  onBlur={handleContactoBlur}
+                  value={form.contacto}
+                  onChange={(e) => setFieldValue("contacto", e.target.value)}
+                  onBlur={() => handleBlur("contacto")}
                   placeholder="Nombre del contacto principal"
                   className={errors.contacto && touched.contacto ? "border-red-500" : ""}
                 />
@@ -1378,33 +1151,61 @@ export default function Proveedores() {
             </div>
 
             <div>
-              <Label htmlFor="create-direccion">Dirección *</Label>
+              <Label htmlFor="create-municipio">Municipio *</Label>
+              <Select
+                value={form.municipioId}
+                onValueChange={(value) => {
+                  setFieldValue("municipioId", value);
+                  setTouched((prev) => ({ ...prev, municipioId: true }));
+                  setErrors((prev) => ({
+                    ...prev,
+                    municipioId: validators.municipioId(value),
+                  }));
+                }}
+                disabled={isLoadingCatalogos}
+              >
+                <SelectTrigger
+                  id="create-municipio"
+                  className={errors.municipioId && touched.municipioId ? "border-red-500" : ""}
+                >
+                  <SelectValue
+                    placeholder={
+                      isLoadingCatalogos
+                        ? "Cargando municipios..."
+                        : "Selecciona un municipio"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {municipios.map((municipio) => (
+                    <SelectItem key={municipio.value} value={municipio.value}>
+                      {municipio.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedMunicipio?.departamento && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Departamento: {selectedMunicipio.departamento}
+                </p>
+              )}
+              {errors.municipioId && touched.municipioId && (
+                <p className="text-red-500 text-sm mt-1">{errors.municipioId}</p>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor="create-direccion">Dirección</Label>
               <Input
                 id="create-direccion"
-                value={formDireccion}
-                onChange={(e) => handleDireccionChange(e.target.value)}
-                onBlur={handleDireccionBlur}
+                value={form.direccion}
+                onChange={(e) => setFieldValue("direccion", e.target.value)}
+                onBlur={() => handleBlur("direccion")}
                 placeholder="Ej: Calle 123 # 45-67"
                 className={errors.direccion && touched.direccion ? "border-red-500" : ""}
               />
               {errors.direccion && touched.direccion && (
                 <p className="text-red-500 text-sm mt-1">{errors.direccion}</p>
-              )}
-            </div>
-
-            <div>
-              <Label htmlFor="create-notas">Notas (opcional)</Label>
-              <Textarea
-                id="create-notas"
-                value={formNotas}
-                onChange={(e) => handleNotasChange(e.target.value)}
-                onBlur={handleNotasBlur}
-                placeholder="Información adicional sobre el proveedor"
-                rows={3}
-                className={errors.notas && touched.notas ? "border-red-500" : ""}
-              />
-              {errors.notas && touched.notas && (
-                <p className="text-red-500 text-sm mt-1">{errors.notas}</p>
               )}
             </div>
           </div>
@@ -1413,14 +1214,18 @@ export default function Proveedores() {
             <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
-            <Button onClick={confirmCreate} className="bg-blue-600 hover:bg-blue-700">
+            <Button
+              onClick={confirmCreate}
+              className="bg-blue-600 hover:bg-blue-700"
+              disabled={isSubmitting || isLoadingCatalogos}
+            >
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Crear Proveedor
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal Editar Proveedor */}
       <Dialog
         open={isEditar}
         onOpenChange={(open) => {
@@ -1439,266 +1244,236 @@ export default function Proveedores() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="edit-tipo-doc">Tipo de Documento *</Label>
-                <Select value={formTipoDoc} onValueChange={handleTipoDocChange}>
-                  <SelectTrigger
-                    id="edit-tipo-doc"
-                    className={errors.tipoDoc && touched.tipoDoc ? "border-red-500" : ""}
+          {isLoadingDetalle ? (
+            <div className="py-10 flex items-center justify-center gap-2 text-gray-500">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Cargando proveedor...
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit-tipo-doc">Tipo de Documento *</Label>
+                  <Select
+                    value={form.tipoDocId}
+                    onValueChange={(value) => {
+                      setFieldValue("tipoDocId", value);
+                      setTouched((prev) => ({ ...prev, tipoDocId: true }));
+                      setErrors((prev) => ({
+                        ...prev,
+                        tipoDocId: validators.tipoDocId(value),
+                      }));
+                    }}
+                    disabled={isLoadingCatalogos}
                   >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="NIT">NIT</SelectItem>
-                    <SelectItem value="CC">Cédula de Ciudadanía</SelectItem>
-                    <SelectItem value="CE">Cédula de Extranjería</SelectItem>
-                    <SelectItem value="Pasaporte">Pasaporte</SelectItem>
-                  </SelectContent>
-                </Select>
-                {errors.tipoDoc && touched.tipoDoc && (
-                  <p className="text-red-500 text-sm mt-1">{errors.tipoDoc}</p>
-                )}
+                    <SelectTrigger
+                      id="edit-tipo-doc"
+                      className={errors.tipoDocId && touched.tipoDocId ? "border-red-500" : ""}
+                    >
+                      <SelectValue placeholder="Selecciona un tipo de documento" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {tiposDocumento.map((tipo) => (
+                        <SelectItem key={tipo.value} value={tipo.value}>
+                          {tipo.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors.tipoDocId && touched.tipoDocId && (
+                    <p className="text-red-500 text-sm mt-1">{errors.tipoDocId}</p>
+                  )}
+                </div>
+
+                <div>
+                  <Label htmlFor="edit-numero-doc">N° de Documento *</Label>
+                  <Input
+                    id="edit-numero-doc"
+                    value={form.numeroDoc}
+                    onChange={(e) => setFieldValue("numeroDoc", e.target.value)}
+                    onBlur={() => handleBlur("numeroDoc")}
+                    placeholder="Ej: 900123456-7"
+                    className={errors.numeroDoc && touched.numeroDoc ? "border-red-500" : ""}
+                  />
+                  {errors.numeroDoc && touched.numeroDoc && (
+                    <p className="text-red-500 text-sm mt-1">{errors.numeroDoc}</p>
+                  )}
+                </div>
               </div>
 
               <div>
-                <Label htmlFor="edit-numero-doc">N° de Documento *</Label>
+                <Label htmlFor="edit-nombre">Nombre o Razón Social *</Label>
                 <Input
-                  id="edit-numero-doc"
-                  value={formNumeroDoc}
-                  onChange={(e) => handleNumeroDocChange(e.target.value)}
-                  onBlur={handleNumeroDocBlur}
-                  placeholder="Ej: 900123456-7"
-                  className={errors.numeroDoc && touched.numeroDoc ? "border-red-500" : ""}
+                  id="edit-nombre"
+                  value={form.nombre}
+                  onChange={(e) => setFieldValue("nombre", e.target.value)}
+                  onBlur={() => handleBlur("nombre")}
+                  placeholder="Ej: Distribuciones Médicas S.A.S."
+                  className={errors.nombre && touched.nombre ? "border-red-500" : ""}
                 />
-                {errors.numeroDoc && touched.numeroDoc && (
-                  <p className="text-red-500 text-sm mt-1">{errors.numeroDoc}</p>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="edit-nombre">Nombre o Razón Social *</Label>
-              <Input
-                id="edit-nombre"
-                value={formNombre}
-                onChange={(e) => handleNombreChange(e.target.value)}
-                onBlur={handleNombreBlur}
-                placeholder="Ej: Distribuciones Médicas S.A.S."
-                className={errors.nombre && touched.nombre ? "border-red-500" : ""}
-              />
-              {errors.nombre && touched.nombre && (
-                <p className="text-red-500 text-sm mt-1">{errors.nombre}</p>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="edit-email">Email *</Label>
-                <Input
-                  id="edit-email"
-                  type="email"
-                  value={formEmail}
-                  onChange={(e) => handleEmailChange(e.target.value)}
-                  onBlur={handleEmailBlur}
-                  placeholder="correo@ejemplo.com"
-                  className={errors.email && touched.email ? "border-red-500" : ""}
-                />
-                {errors.email && touched.email && (
-                  <p className="text-red-500 text-sm mt-1">{errors.email}</p>
+                {errors.nombre && touched.nombre && (
+                  <p className="text-red-500 text-sm mt-1">{errors.nombre}</p>
                 )}
               </div>
 
-              <div>
-                <Label htmlFor="edit-telefono">Teléfono *</Label>
-                <Input
-                  id="edit-telefono"
-                  value={formTelefono}
-                  onChange={(e) => handleTelefonoChange(e.target.value)}
-                  onBlur={handleTelefonoBlur}
-                  placeholder="3001234567"
-                  className={errors.telefono && touched.telefono ? "border-red-500" : ""}
-                />
-                {errors.telefono && touched.telefono && (
-                  <p className="text-red-500 text-sm mt-1">{errors.telefono}</p>
-                )}
-              </div>
-            </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit-email">Email</Label>
+                  <Input
+                    id="edit-email"
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => setFieldValue("email", e.target.value)}
+                    onBlur={() => handleBlur("email")}
+                    placeholder="correo@ejemplo.com"
+                    className={errors.email && touched.email ? "border-red-500" : ""}
+                  />
+                  {errors.email && touched.email && (
+                    <p className="text-red-500 text-sm mt-1">{errors.email}</p>
+                  )}
+                </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <Label htmlFor="edit-pais">País *</Label>
-                <Select value={formPais} onValueChange={handlePaisChange}>
-                  <SelectTrigger
-                    id="edit-pais"
-                    className={errors.pais && touched.pais ? "border-red-500" : ""}
+                <div>
+                  <Label htmlFor="edit-telefono">Teléfono</Label>
+                  <Input
+                    id="edit-telefono"
+                    value={form.telefono}
+                    onChange={(e) => setFieldValue("telefono", e.target.value)}
+                    onBlur={() => handleBlur("telefono")}
+                    placeholder="3001234567"
+                    className={errors.telefono && touched.telefono ? "border-red-500" : ""}
+                  />
+                  {errors.telefono && touched.telefono && (
+                    <p className="text-red-500 text-sm mt-1">{errors.telefono}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit-tipo-proveedor">Tipo de Proveedor *</Label>
+                  <Select
+                    value={form.tipoProveedorId}
+                    onValueChange={(value) => {
+                      setFieldValue("tipoProveedorId", value);
+                      setTouched((prev) => ({ ...prev, tipoProveedorId: true }));
+                      setErrors((prev) => ({
+                        ...prev,
+                        tipoProveedorId: validators.tipoProveedorId(value),
+                      }));
+                    }}
+                    disabled={isLoadingCatalogos}
                   >
-                    <SelectValue placeholder="Selecciona un país" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PAISES.map((pais) => (
-                      <SelectItem key={pais} value={pais}>
-                        {pais}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.pais && touched.pais && (
-                  <p className="text-red-500 text-sm mt-1">{errors.pais}</p>
-                )}
+                    <SelectTrigger
+                      id="edit-tipo-proveedor"
+                      className={
+                        errors.tipoProveedorId && touched.tipoProveedorId
+                          ? "border-red-500"
+                          : ""
+                      }
+                    >
+                      <SelectValue placeholder="Selecciona un tipo de proveedor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {tiposProveedor.map((tipo) => (
+                        <SelectItem key={tipo.value} value={tipo.value}>
+                          {tipo.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors.tipoProveedorId && touched.tipoProveedorId && (
+                    <p className="text-red-500 text-sm mt-1">{errors.tipoProveedorId}</p>
+                  )}
+                </div>
+
+                <div>
+                  <Label htmlFor="edit-contacto">Contacto Principal</Label>
+                  <Input
+                    id="edit-contacto"
+                    value={form.contacto}
+                    onChange={(e) => setFieldValue("contacto", e.target.value)}
+                    onBlur={() => handleBlur("contacto")}
+                    placeholder="Nombre del contacto principal"
+                    className={errors.contacto && touched.contacto ? "border-red-500" : ""}
+                  />
+                  {errors.contacto && touched.contacto && (
+                    <p className="text-red-500 text-sm mt-1">{errors.contacto}</p>
+                  )}
+                </div>
               </div>
 
               <div>
-                <Label htmlFor="edit-departamento">Departamento *</Label>
+                <Label htmlFor="edit-municipio">Municipio *</Label>
                 <Select
-                  value={formDepartamento}
-                  onValueChange={handleDepartamentoChange}
-                  disabled={!formPais}
+                  value={form.municipioId}
+                  onValueChange={(value) => {
+                    setFieldValue("municipioId", value);
+                    setTouched((prev) => ({ ...prev, municipioId: true }));
+                    setErrors((prev) => ({
+                      ...prev,
+                      municipioId: validators.municipioId(value),
+                    }));
+                  }}
+                  disabled={isLoadingCatalogos}
                 >
                   <SelectTrigger
-                    id="edit-departamento"
-                    className={errors.departamento && touched.departamento ? "border-red-500" : ""}
+                    id="edit-municipio"
+                    className={errors.municipioId && touched.municipioId ? "border-red-500" : ""}
                   >
-                    <SelectValue
-                      placeholder={
-                        !formPais
-                          ? "Primero selecciona un país"
-                          : "Selecciona un departamento"
-                      }
-                    />
+                    <SelectValue placeholder="Selecciona un municipio" />
                   </SelectTrigger>
                   <SelectContent>
-                    {departamentosDisponibles.map((departamento) => (
-                      <SelectItem key={departamento} value={departamento}>
-                        {departamento}
+                    {municipios.map((municipio) => (
+                      <SelectItem key={municipio.value} value={municipio.value}>
+                        {municipio.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {errors.departamento && touched.departamento && (
-                  <p className="text-red-500 text-sm mt-1">{errors.departamento}</p>
+                {selectedMunicipio?.departamento && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Departamento: {selectedMunicipio.departamento}
+                  </p>
+                )}
+                {errors.municipioId && touched.municipioId && (
+                  <p className="text-red-500 text-sm mt-1">{errors.municipioId}</p>
                 )}
               </div>
 
               <div>
-                <Label htmlFor="edit-ciudad">Ciudad *</Label>
-                <Select
-                  value={formCiudad}
-                  onValueChange={handleCiudadChange}
-                  disabled={!formPais || !formDepartamento}
-                >
-                  <SelectTrigger
-                    id="edit-ciudad"
-                    className={errors.ciudad && touched.ciudad ? "border-red-500" : ""}
-                  >
-                    <SelectValue
-                      placeholder={
-                        !formPais
-                          ? "Primero selecciona un país"
-                          : !formDepartamento
-                            ? "Primero selecciona un departamento"
-                            : "Selecciona una ciudad"
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ciudadesDisponibles.map((ciudad) => (
-                      <SelectItem key={ciudad} value={ciudad}>
-                        {ciudad}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.ciudad && touched.ciudad && (
-                  <p className="text-red-500 text-sm mt-1">{errors.ciudad}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="edit-categoria">Categoría *</Label>
-                <Select value={formCategoria} onValueChange={handleCategoriaChange}>
-                  <SelectTrigger
-                    id="edit-categoria"
-                    className={errors.categoria && touched.categoria ? "border-red-500" : ""}
-                  >
-                    <SelectValue placeholder="Selecciona una categoría" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CATEGORIAS_PROVEEDOR.map((categoria) => (
-                      <SelectItem key={categoria} value={categoria}>
-                        {categoria}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.categoria && touched.categoria && (
-                  <p className="text-red-500 text-sm mt-1">{errors.categoria}</p>
-                )}
-              </div>
-
-              <div>
-                <Label htmlFor="edit-contacto">Contacto Principal *</Label>
+                <Label htmlFor="edit-direccion">Dirección</Label>
                 <Input
-                  id="edit-contacto"
-                  value={formContacto}
-                  onChange={(e) => handleContactoChange(e.target.value)}
-                  onBlur={handleContactoBlur}
-                  placeholder="Nombre del contacto principal"
-                  className={errors.contacto && touched.contacto ? "border-red-500" : ""}
+                  id="edit-direccion"
+                  value={form.direccion}
+                  onChange={(e) => setFieldValue("direccion", e.target.value)}
+                  onBlur={() => handleBlur("direccion")}
+                  placeholder="Ej: Calle 123 # 45-67"
+                  className={errors.direccion && touched.direccion ? "border-red-500" : ""}
                 />
-                {errors.contacto && touched.contacto && (
-                  <p className="text-red-500 text-sm mt-1">{errors.contacto}</p>
+                {errors.direccion && touched.direccion && (
+                  <p className="text-red-500 text-sm mt-1">{errors.direccion}</p>
                 )}
               </div>
             </div>
-
-            <div>
-              <Label htmlFor="edit-direccion">Dirección *</Label>
-              <Input
-                id="edit-direccion"
-                value={formDireccion}
-                onChange={(e) => handleDireccionChange(e.target.value)}
-                onBlur={handleDireccionBlur}
-                placeholder="Ej: Calle 123 # 45-67"
-                className={errors.direccion && touched.direccion ? "border-red-500" : ""}
-              />
-              {errors.direccion && touched.direccion && (
-                <p className="text-red-500 text-sm mt-1">{errors.direccion}</p>
-              )}
-            </div>
-
-            <div>
-              <Label htmlFor="edit-notas">Notas (opcional)</Label>
-              <Textarea
-                id="edit-notas"
-                value={formNotas}
-                onChange={(e) => handleNotasChange(e.target.value)}
-                onBlur={handleNotasBlur}
-                placeholder="Información adicional sobre el proveedor"
-                rows={3}
-                className={errors.notas && touched.notas ? "border-red-500" : ""}
-              />
-              {errors.notas && touched.notas && (
-                <p className="text-red-500 text-sm mt-1">{errors.notas}</p>
-              )}
-            </div>
-          </div>
+          )}
 
           <DialogFooter>
             <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
-            <Button onClick={confirmEdit} className="bg-orange-600 hover:bg-orange-700">
+            <Button
+              onClick={confirmEdit}
+              className="bg-orange-600 hover:bg-orange-700"
+              disabled={isSubmitting || isLoadingDetalle || isLoadingCatalogos}
+            >
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Guardar Cambios
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal Eliminar Proveedor */}
       <Dialog
         open={isEliminar}
         onOpenChange={(open) => {
@@ -1710,21 +1485,19 @@ export default function Proveedores() {
           onInteractOutside={(e) => e.preventDefault()}
         >
           <DialogHeader>
-            <DialogTitle>Eliminar Proveedor</DialogTitle>
+            <DialogTitle>Desactivar Proveedor</DialogTitle>
             <DialogDescription id="delete-proveedor-description">
-              ¿Estás seguro de que deseas eliminar este proveedor? Esta acción no se puede deshacer.
+              ¿Estás seguro de que deseas desactivar este proveedor?
             </DialogDescription>
           </DialogHeader>
 
-          {proveedorSeleccionado && (
+          {proveedorDetalle && (
             <div className="py-4">
               <p className="text-gray-700">
-                Proveedor:{" "}
-                <span className="font-semibold">{proveedorSeleccionado.nombre}</span>
+                Proveedor: <span className="font-semibold">{proveedorDetalle.nombre}</span>
               </p>
               <p className="text-gray-600 text-sm mt-1">
-                {proveedorSeleccionado.tipoDocumento}:{" "}
-                {proveedorSeleccionado.numeroDocumento}
+                {getTipoDocumentoLabel(proveedorDetalle)}: {proveedorDetalle.numeroDocumento}
               </p>
             </div>
           )}
@@ -1733,14 +1506,18 @@ export default function Proveedores() {
             <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
-            <Button variant="destructive" onClick={confirmDelete}>
-              Eliminar
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={isSubmitting}
+            >
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Desactivar
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal Confirmación Cambio de Estado */}
       <Dialog
         open={showConfirmEstadoModal}
         onOpenChange={setShowConfirmEstadoModal}
@@ -1759,18 +1536,17 @@ export default function Proveedores() {
           <div className="space-y-3 py-4">
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Proveedor:</span>
-              <span className="font-medium">
-                {proveedorParaCambioEstado?.nombre}
-              </span>
+              <span className="font-medium">{proveedorParaCambioEstado?.nombre}</span>
             </div>
 
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Estado Actual:</span>
               <span
-                className={`font-medium ${proveedorParaCambioEstado?.estado === "Activo"
-                  ? "text-green-700"
-                  : "text-red-700"
-                  }`}
+                className={`font-medium ${
+                  proveedorParaCambioEstado?.estado === "Activo"
+                    ? "text-green-700"
+                    : "text-red-700"
+                }`}
               >
                 {proveedorParaCambioEstado?.estado}
               </span>
@@ -1779,10 +1555,11 @@ export default function Proveedores() {
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Nuevo Estado:</span>
               <span
-                className={`font-medium ${proveedorParaCambioEstado?.estado === "Inactivo"
-                  ? "text-green-700"
-                  : "text-red-700"
-                  }`}
+                className={`font-medium ${
+                  proveedorParaCambioEstado?.estado === "Inactivo"
+                    ? "text-green-700"
+                    : "text-red-700"
+                }`}
               >
                 {proveedorParaCambioEstado?.estado === "Activo"
                   ? "Inactivo"
@@ -1802,14 +1579,15 @@ export default function Proveedores() {
             <Button
               onClick={handleConfirmEstado}
               className="bg-blue-600 hover:bg-blue-700"
+              disabled={isSubmitting}
             >
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Confirmar
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Éxito */}
       <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
         <DialogContent
           className="max-w-lg"
@@ -1830,9 +1608,7 @@ export default function Proveedores() {
               </div>
             </div>
 
-            <DialogTitle className="text-center">
-              ¡Registro Exitoso!
-            </DialogTitle>
+            <DialogTitle className="text-center">¡Registro Exitoso!</DialogTitle>
 
             <DialogDescription className="text-center">
               El proveedor ha sido creado correctamente en el sistema
@@ -1841,7 +1617,7 @@ export default function Proveedores() {
 
           <DialogFooter className="flex justify-center">
             <Button
-              onClick={handleSuccessModalClose}
+              onClick={() => setShowSuccessModal(false)}
               className="bg-green-600 hover:bg-green-700"
             >
               Aceptar
