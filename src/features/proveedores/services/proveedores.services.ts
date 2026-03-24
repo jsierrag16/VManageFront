@@ -198,30 +198,11 @@ export const getTiposProveedorOptions = async (): Promise<CatalogOption[]> => {
 };
 
 export const getMunicipiosOptions = async (): Promise<MunicipioOption[]> => {
-  const raw = await getRequestFirstSuccess<any>([
-    {
-      url: "/municipios",
-      config: { params: cleanParams({ includeRefs: "true", limit: 5000 }) },
-    },
-    {
-      url: "/municipios",
-      config: { params: cleanParams({ includeDepartamento: "true", limit: 5000 }) },
-    },
-    {
-      url: "/municipios",
-      config: { params: cleanParams({ limit: 5000 }) },
-    },
-    {
-      url: "/municipio",
-      config: { params: cleanParams({ includeRefs: "true", limit: 5000 }) },
-    },
-    {
-      url: "/municipio",
-      config: { params: cleanParams({ limit: 5000 }) },
-    },
-  ]);
+  const response = await api.get("/municipios");
 
-  const items = extractArray(raw).map(mapMunicipioOption);
+  const items = extractArray(response.data)
+    .map(mapMunicipioOption)
+    .filter((item) => item.value && item.nombre);
 
   return sortOptions(items);
 };
