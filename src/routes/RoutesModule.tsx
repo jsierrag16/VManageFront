@@ -228,7 +228,7 @@ export default function RoutesModule() {
           })}
 
           {buildCrudRoutes({
-            basePath: "compras",
+            basePath: "ordenes-compra",
             element: <Compras />,
             modulo: "compras",
             submodulo: "ordenesCompra",
@@ -237,7 +237,7 @@ export default function RoutesModule() {
           })}
 
           {buildCrudRoutes({
-            basePath: "remcompras",
+            basePath: "remisiones-compra",
             element: <RemisionesCompra />,
             modulo: "compras",
             submodulo: "remisionesCompra",
@@ -263,7 +263,7 @@ export default function RoutesModule() {
           })}
 
           {buildCrudRoutes({
-            basePath: "ordenes",
+            basePath: "ordenes-venta",
             element: <OrdenesVenta />,
             modulo: "ventas",
             submodulo: "ordenesVenta",
@@ -272,7 +272,7 @@ export default function RoutesModule() {
           })}
 
           {buildCrudRoutes({
-            basePath: "remisiones",
+            basePath: "remisiones-venta",
             element: <Remisiones />,
             modulo: "ventas",
             submodulo: "remisionesVenta",
@@ -281,7 +281,7 @@ export default function RoutesModule() {
           })}
 
           {buildCrudRoutes({
-            basePath: "pagos",
+            basePath: "pagos-abonos",
             element: <PagosAbonos />,
             modulo: "ventas",
             submodulo: "pagos",

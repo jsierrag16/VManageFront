@@ -414,13 +414,13 @@ export default function RemisionesCompra() {
   const location = useLocation();
   const params = useParams<{ id: string }>();
 
-  const isCrear = location.pathname.endsWith("/remcompras/crear");
+  const isCrear = location.pathname.endsWith("/remisiones-compra/crear");
   const isVer = location.pathname.endsWith("/ver");
   const isEditar = location.pathname.endsWith("/editar");
   const isAnular = location.pathname.endsWith("/anular");
-  const isListRoute = location.pathname === "/app/remcompras";
+  const isListRoute = location.pathname === "/app/remisiones-compra";
 
-  const closeToList = () => navigate("/app/remcompras");
+  const closeToList = () => navigate("/app/remisiones-compra");
 
   const [loadingPage, setLoadingPage] = useState(false);
   const [loadingDetalleRemision, setLoadingDetalleRemision] = useState(false);
@@ -762,11 +762,11 @@ export default function RemisionesCompra() {
   }, [selectedCompra, items]);
 
   const handleView = (r: RemisionCompraUI) => {
-    navigate(`/app/remcompras/${r.id}/ver`);
+    navigate(`/app/remisiones-compra/${r.id}/ver`);
   };
 
   const handleCreate = () => {
-    navigate("/app/remcompras/crear");
+    navigate("/app/remisiones-compra/crear");
   };
 
   const handleEdit = (r: RemisionCompraUI) => {
@@ -778,7 +778,7 @@ export default function RemisionesCompra() {
       toast.info("No puedes editar una remisión anulada");
       return;
     }
-    navigate(`/app/remcompras/${r.id}/editar`);
+    navigate(`/app/remisiones-compra/${r.id}/editar`);
   };
 
   const handleAnular = (r: RemisionCompraUI) => {
@@ -790,7 +790,7 @@ export default function RemisionesCompra() {
       toast.info("No debes anular una remisión que ya aplicó existencias");
       return;
     }
-    navigate(`/app/remcompras/${r.id}/anular`);
+    navigate(`/app/remisiones-compra/${r.id}/anular`);
   };
 
   const handleOrdenCompraChange = async (idCompraValue: string) => {
@@ -998,7 +998,7 @@ export default function RemisionesCompra() {
       });
 
       triggerListReload();
-      navigate("/app/remcompras", { replace: true });
+      navigate("/app/remisiones-compra", { replace: true });
       toast.success("Remisión de compra actualizada exitosamente");
     } catch (error) {
       toast.error(getErrorMessage(error, "No fue posible actualizar la remisión"));
@@ -1030,7 +1030,7 @@ export default function RemisionesCompra() {
       });
 
       triggerListReload();
-      navigate("/app/remcompras", { replace: true });
+      navigate("/app/remisiones-compra", { replace: true });
       toast.success("Remisión de compra anulada exitosamente");
     } catch (error) {
       toast.error(getErrorMessage(error, "No fue posible anular la remisión"));
@@ -1097,7 +1097,7 @@ export default function RemisionesCompra() {
       setNuevoEstadoLabel(null);
 
       triggerListReload();
-      navigate("/app/remcompras", { replace: true });
+      navigate("/app/remisiones-compra", { replace: true });
 
       toast.success(
         "Estado actualizado correctamente y existencias aplicadas desde backend"
@@ -1112,7 +1112,7 @@ export default function RemisionesCompra() {
   const handleSuccessModalClose = () => {
     setShowSuccessModal(false);
     setLastCreatedCode("");
-    navigate("/app/remcompras", { replace: true });
+    navigate("/app/remisiones-compra", { replace: true });
   };
 
 const generateRemisionPDF = (remision: RemisionCompraUI) => {

@@ -111,19 +111,19 @@ export default function Compras() {
   const selectedBodega = (outlet as any)?.selectedBodegaNombre ?? "";
   const selectedBodegaId = (outlet as any)?.selectedBodegaId;
 
-  const isCrear = location.pathname.endsWith("/compras/crear");
+  const isCrear = location.pathname.endsWith("/ordenes-compra/crear");
   const isVer = location.pathname.endsWith("/ver");
   const isEditar = location.pathname.endsWith("/editar");
   const isAnular = location.pathname.endsWith("/anular");
 
-  const closeToList = useCallback(() => navigate("/app/compras"), [navigate]);
+  const closeToList = useCallback(() => navigate("/app/ordenes-compra"), [navigate]);
 
   const handleView = (c: Compra) => {
-    navigate(`/app/compras/${c.id}/ver`);
+    navigate(`/app/ordenes-compra/${c.id}/ver`);
   };
 
   const handleCreate = () => {
-    navigate("/app/compras/crear");
+    navigate("/app/ordenes-compra/crear");
   };
 
   const handleEdit = (c: Compra) => {
@@ -137,7 +137,7 @@ export default function Compras() {
       return;
     }
 
-    navigate(`/app/compras/${c.id}/editar`);
+    navigate(`/app/ordenes-compra/${c.id}/editar`);
   };
 
   const handleAnular = (c: Compra) => {
@@ -151,7 +151,7 @@ export default function Compras() {
       return;
     }
 
-    navigate(`/app/compras/${c.id}/anular`);
+    navigate(`/app/ordenes-compra/${c.id}/anular`);
   };
 
   const handleCantidadProductoChange = (value: string) => {
