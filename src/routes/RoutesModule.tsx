@@ -7,24 +7,23 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { PublicRoute } from "./components/PublicRoute";
 
 // Páginas
-import Login from "@/features/auth/pages/login";
+import Login from "@/features/auth/pages/Login";
 import RestablecerContrasena from "@/features/auth/pages/RestablecerContrasena";
 import Dashboard from "@/features/dashboard/pages/Dashboard";
-import Bodegas from "@/features/bodegas/pages/Bodegas";
-import Productos from "@/features/productos/pages/Productos";
-import Traslados from "@/features/traslados/pages/Traslados";
-import Perfil from "@/features/perfil/pages/Perfil";
+import Bodegas from "@/features/existencias/bodegas/pages/Bodegas";
+import Productos from "@/features/existencias/productos/pages/Productos";
+import Traslados from "@/features/existencias/traslados/pages/Traslados";
+import Perfil from "@/features/usuarios/perfil/pages/Perfil";
 import Usuarios from "@/features/usuarios/pages/Usuarios";
-import Roles from "@/features/roles/pages/Roles";
-import Proveedores from "@/features/proveedores/pages/Proveedores";
-import Compras from "@/features/compras/pages/Compras";
-import RemisionesCompra from "@/features/remisiones/pages/RemisionesCompra";
-import Clientes from "@/features/clientes/pages/Clientes";
-import Cotizaciones from "@/features/cotizaciones/pages/Cotizaciones";
-// import Ordenes from "@/features/ordenes/pages/Ordenes";
-import OrdenesVenta from "@/features/ordenes-venta/pages/OrdenesVenta";
-import Remisiones from "@/features/remisiones/pages/Remisiones";
-import PagosAbonos from "@/features/pagosAbonos/pages/PagosAbonos";
+import Roles from "@/features/configuracion/roles/pages/Roles";
+import Proveedores from "@/features/compras/proveedores/pages/Proveedores";
+import Compras from "@/features/compras/ordenes-compra/pages/OrdenesCompra";
+import RemisionesCompra from "@/features/compras/remisiones-compra/pages/RemisionesCompra";
+import Clientes from "@/features/ventas/clientes/pages/Clientes";
+import Cotizaciones from "@/features/ventas/cotizaciones/pages/Cotizaciones";
+import OrdenesVenta from "@/features/ventas/ordenes-venta/pages/OrdenesVenta";
+import Remisiones from "@/features/ventas/remisiones-venta/pages/RemisionesVenta";
+import PagosAbonos from "@/features/ventas/pagos-abonos/pages/PagosAbonos";
 
 // Layout
 import MainLayout from "@/layouts/MainLayout";

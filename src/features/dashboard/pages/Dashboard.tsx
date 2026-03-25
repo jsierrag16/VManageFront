@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
 import { toast } from "sonner";
 import { useAuth } from "../../../shared/context/AuthContext";
-import { getBodegas, type Bodega } from "../../bodegas/services/bodegas.services";
+import { getBodegas, type Bodega } from "../../existencias/bodegas/services/bodegas.services";
 
 // Componentes
 import { StatsCard } from "../components/StatsCard";
