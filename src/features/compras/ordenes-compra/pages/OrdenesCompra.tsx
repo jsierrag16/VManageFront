@@ -60,7 +60,7 @@ import type { AppOutletContext } from "../../../../layouts/MainLayout";
 import {
   ESTADO_COMPRA_IDS,
   getFechaActual,
-} from "../services/compras.mapper";
+} from "../services/ordenes-compra.mapper";
 
 import {
   comprasService,
@@ -71,7 +71,7 @@ import {
   type ProductoOrden,
   type CompraCreatePayload,
   type ProveedorOption,
-} from "../services/compras.services";
+} from "../services/ordenes-compra.services";
 
 export default function Compras() {
   const [searchTerm, setSearchTerm] = useState("");

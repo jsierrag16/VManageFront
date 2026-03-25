@@ -376,26 +376,11 @@ export const comprasService = {
       ivasRes,
       bodegasRes,
     ] = await Promise.allSettled([
-      getRequestFirstSuccess([
-        { url: "/proveedores" },
-        { url: "/proveedor" },
-      ]),
-      getRequestFirstSuccess([
-        { url: "/productos" },
-        { url: "/producto" },
-      ]),
-      getRequestFirstSuccess([
-        { url: "/terminos-pago" },
-        { url: "/termino-pago" },
-      ]),
-      getRequestFirstSuccess([
-        { url: "/ivas" },
-        { url: "/iva" },
-      ]),
-      getRequestFirstSuccess([
-        { url: "/bodegas" },
-        { url: "/bodega" },
-      ]),
+      getRequestFirstSuccess([{ url: "/proveedor" }]),
+      getRequestFirstSuccess([{ url: "/producto" }]),
+      getRequestFirstSuccess([{ url: "/termino-pago" }]),
+      getRequestFirstSuccess([{ url: "/iva" }]),
+      getRequestFirstSuccess([{ url: "/bodega" }]),
     ]);
 
     const proveedores =

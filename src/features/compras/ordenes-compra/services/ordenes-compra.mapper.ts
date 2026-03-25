@@ -4,7 +4,7 @@ import type {
   IvaOption,
   ProveedorOption,
   ProductoOrden,
-} from "./compras.types";
+} from "./ordenes-compra.types";
 
 type RawRecord = Record<string, any>;
 
