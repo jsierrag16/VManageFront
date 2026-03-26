@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Home,
@@ -59,25 +59,51 @@ export function Sidebar({
     });
   };
 
+  const getFirstSubmenuPath = (itemId: string) => {
+    if (itemId === "inventario") return inventarioSubItems[0]?.path;
+    if (itemId === "compras") return comprasSubItems[0]?.path;
+    if (itemId === "ventas") return ventasSubItems[0]?.path;
+    if (itemId === "configuracion") return configuracionSubItems[0]?.path;
+    return null;
+  };
+
   const handleMenuClick = (itemId: string) => {
-    if (itemId === "inventario") toggleSubmenu("inventario");
-    else if (itemId === "compras") toggleSubmenu("compras");
-    else if (itemId === "ventas") toggleSubmenu("ventas");
-    else if (itemId === "configuracion") toggleSubmenu("configuracion");
-    else {
-      setExpanded({
-        inventario: false,
-        compras: false,
-        ventas: false,
-        configuracion: false,
-      });
+    const isParentModule =
+      itemId === "inventario" ||
+      itemId === "compras" ||
+      itemId === "ventas" ||
+      itemId === "configuracion";
 
-      if (itemId === "dashboard") onNavigate("/app");
-      else if (itemId === "usuarios") onNavigate("/app/usuarios");
-      else onNavigate("/app");
+    if (isParentModule) {
+      if (!isOpen) {
+        const firstPath = getFirstSubmenuPath(itemId);
+        if (firstPath) {
+          onNavigate(firstPath);
+          onCloseMobile();
+        }
+        return;
+      }
 
-      onCloseMobile();
+      if (itemId === "inventario") toggleSubmenu("inventario");
+      else if (itemId === "compras") toggleSubmenu("compras");
+      else if (itemId === "ventas") toggleSubmenu("ventas");
+      else if (itemId === "configuracion") toggleSubmenu("configuracion");
+
+      return;
     }
+
+    setExpanded({
+      inventario: false,
+      compras: false,
+      ventas: false,
+      configuracion: false,
+    });
+
+    if (itemId === "dashboard") onNavigate("/app");
+    else if (itemId === "usuarios") onNavigate("/app/usuarios");
+    else onNavigate("/app");
+
+    onCloseMobile();
   };
 
   const handleSubItemClick = (path: string) => {
@@ -247,13 +273,15 @@ export function Sidebar({
           } ${isMobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
       >
         <div className="flex flex-col h-full">
-          <div className="p-4 flex items-center justify-center">
-            {isOpen ? (
-              <img src={vManageLogo} alt="VManage" className="h-16 w-auto" />
-            ) : (
-              <img src={vManageLogoSmall} alt="V" className="h-14 w-auto" />
-            )}
-          </div>
+          <Link to="/app" className="block">
+            <div className="p-4 flex items-center justify-center cursor-pointer transition-opacity hover:opacity-90">
+              {isOpen ? (
+                <img src={vManageLogo} alt="VManage" className="h-16 w-auto" />
+              ) : (
+                <img src={vManageLogoSmall} alt="V" className="h-14 w-auto" />
+              )}
+            </div>
+          </Link>
 
           <nav className="flex-1 overflow-y-auto py-4 px-2">
             {menuItems.map((item) => {

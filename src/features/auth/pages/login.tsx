@@ -1,9 +1,16 @@
 import React, { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { motion } from "motion/react";
-import { User, Lock, Eye, EyeOff, Loader2 } from "lucide-react";
+import { User, Lock, Eye, EyeOff, Loader2, ShieldCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../../shared/components/ui/dialog";
 import {
   login,
   solicitarRestablecimientoContrasena,
@@ -23,6 +30,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [confirmResetOpen, setConfirmResetOpen] = useState(false);
 
   const [errors, setErrors] = useState({ username: "", password: "" });
   const [touched, setTouched] = useState({ username: false, password: false });
@@ -75,7 +83,7 @@ export default function Login() {
     }
   };
 
-  const handleForgotPassword = async () => {
+  const handleForgotPassword = () => {
     const email = username.trim();
 
     if (!email) {
@@ -88,14 +96,21 @@ export default function Login() {
       return;
     }
 
+    setConfirmResetOpen(true);
+  };
+
+  const confirmForgotPassword = async () => {
+    const email = username.trim();
+
     try {
       setIsLoading(true);
-
       await solicitarRestablecimientoContrasena(email);
 
       toast.success(
         `Si el correo existe, se generó el enlace de restablecimiento para ${email}`
       );
+
+      setConfirmResetOpen(false);
     } catch (error) {
       console.error("Error solicitando restablecimiento:", error);
       toast.error("No se pudo procesar la solicitud");
@@ -154,6 +169,14 @@ export default function Login() {
   return (
     <AuthLayout>
       <form onSubmit={handleLogin} className="space-y-6">
+        <div className="flex items-center justify-center gap-3 text-sm text-gray-600 text-center">
+          <span className="flex h-9 w-9 items-center justify-center rounded-full text-blue-600 shrink-0">
+            <ShieldCheck size={22} />
+          </span>
+          <span className="font">
+            Ingrese sus datos para ingresar al panel administrativo
+          </span>
+        </div>
         <div className="space-y-2">
           <Label htmlFor="username">Correo electrónico:</Label>
           <div className="relative">
@@ -166,16 +189,16 @@ export default function Login() {
               ref={usernameRef}
               id="username"
               type="text"
-              placeholder="Ingrese su correo"
+              placeholder="usuario@gvm.com.co"
               value={username}
               onChange={(e) => handleUsernameChange(e.target.value)}
               onBlur={() => handleBlur("username")}
               disabled={isLoading}
               className={`h-11 pl-10 transition-all duration-200 ${errors.username && touched.username
-                  ? "border-red-500 focus-visible:ring-red-500"
-                  : touched.username && !errors.username
-                    ? "border-green-500 focus-visible:ring-green-500"
-                    : ""
+                ? "border-red-500 focus-visible:ring-red-500"
+                : touched.username && !errors.username
+                  ? "border-green-500 focus-visible:ring-green-500"
+                  : ""
                 }`}
             />
           </div>
@@ -207,10 +230,10 @@ export default function Login() {
               onBlur={() => handleBlur("password")}
               disabled={isLoading}
               className={`h-11 pl-10 pr-10 transition-all duration-200 ${errors.password && touched.password
-                  ? "border-red-500 focus-visible:ring-red-500"
-                  : touched.password && !errors.password
-                    ? "border-green-500 focus-visible:ring-green-500"
-                    : ""
+                ? "border-red-500 focus-visible:ring-red-500"
+                : touched.password && !errors.password
+                  ? "border-green-500 focus-visible:ring-green-500"
+                  : ""
                 }`}
             />
             <button
@@ -258,6 +281,40 @@ export default function Login() {
           )}
         </Button>
       </form>
+
+      <Dialog open={confirmResetOpen} onOpenChange={setConfirmResetOpen}>
+        <DialogContent className="sm:max-w-md rounded-2xl"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>Confirmar envío</DialogTitle>
+            <DialogDescription className="text-sm text-gray-600 leading-relaxed">
+              ¿Está seguro que desea enviar el enlace para restablecer contraseña al correo{" "}
+              <span className="font-medium text-gray-900">"{username.trim()}"</span>?
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmResetOpen(false)}
+              disabled={isLoading}
+            >
+              Cancelar
+            </Button>
+
+            <Button
+              type="button"
+              onClick={confirmForgotPassword}
+              disabled={isLoading}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {isLoading ? "Enviando..." : "Confirmar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AuthLayout>
   );
 }
