@@ -1,30 +1,1473 @@
-import { useState, useMemo, useEffect } from "react";
+// import { useEffect, useMemo, useState } from "react";
+// import {
+//   useLocation,
+//   useNavigate,
+//   useOutletContext,
+//   useParams,
+// } from "react-router-dom";
+// import {
+//   Ban,
+//   CheckCircle,
+//   ChevronLeft,
+//   ChevronRight,
+//   Clock,
+//   Download,
+//   Edit,
+//   Eye,
+//   FileText,
+//   Package,
+//   Plus,
+//   Search,
+//   ShoppingCart,
+//   X,
+// } from "lucide-react";
+// import jsPDF from "jspdf";
+// import autoTable from "jspdf-autotable";
+// import { toast } from "sonner";
+
+// import type { AppOutletContext } from "../../../../layouts/MainLayout";
+// import { Button } from "../../../../shared/components/ui/button";
+// import { Input } from "../../../../shared/components/ui/input";
+// import { Label } from "../../../../shared/components/ui/label";
+// import {
+//   Dialog,
+//   DialogContent,
+//   DialogDescription,
+//   DialogFooter,
+//   DialogHeader,
+//   DialogTitle,
+// } from "../../../../shared/components/ui/dialog";
+// import {
+//   Table,
+//   TableBody,
+//   TableCell,
+//   TableHead,
+//   TableHeader,
+//   TableRow,
+// } from "../../../../shared/components/ui/table";
+// import { remisionesVentaService } from "../services/remisiones-venta.services";
+// import type {
+//   CatalogoEstadoRemisionVenta,
+//   CreateRemisionVentaPayload,
+//   OrdenVentaCatalogoApi,
+//   RemisionVentaApi,
+//   UpdateRemisionVentaPayload,
+// } from "../types/remisiones-venta.types";
+
+// type EstadoUi = "Pendiente" | "Aprobada" | "Facturada" | "Anulada";
+
+// type RemisionListadoUi = {
+//   id: number;
+//   numeroRemision: string;
+//   ordenVenta: string;
+//   cliente: string;
+//   fecha: string;
+//   estado: EstadoUi;
+//   items: number;
+//   total: number;
+//   observaciones: string;
+//   bodega: string;
+//   estadoId: number;
+//   detalle: Array<{
+//     producto: string;
+//     lote: string;
+//     cantidad: number;
+//     precio: number;
+//     subtotal: number;
+//   }>;
+// };
+
+// type FormLoteState = {
+//   id_existencia: number;
+//   lote: string;
+//   codigo_barras: string;
+//   fecha_vencimiento: string;
+//   cantidad_disponible: number;
+//   cantidad: string;
+// };
+
+// type FormProductoState = {
+//   id_producto: number;
+//   nombre: string;
+//   precio_unitario: number;
+//   cantidad_orden: number;
+//   cantidad_remitida: number;
+//   cantidad_pendiente: number;
+//   lotes: FormLoteState[];
+// };
+
+// function normalizeText(value?: string | null) {
+//   return (value ?? "")
+//     .normalize("NFD")
+//     .replace(/[\u0300-\u036f]/g, "")
+//     .trim()
+//     .toLowerCase();
+// }
+
+// function normalizeDate(value?: string | null) {
+//   if (!value) return "";
+//   return String(value).slice(0, 10);
+// }
+
+// function toNumber(value: unknown) {
+//   const parsed = Number(value ?? 0);
+//   return Number.isFinite(parsed) ? parsed : 0;
+// }
+
+// function mapEstado(nombre?: string | null): EstadoUi {
+//   const text = normalizeText(nombre);
+
+//   if (text.includes("factur")) return "Facturada";
+//   if (text.includes("anulad")) return "Anulada";
+//   if (text.includes("aprob")) return "Aprobada";
+//   return "Pendiente";
+// }
+
+// function buildRemisionUi(item: RemisionVentaApi): RemisionListadoUi {
+//   const detalle = (item.detalle_remision_venta ?? []).map((d) => {
+//     const cantidad = toNumber(d.cantidad);
+//     const precio = toNumber(d.precio_unitario);
+
+//     return {
+//       producto: d.existencias?.producto?.nombre_producto ?? "Producto",
+//       lote: d.existencias?.lote ?? "",
+//       cantidad,
+//       precio,
+//       subtotal: cantidad * precio,
+//     };
+//   });
+
+//   return {
+//     id: item.id_remision_venta,
+//     numeroRemision:
+//       item.codigo_remision_venta ||
+//       `RMV-${String(item.id_remision_venta).padStart(4, "0")}`,
+//     ordenVenta:
+//       item.orden_venta?.codigo_orden_venta ||
+//       `OV-${String(item.id_orden_venta).padStart(4, "0")}`,
+//     cliente: item.cliente?.nombre_cliente ?? "Cliente",
+//     fecha: normalizeDate(item.fecha_creacion),
+//     estado: mapEstado(item.estado_remision_venta?.nombre_estado),
+//     items: detalle.length,
+//     total: detalle.reduce((acc, d) => acc + d.subtotal, 0),
+//     observaciones: item.observaciones ?? "",
+//     bodega: item.orden_venta?.bodega?.nombre_bodega ?? "",
+//     estadoId:
+//       item.estado_remision_venta?.id_estado_remision_venta ??
+//       item.id_estado_remision_venta,
+//     detalle,
+//   };
+// }
+
+// const puedeEditarRemision = (estado: EstadoUi) =>
+//   estado !== "Facturada" && estado !== "Anulada";
+
+// const puedeAnularRemision = (estado: EstadoUi) =>
+//   estado !== "Anulada" && estado !== "Facturada";
+
+// const puedeCambiarEstadoRemision = (estado: EstadoUi) =>
+//   estado !== "Facturada" && estado !== "Anulada";
+
+// function getEstadoBadgeClass(estado: EstadoUi) {
+//   if (estado === "Pendiente") {
+//     return "bg-yellow-100 text-yellow-800 hover:bg-yellow-200";
+//   }
+//   if (estado === "Aprobada") {
+//     return "bg-green-100 text-green-800 hover:bg-green-200";
+//   }
+//   if (estado === "Facturada") {
+//     return "bg-blue-100 text-blue-800 hover:bg-blue-200";
+//   }
+//   return "bg-red-100 text-red-800 hover:bg-red-200";
+// }
+
+// function getSiguienteEstadoTexto(estado: EstadoUi) {
+//   if (estado === "Pendiente") return "Cambiar a Aprobada";
+//   if (estado === "Aprobada") return "Cambiar a Facturada";
+//   if (estado === "Facturada") return "Ya está facturada";
+//   return "Ya está anulada";
+// }
+
+// export default function RemisionesVenta() {
+//   const outlet = useOutletContext<AppOutletContext>() as AppOutletContext & {
+//     selectedBodegaId?: number | null;
+//     selectedBodegaNombre?: string;
+//     currentUser?: {
+//       id?: number | string;
+//       id_usuario?: number | string;
+//       bodega?: string;
+//     } | null;
+//   };
+
+//   const selectedBodegaId = Number(outlet?.selectedBodegaId ?? 0) || undefined;
+//   const selectedBodegaNombre =
+//     outlet?.selectedBodegaNombre ?? "Todas las bodegas";
+//   const currentUserId = Number(
+//     outlet?.currentUser?.id_usuario ?? outlet?.currentUser?.id ?? 0
+//   );
+
+//   const navigate = useNavigate();
+//   const location = useLocation();
+//   const params = useParams<{ id: string }>();
+
+//   const isCrear = location.pathname.endsWith("/remisiones-venta/crear");
+//   const isEditar = location.pathname.endsWith("/editar");
+//   const isVer = location.pathname.endsWith("/ver");
+//   const isAnular = location.pathname.endsWith("/anular");
+//   const isFormularioAbierto = isCrear || isEditar;
+
+//   const [searchTerm, setSearchTerm] = useState("");
+//   const [remisiones, setRemisiones] = useState<RemisionListadoUi[]>([]);
+//   const [ordenesDisponibles, setOrdenesDisponibles] = useState<
+//     OrdenVentaCatalogoApi[]
+//   >([]);
+//   const [estados, setEstados] = useState<CatalogoEstadoRemisionVenta[]>([]);
+//   const [loading, setLoading] = useState(false);
+
+//   const [currentPage, setCurrentPage] = useState(1);
+//   const itemsPerPage = 10;
+
+//   const [formNumeroRemision, setFormNumeroRemision] = useState("");
+//   const [formFecha, setFormFecha] = useState("");
+//   const [formObservaciones, setFormObservaciones] = useState("");
+//   const [formOrdenId, setFormOrdenId] = useState("");
+//   const [formEstadoId, setFormEstadoId] = useState("");
+//   const [formCliente, setFormCliente] = useState("");
+//   const [formProductos, setFormProductos] = useState<FormProductoState[]>([]);
+
+//   const [showSuccessModal, setShowSuccessModal] = useState(false);
+//   const [successMessage, setSuccessMessage] = useState(
+//     "La remisión de venta se creó correctamente."
+//   );
+//   const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
+//   const [remisionCambioEstado, setRemisionCambioEstado] =
+//     useState<RemisionListadoUi | null>(null);
+//   const [estadoDestino, setEstadoDestino] = useState<{
+//     id: number;
+//     nombre: EstadoUi;
+//   } | null>(null);
+
+//   const remisionSeleccionada = useMemo(() => {
+//     if (!params.id) return null;
+//     const id = Number(params.id);
+//     if (!Number.isFinite(id)) return null;
+//     return remisiones.find((item) => item.id === id) ?? null;
+//   }, [params.id, remisiones]);
+
+//   const estadoPendienteId = useMemo(
+//     () =>
+//       estados.find((item) => normalizeText(item.nombre_estado).includes("pend"))
+//         ?.id_estado_remision_venta ?? "",
+//     [estados]
+//   );
+
+//   const getEstadoIdPorNombre = (nombre: EstadoUi) =>
+//     estados.find((item) => {
+//       const n = normalizeText(item.nombre_estado);
+//       if (nombre === "Pendiente") return n.includes("pend");
+//       if (nombre === "Aprobada") return n.includes("aprob");
+//       if (nombre === "Facturada") return n.includes("factur");
+//       if (nombre === "Anulada") return n.includes("anulad");
+//       return false;
+//     })?.id_estado_remision_venta;
+
+//   const cargarTodo = async () => {
+//     try {
+//       setLoading(true);
+
+//       const [listado, catalogos] = await Promise.all([
+//         remisionesVentaService.getAll(selectedBodegaId),
+//         remisionesVentaService.getCatalogos(selectedBodegaId),
+//       ]);
+
+//       setRemisiones(listado.map(buildRemisionUi));
+//       setOrdenesDisponibles(catalogos.ordenes);
+//       setEstados(catalogos.estados);
+//     } catch (error: any) {
+//       console.error(error);
+//       toast.error(error?.message || "No se pudieron cargar las remisiones");
+//     } finally {
+//       setLoading(false);
+//     }
+//   };
+
+//   useEffect(() => {
+//     void cargarTodo();
+//   }, [selectedBodegaId]);
+
+//   useEffect(() => {
+//     setCurrentPage(1);
+//   }, [searchTerm, selectedBodegaId]);
+
+//   useEffect(() => {
+//     if (!isCrear) return;
+
+//     setFormNumeroRemision("Se genera automáticamente");
+//     setFormFecha(new Date().toISOString().split("T")[0]);
+//     setFormObservaciones("");
+//     setFormOrdenId("");
+//     setFormEstadoId(String(estadoPendienteId || ""));
+//     setFormCliente("");
+//     setFormProductos([]);
+//   }, [isCrear, estadoPendienteId]);
+
+//   useEffect(() => {
+//     const cargarEdicion = async () => {
+//       if (!isEditar || !params.id) return;
+
+//       try {
+//         const idRemision = Number(params.id);
+//         if (!Number.isFinite(idRemision)) return;
+
+//         const [catalogos, remision] = await Promise.all([
+//           remisionesVentaService.getCatalogos(selectedBodegaId, idRemision),
+//           remisionesVentaService.getOne(idRemision),
+//         ]);
+
+//         setOrdenesDisponibles(catalogos.ordenes);
+//         setEstados(catalogos.estados);
+
+//         const orden = catalogos.ordenes.find(
+//           (item) => item.id_orden_venta === remision.id_orden_venta
+//         );
+
+//         if (!orden) {
+//           toast.error(
+//             "No se pudo cargar la orden asociada a esta remisión para editarla"
+//           );
+//           return;
+//         }
+
+//         const cantidadesPorProductoYLote = new Map<number, Map<number, number>>();
+
+//         for (const detalle of remision.detalle_remision_venta ?? []) {
+//           const idProducto = Number(
+//             detalle.existencias?.id_producto ??
+//               detalle.existencias?.producto?.id_producto ??
+//               0
+//           );
+//           const idExistencia = Number(detalle.existencias?.id_existencia ?? 0);
+//           const cantidad = toNumber(detalle.cantidad);
+
+//           if (!idProducto || !idExistencia) continue;
+
+//           if (!cantidadesPorProductoYLote.has(idProducto)) {
+//             cantidadesPorProductoYLote.set(idProducto, new Map<number, number>());
+//           }
+
+//           cantidadesPorProductoYLote
+//             .get(idProducto)!
+//             .set(idExistencia, cantidad);
+//         }
+
+//         setFormNumeroRemision(
+//           remision.codigo_remision_venta ||
+//             `RMV-${String(remision.id_remision_venta).padStart(4, "0")}`
+//         );
+//         setFormFecha(
+//           normalizeDate(remision.fecha_creacion) ||
+//             new Date().toISOString().split("T")[0]
+//         );
+//         setFormObservaciones(remision.observaciones ?? "");
+//         setFormOrdenId(String(remision.id_orden_venta));
+//         setFormEstadoId(String(remision.id_estado_remision_venta));
+//         setFormCliente(
+//           remision.cliente?.nombre_cliente ?? orden.cliente?.nombre_cliente ?? ""
+//         );
+
+//         const productos = (orden.detalle ?? []).map((detalle) => {
+//           const seleccionados =
+//             cantidadesPorProductoYLote.get(detalle.id_producto) ??
+//             new Map<number, number>();
+
+//           return {
+//             id_producto: detalle.id_producto,
+//             nombre: detalle.producto?.nombre_producto ?? "Producto",
+//             precio_unitario: toNumber(detalle.precio_unitario),
+//             cantidad_orden: toNumber(detalle.cantidad_orden),
+//             cantidad_remitida: toNumber(detalle.cantidad_remitida),
+//             cantidad_pendiente: toNumber(detalle.cantidad_pendiente),
+//             lotes: (detalle.existencias_disponibles ?? []).map((lote) => ({
+//               id_existencia: lote.id_existencia,
+//               lote: lote.lote ?? "",
+//               codigo_barras: lote.codigo_barras ?? "",
+//               fecha_vencimiento: normalizeDate(lote.fecha_vencimiento),
+//               cantidad_disponible: toNumber(lote.cantidad_disponible),
+//               cantidad: seleccionados.has(lote.id_existencia)
+//                 ? String(seleccionados.get(lote.id_existencia))
+//                 : "",
+//             })),
+//           };
+//         });
+
+//         setFormProductos(productos);
+//       } catch (error: any) {
+//         console.error(error);
+//         toast.error(error?.message || "No se pudo cargar la remisión a editar");
+//       }
+//     };
+
+//     void cargarEdicion();
+//   }, [isEditar, params.id, selectedBodegaId]);
+
+//   const filteredRemisiones = useMemo(() => {
+//     const term = searchTerm.trim().toLowerCase();
+//     if (!term) return remisiones;
+
+//     return remisiones.filter((item) => {
+//       return (
+//         item.numeroRemision.toLowerCase().includes(term) ||
+//         item.ordenVenta.toLowerCase().includes(term) ||
+//         item.cliente.toLowerCase().includes(term) ||
+//         item.estado.toLowerCase().includes(term) ||
+//         item.items.toString().includes(term)
+//       );
+//     });
+//   }, [remisiones, searchTerm]);
+
+//   const totalPages = Math.max(
+//     1,
+//     Math.ceil(filteredRemisiones.length / itemsPerPage)
+//   );
+//   const startIndex = (currentPage - 1) * itemsPerPage;
+//   const currentRemisiones = filteredRemisiones.slice(
+//     startIndex,
+//     startIndex + itemsPerPage
+//   );
+
+//   const stats = useMemo(() => {
+//     return {
+//       totalRemisiones: filteredRemisiones.length,
+//       pendientes: filteredRemisiones.filter((r) => r.estado === "Pendiente")
+//         .length,
+//       aprobadas: filteredRemisiones.filter((r) => r.estado === "Aprobada")
+//         .length,
+//       anuladas: filteredRemisiones.filter((r) => r.estado === "Anulada").length,
+//     };
+//   }, [filteredRemisiones]);
+
+//   const ordenSeleccionada = useMemo(() => {
+//     const id = Number(formOrdenId);
+//     if (!id) return null;
+//     return ordenesDisponibles.find((o) => o.id_orden_venta === id) ?? null;
+//   }, [formOrdenId, ordenesDisponibles]);
+
+//   const bodegaFormularioNombre = useMemo(() => {
+//     return (
+//       ordenSeleccionada?.bodega?.nombre_bodega ??
+//       selectedBodegaNombre ??
+//       "Sin bodega"
+//     );
+//   }, [ordenSeleccionada, selectedBodegaNombre]);
+
+//   const totalFormulario = useMemo(() => {
+//     return formProductos.reduce((acc, producto) => {
+//       const subtotal = producto.lotes.reduce(
+//         (sum, lote) => sum + toNumber(lote.cantidad) * producto.precio_unitario,
+//         0
+//       );
+//       return acc + subtotal;
+//     }, 0);
+//   }, [formProductos]);
+
+//   const cantidadTotalItemsFormulario = useMemo(() => {
+//     return formProductos.reduce(
+//       (acc, producto) =>
+//         acc + producto.lotes.filter((lote) => toNumber(lote.cantidad) > 0).length,
+//       0
+//     );
+//   }, [formProductos]);
+
+//   const handleOrdenChange = (ordenId: string) => {
+//     setFormOrdenId(ordenId);
+
+//     const orden = ordenesDisponibles.find(
+//       (item) => item.id_orden_venta === Number(ordenId)
+//     );
+
+//     if (!orden) {
+//       setFormCliente("");
+//       setFormProductos([]);
+//       return;
+//     }
+
+//     setFormCliente(orden.cliente?.nombre_cliente ?? "");
+
+//     const productos = (orden.detalle ?? []).map((detalle) => ({
+//       id_producto: detalle.id_producto,
+//       nombre: detalle.producto?.nombre_producto ?? "Producto",
+//       precio_unitario: toNumber(detalle.precio_unitario),
+//       cantidad_orden: toNumber(detalle.cantidad_orden),
+//       cantidad_remitida: toNumber(detalle.cantidad_remitida),
+//       cantidad_pendiente: toNumber(detalle.cantidad_pendiente),
+//       lotes: (detalle.existencias_disponibles ?? []).map((lote) => ({
+//         id_existencia: lote.id_existencia,
+//         lote: lote.lote ?? "",
+//         codigo_barras: lote.codigo_barras ?? "",
+//         fecha_vencimiento: normalizeDate(lote.fecha_vencimiento),
+//         cantidad_disponible: toNumber(lote.cantidad_disponible),
+//         cantidad: "",
+//       })),
+//     }));
+
+//     setFormProductos(productos);
+//   };
+
+//   const handleCantidadLoteChange = (
+//     idProducto: number,
+//     idExistencia: number,
+//     value: string
+//   ) => {
+//     setFormProductos((prev) =>
+//       prev.map((producto) => {
+//         if (producto.id_producto !== idProducto) return producto;
+
+//         return {
+//           ...producto,
+//           lotes: producto.lotes.map((lote) =>
+//             lote.id_existencia === idExistencia
+//               ? { ...lote, cantidad: value }
+//               : lote
+//           ),
+//         };
+//       })
+//     );
+//   };
+
+//   const getCantidadSolicitadaProducto = (producto: FormProductoState) =>
+//     producto.lotes.reduce((acc, lote) => acc + toNumber(lote.cantidad), 0);
+
+//   const validarFormulario = () => {
+//     if (!currentUserId) {
+//       toast.error("No se pudo identificar el usuario actual");
+//       return false;
+//     }
+
+//     if (!formOrdenId) {
+//       toast.error("Debes seleccionar una orden de venta aprobada");
+//       return false;
+//     }
+
+//     if (!formEstadoId) {
+//       toast.error("Debes seleccionar un estado");
+//       return false;
+//     }
+
+//     const detalleConCantidad = formProductos
+//       .map((producto) => ({
+//         ...producto,
+//         cantidadSolicitada: getCantidadSolicitadaProducto(producto),
+//       }))
+//       .filter((producto) => producto.cantidadSolicitada > 0);
+
+//     if (detalleConCantidad.length === 0) {
+//       toast.error("Debes remitir al menos una cantidad");
+//       return false;
+//     }
+
+//     for (const producto of detalleConCantidad) {
+//       if (producto.cantidadSolicitada > producto.cantidad_pendiente) {
+//         toast.error(
+//           `La cantidad solicitada de ${producto.nombre} supera lo pendiente de la orden`
+//         );
+//         return false;
+//       }
+
+//       for (const lote of producto.lotes) {
+//         const cantidad = toNumber(lote.cantidad);
+//         if (cantidad > lote.cantidad_disponible) {
+//           toast.error(
+//             `La cantidad del lote ${lote.lote || lote.id_existencia} supera la disponible`
+//           );
+//           return false;
+//         }
+//       }
+//     }
+
+//     return true;
+//   };
+
+//   const handleGuardar = async () => {
+//     if (!validarFormulario()) return;
+
+//     const payload: CreateRemisionVentaPayload | UpdateRemisionVentaPayload = {
+//       fecha_creacion: formFecha,
+//       fecha_vencimiento: null,
+//       observaciones: formObservaciones || null,
+//       id_orden_venta: Number(formOrdenId),
+//       id_estado_remision_venta: Number(formEstadoId),
+//       id_usuario_creador: currentUserId,
+//       detalle: formProductos
+//         .map((producto) => ({
+//           id_producto: producto.id_producto,
+//           lotes: producto.lotes
+//             .map((lote) => ({
+//               id_existencia: lote.id_existencia,
+//               cantidad: toNumber(lote.cantidad),
+//             }))
+//             .filter((lote) => lote.cantidad > 0),
+//         }))
+//         .filter((producto) => producto.lotes.length > 0),
+//     };
+
+//     try {
+//       if (isEditar && params.id) {
+//         await remisionesVentaService.update(Number(params.id), payload);
+//         setSuccessMessage("La remisión de venta se actualizó correctamente.");
+//       } else {
+//         await remisionesVentaService.create(payload);
+//         setSuccessMessage("La remisión de venta se creó correctamente.");
+//       }
+
+//       await cargarTodo();
+//       navigate("/app/remisiones-venta");
+//       setShowSuccessModal(true);
+//     } catch (error: any) {
+//       console.error(error);
+//       toast.error(
+//         error?.message ||
+//           (isEditar
+//             ? "No se pudo actualizar la remisión"
+//             : "No se pudo crear la remisión")
+//       );
+//     }
+//   };
+
+//   const handleView = (remision: RemisionListadoUi) => {
+//     navigate(`/app/remisiones-venta/${remision.id}/ver`);
+//   };
+
+//   const handleEdit = (remision: RemisionListadoUi) => {
+//     navigate(`/app/remisiones-venta/${remision.id}/editar`);
+//   };
+
+//   const handleAnular = (remision: RemisionListadoUi) => {
+//     navigate(`/app/remisiones-venta/${remision.id}/anular`);
+//   };
+
+//   const closeToList = () => navigate("/app/remisiones-venta");
+
+//   const handleToggleEstado = (remision: RemisionListadoUi) => {
+//     let siguiente: EstadoUi | null = null;
+
+//     if (remision.estado === "Pendiente") siguiente = "Aprobada";
+//     else if (remision.estado === "Aprobada") siguiente = "Facturada";
+//     else if (remision.estado === "Facturada") {
+//       toast.info("Esta remisión ya está facturada");
+//       return;
+//     } else {
+//       toast.info("Las remisiones anuladas no pueden cambiar de estado");
+//       return;
+//     }
+
+//     const estadoId = getEstadoIdPorNombre(siguiente);
+//     if (!estadoId) {
+//       toast.error(`No encontré el estado ${siguiente} en el backend`);
+//       return;
+//     }
+
+//     setRemisionCambioEstado(remision);
+//     setEstadoDestino({ id: estadoId, nombre: siguiente });
+//     setShowConfirmEstadoModal(true);
+//   };
+
+//   const handleConfirmEstado = async () => {
+//     if (!remisionCambioEstado || !estadoDestino) return;
+
+//     try {
+//       await remisionesVentaService.updateEstado(
+//         remisionCambioEstado.id,
+//         estadoDestino.id
+//       );
+//       await cargarTodo();
+//       toast.success(`Estado actualizado a ${estadoDestino.nombre}`);
+//     } catch (error: any) {
+//       console.error(error);
+//       toast.error(error?.message || "No se pudo actualizar el estado");
+//     } finally {
+//       setShowConfirmEstadoModal(false);
+//       setRemisionCambioEstado(null);
+//       setEstadoDestino(null);
+//     }
+//   };
+
+//   const confirmAnular = async () => {
+//     if (!remisionSeleccionada) return;
+
+//     const estadoId = getEstadoIdPorNombre("Anulada");
+//     if (!estadoId) {
+//       toast.error("No encontré el estado Anulada en el backend");
+//       return;
+//     }
+
+//     try {
+//       await remisionesVentaService.updateEstado(
+//         remisionSeleccionada.id,
+//         estadoId
+//       );
+//       await cargarTodo();
+//       toast.success("Remisión anulada exitosamente");
+//       closeToList();
+//     } catch (error: any) {
+//       console.error(error);
+//       toast.error(error?.message || "No se pudo anular la remisión");
+//     }
+//   };
+
+//   const generarPDF = (remision: RemisionListadoUi) => {
+//     const doc = new jsPDF();
+
+//     doc.setFontSize(18);
+//     doc.setFont("helvetica", "bold");
+//     doc.text("REMISIÓN DE VENTA", 105, 18, { align: "center" });
+
+//     doc.setFontSize(10);
+//     doc.setFont("helvetica", "normal");
+//     doc.text(`N° Remisión: ${remision.numeroRemision}`, 20, 34);
+//     doc.text(`Orden de Venta: ${remision.ordenVenta}`, 20, 40);
+//     doc.text(`Cliente: ${remision.cliente}`, 20, 46);
+//     doc.text(`Fecha: ${remision.fecha}`, 130, 34);
+//     doc.text(`Estado: ${remision.estado}`, 130, 40);
+//     doc.text(`Bodega: ${remision.bodega}`, 130, 46);
+
+//     autoTable(doc, {
+//       startY: 56,
+//       head: [["Producto", "Lote", "Cantidad", "Precio", "Subtotal"]],
+//       body: remision.detalle.map((item) => [
+//         item.producto,
+//         item.lote,
+//         String(item.cantidad),
+//         `$${item.precio.toLocaleString("es-CO", { minimumFractionDigits: 2 })}`,
+//         `$${item.subtotal.toLocaleString("es-CO", {
+//           minimumFractionDigits: 2,
+//         })}`,
+//       ]),
+//       theme: "grid",
+//       headStyles: {
+//         fillColor: [37, 99, 235],
+//         textColor: 255,
+//       },
+//       styles: {
+//         fontSize: 9,
+//       },
+//     });
+
+//     const finalY = (doc as any).lastAutoTable?.finalY || 56;
+//     doc.setFont("helvetica", "bold");
+//     doc.text(
+//       `Total: $${remision.total.toLocaleString("es-CO", {
+//         minimumFractionDigits: 2,
+//       })}`,
+//       190,
+//       finalY + 12,
+//       { align: "right" }
+//     );
+
+//     if (remision.observaciones) {
+//       doc.setFont("helvetica", "normal");
+//       doc.text(`Observaciones: ${remision.observaciones}`, 20, finalY + 24);
+//     }
+
+//     doc.save(`Remision_${remision.numeroRemision}.pdf`);
+//   };
+
+//   return (
+//     <div className="space-y-6">
+//       <div>
+//         <h2 className="text-gray-900">Remisiones</h2>
+//         <p className="text-gray-600 mt-1">
+//           Gestiona las remisiones de venta
+//         </p>
+//       </div>
+//       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+//         <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white">
+//           <div className="flex items-center justify-between">
+//             <div>
+//               <p className="text-blue-100 text-sm">Total Remisiones</p>
+//               <p className="text-3xl mt-2">{stats.totalRemisiones}</p>
+//             </div>
+//             <FileText className="text-blue-200" size={40} />
+//           </div>
+//         </div>
+
+//         <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl shadow-lg p-6 text-white">
+//           <div className="flex items-center justify-between">
+//             <div>
+//               <p className="text-yellow-100 text-sm">Pendientes</p>
+//               <p className="text-3xl mt-2">{stats.pendientes}</p>
+//             </div>
+//             <Clock className="text-yellow-200" size={40} />
+//           </div>
+//         </div>
+
+//         <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-6 text-white">
+//           <div className="flex items-center justify-between">
+//             <div>
+//               <p className="text-green-100 text-sm">Aprobadas</p>
+//               <p className="text-3xl mt-2">{stats.aprobadas}</p>
+//             </div>
+//             <CheckCircle className="text-green-200" size={40} />
+//           </div>
+//         </div>
+//       </div>
+
+//       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+//         <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+//           <div className="relative flex-1 w-full sm:w-auto">
+//             <Search
+//               className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+//               size={20}
+//             />
+//             <Input
+//               type="text"
+//               placeholder="Buscar por remisión, orden, cliente, estado o items..."
+//               value={searchTerm}
+//               onChange={(e) => setSearchTerm(e.target.value)}
+//               className="pl-10 w-full"
+//             />
+//           </div>
+
+//           <Button
+//             onClick={() => navigate("/app/remisiones-venta/crear")}
+//             className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto"
+//           >
+//             <Plus size={20} className="mr-2" />
+//             Nueva Remisión
+//           </Button>
+//         </div>
+//       </div>
+
+//       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+//         <div className="overflow-x-auto">
+//           <Table>
+//             <TableHeader>
+//               <TableRow className="bg-gray-50">
+//                 <TableHead>#</TableHead>
+//                 <TableHead>N° Remisión</TableHead>
+//                 <TableHead>Orden de Venta</TableHead>
+//                 <TableHead>Cliente</TableHead>
+//                 <TableHead>Fecha</TableHead>
+//                 <TableHead>Items</TableHead>
+//                 <TableHead className="text-center">Estado</TableHead>
+//                 <TableHead className="text-center">Acciones</TableHead>
+//               </TableRow>
+//             </TableHeader>
+
+//             <TableBody>
+//               {loading ? (
+//                 <TableRow>
+//                   <TableCell colSpan={8} className="text-center py-8">
+//                     Cargando...
+//                   </TableCell>
+//                 </TableRow>
+//               ) : currentRemisiones.length === 0 ? (
+//                 <TableRow>
+//                   <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+//                     No se encontraron remisiones de venta
+//                   </TableCell>
+//                 </TableRow>
+//               ) : (
+//                 currentRemisiones.map((remision, index) => (
+//                   <TableRow key={remision.id} className="hover:bg-gray-50">
+//                     <TableCell>{startIndex + index + 1}</TableCell>
+//                     <TableCell className="font-medium">
+//                       {remision.numeroRemision}
+//                     </TableCell>
+//                     <TableCell>{remision.ordenVenta}</TableCell>
+//                     <TableCell>{remision.cliente}</TableCell>
+//                     <TableCell>{remision.fecha}</TableCell>
+//                     <TableCell>{remision.items}</TableCell>
+
+//                     <TableCell className="text-center">
+//                       <Button
+//                         variant="ghost"
+//                         size="sm"
+//                         onClick={() => handleToggleEstado(remision)}
+//                         disabled={!puedeCambiarEstadoRemision(remision.estado)}
+//                         className={`h-8 rounded-full px-3 text-xs font-medium ${getEstadoBadgeClass(
+//                           remision.estado
+//                         )} ${
+//                           !puedeCambiarEstadoRemision(remision.estado)
+//                             ? "cursor-not-allowed opacity-70"
+//                             : ""
+//                         }`}
+//                         title={getSiguienteEstadoTexto(remision.estado)}
+//                       >
+//                         {remision.estado}
+//                       </Button>
+//                     </TableCell>
+
+//                     <TableCell>
+//                       <div className="flex items-center justify-center gap-2">
+//                         <Button
+//                           variant="ghost"
+//                           size="sm"
+//                           onClick={() => handleView(remision)}
+//                           className="hover:bg-blue-50"
+//                           title="Ver detalles"
+//                         >
+//                           <Eye size={16} className="text-blue-600" />
+//                         </Button>
+
+//                         <Button
+//                           variant="ghost"
+//                           size="sm"
+//                           onClick={() => generarPDF(remision)}
+//                           className="hover:bg-green-50"
+//                           title="Descargar PDF"
+//                         >
+//                           <Download size={16} className="text-green-600" />
+//                         </Button>
+
+//                         <Button
+//                           variant="ghost"
+//                           size="sm"
+//                           onClick={() => handleEdit(remision)}
+//                           disabled={!puedeEditarRemision(remision.estado)}
+//                           className={
+//                             puedeEditarRemision(remision.estado)
+//                               ? "hover:bg-amber-50"
+//                               : "cursor-not-allowed opacity-50"
+//                           }
+//                           title={
+//                             remision.estado === "Facturada"
+//                               ? "No se puede editar una remisión facturada"
+//                               : remision.estado === "Anulada"
+//                               ? "No se puede editar una remisión anulada"
+//                               : "Editar"
+//                           }
+//                         >
+//                           <Edit size={16} className="text-amber-600" />
+//                         </Button>
+
+//                         <Button
+//                           variant="ghost"
+//                           size="sm"
+//                           onClick={() => handleAnular(remision)}
+//                           disabled={!puedeAnularRemision(remision.estado)}
+//                           className={
+//                             puedeAnularRemision(remision.estado)
+//                               ? "hover:bg-red-50"
+//                               : "cursor-not-allowed opacity-50"
+//                           }
+//                           title={
+//                             remision.estado === "Facturada"
+//                               ? "No se puede anular una remisión facturada"
+//                               : remision.estado === "Anulada"
+//                               ? "La remisión ya está anulada"
+//                               : "Anular"
+//                           }
+//                         >
+//                           <Ban size={16} className="text-red-600" />
+//                         </Button>
+//                       </div>
+//                     </TableCell>
+//                   </TableRow>
+//                 ))
+//               )}
+//             </TableBody>
+//           </Table>
+//         </div>
+
+//         {filteredRemisiones.length > 0 && (
+//           <div className="flex items-center justify-between p-4 border-t">
+//             <p className="text-sm text-gray-600">
+//               Mostrando {startIndex + 1} a{" "}
+//               {Math.min(startIndex + itemsPerPage, filteredRemisiones.length)} de{" "}
+//               {filteredRemisiones.length} registros
+//             </p>
+
+//             <div className="flex gap-2">
+//               <Button
+//                 variant="outline"
+//                 size="sm"
+//                 onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+//                 disabled={currentPage === 1}
+//               >
+//                 <ChevronLeft size={16} />
+//               </Button>
+//               <Button variant="outline" size="sm" disabled>
+//                 {currentPage} / {totalPages}
+//               </Button>
+//               <Button
+//                 variant="outline"
+//                 size="sm"
+//                 onClick={() =>
+//                   setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+//                 }
+//                 disabled={currentPage === totalPages}
+//               >
+//                 <ChevronRight size={16} />
+//               </Button>
+//             </div>
+//           </div>
+//         )}
+//       </div>
+
+//       <Dialog open={isFormularioAbierto} onOpenChange={(open) => !open && closeToList()}>
+//         <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+//           <DialogHeader>
+//             <DialogTitle>
+//               {isEditar ? "Editar Remisión de Venta" : "Nueva Remisión de Venta"}
+//             </DialogTitle>
+//             <DialogDescription>
+//               {isEditar
+//                 ? "Edita la remisión manteniéndola ligada a una orden de venta aprobada."
+//                 : "La remisión solo puede crearse desde una orden de venta aprobada."}
+//             </DialogDescription>
+//           </DialogHeader>
+
+//           <div className="space-y-6">
+//             <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-4">
+//               <div className="flex items-center gap-2 mb-4">
+//                 <FileText size={18} className="text-blue-600" />
+//                 <h3 className="font-semibold text-gray-900">
+//                   Información general
+//                 </h3>
+//               </div>
+
+//               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+//                 <div>
+//                   <Label>N° Remisión</Label>
+//                   <Input value={formNumeroRemision} disabled />
+//                 </div>
+
+//                 <div>
+//                   <Label>Fecha</Label>
+//                   <Input
+//                     type="date"
+//                     value={formFecha}
+//                     onChange={(e) => setFormFecha(e.target.value)}
+//                   />
+//                 </div>
+
+//                 <div>
+//                   <Label>Bodega</Label>
+//                   <Input value={bodegaFormularioNombre} disabled />
+//                 </div>
+
+//                 <div>
+//                   <Label>Estado inicial</Label>
+//                   <Input
+//                     value={
+//                       estados.find(
+//                         (estado) =>
+//                           String(estado.id_estado_remision_venta) === formEstadoId
+//                       )?.nombre_estado ?? "Pendiente"
+//                     }
+//                     disabled
+//                   />
+//                 </div>
+//               </div>
+//             </div>
+
+//             <div className="rounded-xl border border-gray-200 p-4">
+//               <div className="flex items-center gap-2 mb-4">
+//                 <ShoppingCart size={18} className="text-blue-600" />
+//                 <h3 className="font-semibold text-gray-900">
+//                   Orden asociada
+//                 </h3>
+//               </div>
+
+//               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+//                 <div className="md:col-span-2">
+//                   <Label>Orden de Venta Aprobada</Label>
+//                   <select
+//                     className="w-full h-10 rounded-md border border-gray-300 px-3 bg-white"
+//                     value={formOrdenId}
+//                     onChange={(e) => handleOrdenChange(e.target.value)}
+//                   >
+//                     <option value="">Selecciona una orden</option>
+//                     {ordenesDisponibles.map((orden) => (
+//                       <option
+//                         key={orden.id_orden_venta}
+//                         value={orden.id_orden_venta}
+//                       >
+//                         {orden.codigo_orden_venta} -{" "}
+//                         {orden.cliente?.nombre_cliente ?? "Cliente"} - Pendiente:{" "}
+//                         {orden.cantidad_pendiente_total}
+//                       </option>
+//                     ))}
+//                   </select>
+//                 </div>
+
+//                 <div>
+//                   <Label>Cliente</Label>
+//                   <Input value={formCliente} disabled />
+//                 </div>
+//               </div>
+//             </div>
+
+//             <div className="rounded-xl border border-gray-200 p-4">
+//               <div className="flex items-center gap-2 mb-4">
+//                 <Package size={18} className="text-blue-600" />
+//                 <h3 className="font-semibold text-gray-900">
+//                   Observaciones y resumen
+//                 </h3>
+//               </div>
+
+//               <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-4">
+//                 <div>
+//                   <Label>Observaciones</Label>
+//                   <textarea
+//                     className="w-full min-h-[100px] rounded-md border border-gray-300 px-3 py-2"
+//                     value={formObservaciones}
+//                     onChange={(e) => setFormObservaciones(e.target.value)}
+//                     placeholder="Observaciones de la remisión"
+//                   />
+//                 </div>
+
+//                 <div className="rounded-lg border bg-gray-50 p-4 space-y-3">
+//                   <div>
+//                     <p className="text-sm text-gray-500">Items seleccionados</p>
+//                     <p className="text-2xl font-semibold text-gray-900">
+//                       {cantidadTotalItemsFormulario}
+//                     </p>
+//                   </div>
+//                   <div>
+//                     <p className="text-sm text-gray-500">Total remisión</p>
+//                     <p className="text-xl font-semibold text-blue-700">
+//                       $
+//                       {totalFormulario.toLocaleString("es-CO", {
+//                         minimumFractionDigits: 2,
+//                       })}
+//                     </p>
+//                   </div>
+//                 </div>
+//               </div>
+//             </div>
+
+//             <div className="rounded-xl border border-gray-200 p-4">
+//               <div className="flex items-center gap-2 mb-4">
+//                 <Package size={18} className="text-blue-600" />
+//                 <h3 className="font-semibold text-gray-900">
+//                   Productos y lotes a remitir
+//                 </h3>
+//               </div>
+
+//               {ordenSeleccionada ? (
+//                 <div className="space-y-4">
+//                   {formProductos.map((producto) => (
+//                     <div
+//                       key={producto.id_producto}
+//                       className="border rounded-xl p-4 space-y-4 bg-white"
+//                     >
+//                       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+//                         <div>
+//                           <p className="font-semibold text-gray-900">
+//                             {producto.nombre}
+//                           </p>
+//                           <div className="flex flex-wrap gap-2 mt-2 text-xs">
+//                             <span className="rounded-full bg-gray-100 px-3 py-1 text-gray-700">
+//                               Orden: {producto.cantidad_orden}
+//                             </span>
+//                             <span className="rounded-full bg-blue-100 px-3 py-1 text-blue-700">
+//                               Remitido: {producto.cantidad_remitida}
+//                             </span>
+//                             <span className="rounded-full bg-yellow-100 px-3 py-1 text-yellow-700">
+//                               Pendiente: {producto.cantidad_pendiente}
+//                             </span>
+//                           </div>
+//                         </div>
+
+//                         <div className="rounded-lg bg-blue-50 px-4 py-3 text-sm font-medium text-blue-700">
+//                           Precio unitario: $
+//                           {producto.precio_unitario.toLocaleString("es-CO", {
+//                             minimumFractionDigits: 2,
+//                           })}
+//                         </div>
+//                       </div>
+
+//                       {producto.lotes.length === 0 ? (
+//                         <div className="rounded-md bg-red-50 text-red-700 px-3 py-2 text-sm">
+//                           Este producto no tiene existencias disponibles en la bodega
+//                           de la orden.
+//                         </div>
+//                       ) : (
+//                         <div className="overflow-x-auto rounded-lg border">
+//                           <Table>
+//                             <TableHeader>
+//                               <TableRow className="bg-gray-50">
+//                                 <TableHead>Lote</TableHead>
+//                                 <TableHead>Cód. barras</TableHead>
+//                                 <TableHead>Vence</TableHead>
+//                                 <TableHead>Disponible</TableHead>
+//                                 <TableHead>Cantidad a remitir</TableHead>
+//                               </TableRow>
+//                             </TableHeader>
+//                             <TableBody>
+//                               {producto.lotes.map((lote) => (
+//                                 <TableRow key={lote.id_existencia}>
+//                                   <TableCell>{lote.lote || "-"}</TableCell>
+//                                   <TableCell>{lote.codigo_barras || "-"}</TableCell>
+//                                   <TableCell>{lote.fecha_vencimiento || "-"}</TableCell>
+//                                   <TableCell>{lote.cantidad_disponible}</TableCell>
+//                                   <TableCell>
+//                                     <Input
+//                                       type="number"
+//                                       min="0"
+//                                       step="0.01"
+//                                       value={lote.cantidad}
+//                                       onChange={(e) =>
+//                                         handleCantidadLoteChange(
+//                                           producto.id_producto,
+//                                           lote.id_existencia,
+//                                           e.target.value
+//                                         )
+//                                       }
+//                                       placeholder="0"
+//                                       className="max-w-[150px]"
+//                                     />
+//                                   </TableCell>
+//                                 </TableRow>
+//                               ))}
+//                             </TableBody>
+//                           </Table>
+//                         </div>
+//                       )}
+//                     </div>
+//                   ))}
+//                 </div>
+//               ) : (
+//                 <div className="rounded-lg border border-dashed p-10 text-center text-gray-500">
+//                   Selecciona una orden de venta aprobada para cargar sus productos
+//                   pendientes por remitir.
+//                 </div>
+//               )}
+//             </div>
+//           </div>
+
+//           <DialogFooter className="pt-2">
+//             <Button variant="outline" onClick={closeToList}>
+//               Cancelar
+//             </Button>
+//             <Button
+//               onClick={handleGuardar}
+//               className="bg-blue-600 hover:bg-blue-700"
+//             >
+//               {isEditar ? "Guardar Cambios" : "Guardar Remisión"}
+//             </Button>
+//           </DialogFooter>
+//         </DialogContent>
+//       </Dialog>
+
+//       <Dialog open={isVer} onOpenChange={(open) => !open && closeToList()}>
+//         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+//           <DialogHeader>
+//             <DialogTitle>Detalle de Remisión</DialogTitle>
+//           </DialogHeader>
+
+//           {remisionSeleccionada && (
+//             <div className="space-y-4">
+//               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+//                 <div>
+//                   <Label>N° Remisión</Label>
+//                   <Input value={remisionSeleccionada.numeroRemision} disabled />
+//                 </div>
+//                 <div>
+//                   <Label>Orden de Venta</Label>
+//                   <Input value={remisionSeleccionada.ordenVenta} disabled />
+//                 </div>
+//                 <div>
+//                   <Label>Cliente</Label>
+//                   <Input value={remisionSeleccionada.cliente} disabled />
+//                 </div>
+//                 <div>
+//                   <Label>Estado</Label>
+//                   <Input value={remisionSeleccionada.estado} disabled />
+//                 </div>
+//               </div>
+
+//               <div className="overflow-x-auto rounded-lg border">
+//                 <Table>
+//                   <TableHeader>
+//                     <TableRow>
+//                       <TableHead>Producto</TableHead>
+//                       <TableHead>Lote</TableHead>
+//                       <TableHead>Cantidad</TableHead>
+//                       <TableHead>Precio</TableHead>
+//                       <TableHead>Subtotal</TableHead>
+//                     </TableRow>
+//                   </TableHeader>
+//                   <TableBody>
+//                     {remisionSeleccionada.detalle.map((item, index) => (
+//                       <TableRow key={`${item.producto}-${index}`}>
+//                         <TableCell>{item.producto}</TableCell>
+//                         <TableCell>{item.lote || "-"}</TableCell>
+//                         <TableCell>{item.cantidad}</TableCell>
+//                         <TableCell>
+//                           $
+//                           {item.precio.toLocaleString("es-CO", {
+//                             minimumFractionDigits: 2,
+//                           })}
+//                         </TableCell>
+//                         <TableCell>
+//                           $
+//                           {item.subtotal.toLocaleString("es-CO", {
+//                             minimumFractionDigits: 2,
+//                           })}
+//                         </TableCell>
+//                       </TableRow>
+//                     ))}
+//                   </TableBody>
+//                 </Table>
+//               </div>
+
+//               {remisionSeleccionada.observaciones && (
+//                 <div>
+//                   <Label>Observaciones</Label>
+//                   <textarea
+//                     className="w-full min-h-[90px] rounded-md border border-gray-300 px-3 py-2"
+//                     value={remisionSeleccionada.observaciones}
+//                     disabled
+//                   />
+//                 </div>
+//               )}
+
+//               <div className="flex justify-between items-center">
+//                 <div className="text-lg font-semibold">
+//                   Total: $
+//                   {remisionSeleccionada.total.toLocaleString("es-CO", {
+//                     minimumFractionDigits: 2,
+//                   })}
+//                 </div>
+
+//                 <Button
+//                   onClick={() => generarPDF(remisionSeleccionada)}
+//                   className="bg-green-600 hover:bg-green-700"
+//                 >
+//                   <Download size={16} className="mr-2" />
+//                   Descargar PDF
+//                 </Button>
+//               </div>
+//             </div>
+//           )}
+
+//           <DialogFooter>
+//             <Button variant="outline" onClick={closeToList}>
+//               Cerrar
+//             </Button>
+//           </DialogFooter>
+//         </DialogContent>
+//       </Dialog>
+
+//       <Dialog open={isAnular} onOpenChange={(open) => !open && closeToList()}>
+//         <DialogContent className="max-w-md">
+//           <DialogHeader>
+//             <DialogTitle>Anular Remisión</DialogTitle>
+//             <DialogDescription>
+//               Esta acción cambiará el estado de la remisión a anulada y devolverá
+//               las cantidades al inventario.
+//             </DialogDescription>
+//           </DialogHeader>
+
+//           <DialogFooter>
+//             <Button variant="outline" onClick={closeToList}>
+//               Cancelar
+//             </Button>
+//             <Button variant="destructive" onClick={confirmAnular}>
+//               Anular
+//             </Button>
+//           </DialogFooter>
+//         </DialogContent>
+//       </Dialog>
+
+//       <Dialog
+//         open={showConfirmEstadoModal}
+//         onOpenChange={setShowConfirmEstadoModal}
+//       >
+//         <DialogContent className="max-w-md">
+//           <DialogHeader>
+//             <DialogTitle>Confirmar cambio de estado</DialogTitle>
+//             <DialogDescription>
+//               {remisionCambioEstado && estadoDestino
+//                 ? `La remisión ${remisionCambioEstado.numeroRemision} cambiará a estado ${estadoDestino.nombre}.`
+//                 : "¿Deseas cambiar el estado de esta remisión?"}
+//             </DialogDescription>
+//           </DialogHeader>
+
+//           <DialogFooter>
+//             <Button
+//               variant="outline"
+//               onClick={() => {
+//                 setShowConfirmEstadoModal(false);
+//                 setRemisionCambioEstado(null);
+//                 setEstadoDestino(null);
+//               }}
+//             >
+//               <X size={16} className="mr-2" />
+//               Cancelar
+//             </Button>
+//             <Button onClick={handleConfirmEstado}>
+//               <CheckCircle size={16} className="mr-2" />
+//               Confirmar
+//             </Button>
+//           </DialogFooter>
+//         </DialogContent>
+//       </Dialog>
+
+//       <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
+//         <DialogContent className="max-w-md">
+//           <DialogHeader>
+//             <DialogTitle>{isEditar ? "Remisión actualizada" : "Remisión creada"}</DialogTitle>
+//             <DialogDescription>{successMessage}</DialogDescription>
+//           </DialogHeader>
+
+//           <DialogFooter>
+//             <Button onClick={() => setShowSuccessModal(false)}>Aceptar</Button>
+//           </DialogFooter>
+//         </DialogContent>
+//       </Dialog>
+//     </div>
+//   );
+// }
+
 import {
-  useNavigate,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type TouchEvent as ReactTouchEvent,
+} from "react";
+import {
   useLocation,
-  useParams,
+  useNavigate,
   useOutletContext,
+  useParams,
 } from "react-router-dom";
 import {
-  FileText,
-  Search,
-  Plus,
-  Edit,
   Ban,
-  Eye,
   CheckCircle,
-  Clock,
   ChevronLeft,
   ChevronRight,
-  X,
+  Clock,
   Download,
+  Edit,
+  Eye,
+  FileText,
+  Package,
+  Plus,
+  Search,
+  ShoppingCart,
+  X,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { toast } from "sonner";
+
+import type { AppOutletContext } from "../../../../layouts/MainLayout";
 import { Button } from "../../../../shared/components/ui/button";
 import { Input } from "../../../../shared/components/ui/input";
 import { Label } from "../../../../shared/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../../../shared/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -33,637 +1476,889 @@ import {
   TableHeader,
   TableRow,
 } from "../../../../shared/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from "../../../../shared/components/ui/dialog";
+import { remisionesVentaService } from "../services/remisiones-venta.services";
+import type {
+  CatalogoEstadoRemisionVenta,
+  CreateRemisionVentaPayload,
+  OrdenVentaCatalogoApi,
+  RemisionVentaApi,
+  UpdateRemisionVentaPayload,
+} from "../types/remisiones-venta.types";
 
-import type { AppOutletContext } from "../../../../layouts/MainLayout";
-import { ordenesData } from "../../../../data/ordenes";
-import { clientesData } from "../../../../data/clientes";
-import { productosData } from "../../../../data/productos";
-import {
-  remisionesVentaData,
-  type RemisionVenta,
-  type ProductoRemisionVenta,
-} from "../../../../data/remisiones-venta";
+type EstadoUi = "Pendiente" | "Despachado" | "Entregado" | "Facturada" | "Anulada";
 
-export default function Remisiones() {
-  const { selectedBodegaNombre, currentUser } =
-    useOutletContext<AppOutletContext>();
-  const selectedBodega = selectedBodegaNombre;
+type RemisionListadoUi = {
+  id: number;
+  numeroRemision: string;
+  ordenVenta: string;
+  cliente: string;
+  fecha: string;
+  estado: EstadoUi;
+  items: number;
+  total: number;
+  observaciones: string;
+  bodega: string;
+  estadoId: number;
+  detalle: Array<{
+    producto: string;
+    lote: string;
+    cantidad: number;
+    precio: number;
+    subtotal: number;
+  }>;
+};
 
-  // ✅ estados base
-  const [searchTerm, setSearchTerm] = useState("");
-  const [remisiones, setRemisiones] = useState<RemisionVenta[]>(() => {
-    const saved = localStorage.getItem("vetmanage_remisiones_venta");
-    return saved ? JSON.parse(saved) : remisionesVentaData;
+type FormLoteState = {
+  id_existencia: number;
+  lote: string;
+  codigo_barras: string;
+  fecha_vencimiento: string;
+  cantidad_disponible: number;
+  cantidad: string;
+};
+
+type FormProductoState = {
+  id_producto: number;
+  nombre: string;
+  precio_unitario: number;
+  cantidad_orden: number;
+  cantidad_remitida: number;
+  cantidad_pendiente: number;
+  lotes: FormLoteState[];
+};
+
+function normalizeText(value?: string | null) {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeDate(value?: string | null) {
+  if (!value) return "";
+  return String(value).slice(0, 10);
+}
+
+function toNumber(value: unknown) {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function mapEstado(nombre?: string | null): EstadoUi {
+  const text = normalizeText(nombre);
+
+  if (text.includes("anulad")) return "Anulada";
+  if (text.includes("entreg")) return "Entregado";
+  if (text.includes("despach") || text.includes("aprob")) return "Despachado";
+  if (text.includes("factur")) return "Facturada";
+  return "Pendiente";
+}
+
+function buildRemisionUi(item: RemisionVentaApi): RemisionListadoUi {
+  const detalle = (item.detalle_remision_venta ?? []).map((d) => {
+    const cantidad = toNumber(d.cantidad);
+    const precio = toNumber(d.precio_unitario);
+
+    return {
+      producto: d.existencias?.producto?.nombre_producto ?? "Producto",
+      lote: d.existencias?.lote ?? "",
+      cantidad,
+      precio,
+      subtotal: cantidad * precio,
+    };
   });
 
-  const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  return {
+    id: item.id_remision_venta,
+    numeroRemision:
+      item.codigo_remision_venta ||
+      `RMV-${String(item.id_remision_venta).padStart(4, "0")}`,
+    ordenVenta:
+      item.orden_venta?.codigo_orden_venta ||
+      `OV-${String(item.id_orden_venta).padStart(4, "0")}`,
+    cliente: item.cliente?.nombre_cliente ?? "Cliente",
+    fecha: normalizeDate(item.fecha_creacion),
+    estado: mapEstado(item.estado_remision_venta?.nombre_estado),
+    items: detalle.length,
+    total: detalle.reduce((acc, d) => acc + d.subtotal, 0),
+    observaciones: item.observaciones ?? "",
+    bodega: item.orden_venta?.bodega?.nombre_bodega ?? "",
+    estadoId:
+      item.estado_remision_venta?.id_estado_remision_venta ??
+      item.id_estado_remision_venta,
+    detalle,
+  };
+}
 
-  const [remisionParaCambioEstado, setRemisionParaCambioEstado] =
-    useState<RemisionVenta | null>(null);
-  const [nuevoEstado, setNuevoEstado] = useState<
-    "Pendiente" | "Aprobada" | "Facturada" | "Anulada" | null
-  >(null);
+const puedeEditarRemision = (estado: EstadoUi) =>
+  estado !== "Entregado" && estado !== "Facturada" && estado !== "Anulada";
 
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+const puedeAnularRemision = (estado: EstadoUi) =>
+  estado !== "Entregado" && estado !== "Anulada" && estado !== "Facturada";
 
-  const [isPdfOptionsModalOpen, setIsPdfOptionsModalOpen] = useState(false);
-  const [remisionParaPdf, setRemisionParaPdf] =
-    useState<RemisionVenta | null>(null);
+const puedeCambiarEstadoRemision = (estado: EstadoUi) =>
+  estado !== "Entregado" && estado !== "Facturada" && estado !== "Anulada";
 
-  // ✅ router + flags URL
+function getEstadoBadgeClass(estado: EstadoUi) {
+  if (estado === "Pendiente") {
+    return "bg-yellow-100 text-yellow-800 hover:bg-yellow-200";
+  }
+  if (estado === "Despachado") {
+    return "bg-blue-100 text-blue-800 hover:bg-blue-200";
+  }
+  if (estado === "Entregado") {
+    return "bg-emerald-100 text-emerald-800 hover:bg-emerald-200";
+  }
+  if (estado === "Facturada") {
+    return "bg-indigo-100 text-indigo-800 hover:bg-indigo-200";
+  }
+  return "bg-red-100 text-red-800 hover:bg-red-200";
+}
+
+function getSiguienteEstadoTexto(estado: EstadoUi) {
+  if (estado === "Pendiente") return "Cambiar a Despachado";
+  if (estado === "Despachado") return "Cambiar a Entregado";
+  if (estado === "Entregado") return "Ya está entregada";
+  if (estado === "Facturada") return "Ya está facturada";
+  return "Ya está anulada";
+}
+
+export default function RemisionesVenta() {
+  const outlet = useOutletContext<AppOutletContext>() as AppOutletContext & {
+    selectedBodegaId?: number | null;
+    selectedBodegaNombre?: string;
+    currentUser?: {
+      id?: number | string;
+      id_usuario?: number | string;
+      bodega?: string;
+    } | null;
+  };
+
+  const selectedBodegaId = Number(outlet?.selectedBodegaId ?? 0) || undefined;
+  const selectedBodegaNombre =
+    outlet?.selectedBodegaNombre ?? "Todas las bodegas";
+  const currentUserId = Number(
+    outlet?.currentUser?.id_usuario ?? outlet?.currentUser?.id ?? 0
+  );
+
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams<{ id: string }>();
 
-  const isCrear = location.pathname.endsWith("/remisiones/crear");
-  const isVer = location.pathname.endsWith("/ver");
+  const isCrear = location.pathname.endsWith("/remisiones-venta/crear");
   const isEditar = location.pathname.endsWith("/editar");
+  const isVer = location.pathname.endsWith("/ver");
   const isAnular = location.pathname.endsWith("/anular");
+  const isFormularioAbierto = isCrear || isEditar;
 
-  const closeToList = () => navigate("/app/remisiones");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [remisiones, setRemisiones] = useState<RemisionListadoUi[]>([]);
+  const [ordenesDisponibles, setOrdenesDisponibles] = useState<
+    OrdenVentaCatalogoApi[]
+  >([]);
+  const [estados, setEstados] = useState<CatalogoEstadoRemisionVenta[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  // ✅ remisión seleccionada por URL (:id)
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  const [formNumeroRemision, setFormNumeroRemision] = useState("");
+  const [formFecha, setFormFecha] = useState("");
+  const [formObservaciones, setFormObservaciones] = useState("");
+  const [formOrdenId, setFormOrdenId] = useState("");
+  const [formEstadoId, setFormEstadoId] = useState("");
+  const [formCliente, setFormCliente] = useState("");
+  const [formProductos, setFormProductos] = useState<FormProductoState[]>([]);
+
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState(
+    "La remisión de venta se creó correctamente."
+  );
+  const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
+  const [remisionCambioEstado, setRemisionCambioEstado] =
+    useState<RemisionListadoUi | null>(null);
+  const [estadoDestino, setEstadoDestino] = useState<{
+    id: number;
+    nombre: EstadoUi;
+  } | null>(null);
+
+  const [showFirmaModal, setShowFirmaModal] = useState(false);
+  const [firmaDigital, setFirmaDigital] = useState("");
+  const [firmaValida, setFirmaValida] = useState(false);
+  const firmaCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const firmaDibujandoRef = useRef(false);
+
   const remisionSeleccionada = useMemo(() => {
     if (!params.id) return null;
     const id = Number(params.id);
     if (!Number.isFinite(id)) return null;
-    return remisiones.find((r) => r.id === id) ?? null;
-  }, [remisiones, params.id]);
+    return remisiones.find((item) => item.id === id) ?? null;
+  }, [params.id, remisiones]);
 
-  // ✅ si entran a /ver, /editar o /eliminar con id inválido → volver
-  useEffect(() => {
-    if (!isVer && !isEditar && !isAnular) return;
-
-    if (!remisionSeleccionada) {
-      closeToList();
-      return;
-    }
-  }, [isVer, isEditar, isAnular, remisionSeleccionada]);
-
-  // ✅ navegación (modales por URL)
-  const handleView = (remision: RemisionVenta) => {
-    navigate(`/app/remisiones/${remision.id}/ver`);
-  };
-
-  const handleCreate = () => {
-    navigate("/app/remisiones/crear");
-  };
-
-  const handleEdit = (remision: RemisionVenta) => {
-    navigate(`/app/remisiones/${remision.id}/editar`);
-  };
-
-  const handleAnular = (remision: RemisionVenta) => {
-    navigate(`/app/remisiones/${remision.id}/anular`);
-  };
-
-  const [formData, setFormData] = useState({
-    numeroRemision: "",
-    ordenVenta: "",
-    cliente: "",
-    fecha: "",
-    estado: "Pendiente" as "Pendiente" | "Aprobada" | "Facturada" | "Anulada",
-    items: 0,
-    total: 0,
-    observaciones: "",
-  });
-
-  // Productos dentro de la remisión
-  const [productosRemision, setProductosRemision] = useState<
-    ProductoRemisionVenta[]
-  >([]);
-  const [selectedProductoId, setSelectedProductoId] = useState("");
-  const [cantidadProducto, setCantidadProducto] = useState(1);
-  const [precioProducto, setPrecioProducto] = useState<string>("");
-
-  // Productos activos
-  const productosActivos = useMemo(
-    () => productosData.filter((p) => p.estado),
-    []
+  const estadoPendienteId = useMemo(
+    () =>
+      estados.find((item) => normalizeText(item.nombre_estado).includes("pend"))
+        ?.id_estado_remision_venta ?? "",
+    [estados]
   );
 
-  // Número automático
-  const generarNumeroRemision = () => {
-    const maxNum = remisiones.reduce((max, r) => {
-      const match = /^RV-(\d+)$/.exec(r.numeroRemision);
-      const num = match ? Number(match[1]) : 0;
-      return Number.isFinite(num) ? Math.max(max, num) : max;
-    }, 0);
+  const getEstadoIdPorNombre = (nombre: EstadoUi) =>
+    estados.find((item) => {
+      const n = normalizeText(item.nombre_estado);
+      if (nombre === "Pendiente") return n.includes("pend");
+      if (nombre === "Despachado") return n.includes("despach") || n.includes("aprob");
+      if (nombre === "Entregado") return n.includes("entreg");
+      if (nombre === "Facturada") return n.includes("factur");
+      if (nombre === "Anulada") return n.includes("anulad");
+      return false;
+    })?.id_estado_remision_venta;
 
-    return `RV-${String(maxNum + 1).padStart(3, "0")}`;
+  const cargarTodo = async () => {
+    try {
+      setLoading(true);
+
+      const [listado, catalogos] = await Promise.all([
+        remisionesVentaService.getAll(selectedBodegaId),
+        remisionesVentaService.getCatalogos(selectedBodegaId),
+      ]);
+
+      setRemisiones(listado.map(buildRemisionUi));
+      setOrdenesDisponibles(catalogos.ordenes);
+      setEstados(catalogos.estados);
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error?.message || "No se pudieron cargar las remisiones");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const getFechaActual = () => new Date().toISOString().split("T")[0];
+  useEffect(() => {
+    void cargarTodo();
+  }, [selectedBodegaId]);
 
-  // Órdenes filtradas por cliente seleccionado
-  const ordenesFiltradas = useMemo(() => {
-    if (!formData.cliente) return ordenesData;
-    return ordenesData.filter((orden) => orden.cliente === formData.cliente);
-  }, [formData.cliente]);
-
-  // ✅ filtrar por bodega + búsqueda
-  const filteredRemisiones = useMemo(() => {
-    const porBodega =
-      selectedBodega === "Todas las bodegas"
-        ? remisiones
-        : remisiones.filter((r) => r.bodega === selectedBodega);
-
-    return porBodega.filter(
-      (remision) =>
-        remision.numeroRemision
-          .toLowerCase()
-          .includes(searchTerm.toLowerCase()) ||
-        remision.ordenVenta
-          .toLowerCase()
-          .includes(searchTerm.toLowerCase()) ||
-        remision.cliente.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        remision.estado.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        remision.items.toString().includes(searchTerm)
-    );
-  }, [remisiones, searchTerm, selectedBodega]);
-
-  // ✅ paginación
-  const totalPages = Math.ceil(filteredRemisiones.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentRemisiones = filteredRemisiones.slice(startIndex, endIndex);
-
-  // ✅ reset página al cambiar filtros
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedBodega]);
-
-  // ✅ stats sobre filtrado
-  const stats = useMemo(() => {
-    const totalRemisiones = filteredRemisiones.length;
-    const pendientes = filteredRemisiones.filter(
-      (r) => r.estado === "Pendiente"
-    ).length;
-    const aprobadas = filteredRemisiones.filter(
-      (r) => r.estado === "Aprobada"
-    ).length;
-    const anuladas = filteredRemisiones.filter(
-      (r) => r.estado === "Anulada"
-    ).length;
-
-    return { totalRemisiones, pendientes, aprobadas, anuladas };
-  }, [filteredRemisiones]);
-
-  const handleOrdenChange = (ordenId: string) => {
-    const ordenSeleccionada = ordenesData.find(
-      (o) => o.numeroOrden === ordenId
-    );
-
-    if (ordenSeleccionada) {
-      setFormData((prev) => ({
-        ...prev,
-        ordenVenta: ordenId,
-        cliente: ordenSeleccionada.cliente,
-      }));
-
-      if (ordenSeleccionada.productos && ordenSeleccionada.productos.length > 0) {
-        const productosConvertidos: ProductoRemisionVenta[] =
-          ordenSeleccionada.productos.map((p) => ({
-            producto: p.producto,
-            cantidad: p.cantidad,
-            precio: p.precio,
-            subtotal: p.subtotal,
-          }));
-
-        setProductosRemision(productosConvertidos);
-        toast.success(
-          `${ordenSeleccionada.productos.length} productos cargados de la orden`
-        );
-      } else {
-        setProductosRemision([]);
-      }
-    } else {
-      setFormData((prev) => ({ ...prev, ordenVenta: ordenId }));
-      setProductosRemision([]);
-    }
-  };
-
-  const handleClienteChange = (clienteNombre: string) => {
-    setFormData((prev) => ({ ...prev, cliente: clienteNombre }));
-
-    if (formData.ordenVenta) {
-      const ordenActual = ordenesData.find(
-        (o) => o.numeroOrden === formData.ordenVenta
-      );
-
-      if (ordenActual && ordenActual.cliente !== clienteNombre) {
-        setFormData((prev) => ({
-          ...prev,
-          cliente: clienteNombre,
-          ordenVenta: "",
-        }));
-        setProductosRemision([]);
-      }
-    }
-  };
-
-  const agregarProducto = () => {
-    if (!selectedProductoId) {
-      toast.error("Selecciona un producto");
-      return;
-    }
-
-    if (cantidadProducto <= 0) {
-      toast.error("La cantidad debe ser mayor a 0");
-      return;
-    }
-
-    const precio = parseFloat(precioProducto);
-
-    if (!precioProducto.trim() || Number.isNaN(precio) || precio <= 0) {
-      toast.error("El precio debe ser mayor a 0");
-      return;
-    }
-
-    const producto = productosActivos.find((p) => p.id === selectedProductoId);
-    if (!producto) return;
-
-    const productoExistente = productosRemision.find(
-      (p) => p.producto.id === selectedProductoId
-    );
-    if (productoExistente) {
-      toast.error("Este producto ya está agregado");
-      return;
-    }
-
-    const nuevoProducto: ProductoRemisionVenta = {
-      producto,
-      cantidad: cantidadProducto,
-      precio,
-      subtotal: cantidadProducto * precio,
-    };
-
-    setProductosRemision([...productosRemision, nuevoProducto]);
-    setSelectedProductoId("");
-    setCantidadProducto(1);
-    setPrecioProducto("");
-    toast.success("Producto agregado a la remisión");
-  };
-  const eliminarProducto = (productoId: string) => {
-    setProductosRemision(
-      productosRemision.filter((p) => p.producto.id !== productoId)
-    );
-    toast.success("Producto eliminado");
-  };
-
-  const calcularTotal = () =>
-    productosRemision.reduce((total, item) => total + item.subtotal, 0);
-
-  const resetForm = () => {
-    setFormData({
-      numeroRemision: "",
-      ordenVenta: "",
-      cliente: "",
-      fecha: "",
-      estado: "Pendiente",
-      items: 0,
-      total: 0,
-      observaciones: "",
-    });
-    setProductosRemision([]);
-    setSelectedProductoId("");
-    setCantidadProducto(1);
-    setPrecioProducto("");
-  };
-
-  // ✅ al entrar a /crear
-
-  useEffect(() => {
-    localStorage.setItem(
-      "vetmanage_remisiones_venta",
-      JSON.stringify(remisiones)
-    );
-  }, [remisiones]);
+  }, [searchTerm, selectedBodegaId]);
 
   useEffect(() => {
     if (!isCrear) return;
 
-    resetForm();
+    setFormNumeroRemision("Se genera automáticamente");
+    setFormFecha(new Date().toISOString().split("T")[0]);
+    setFormObservaciones("");
+    setFormOrdenId("");
+    setFormEstadoId(String(estadoPendienteId || ""));
+    setFormCliente("");
+    setFormProductos([]);
+  }, [isCrear, estadoPendienteId]);
 
-    setFormData({
-      numeroRemision: generarNumeroRemision(),
-      ordenVenta: "",
-      cliente: "",
-      fecha: getFechaActual(),
-      estado: "Pendiente",
-      items: 0,
-      total: 0,
-      observaciones: "",
-    });
-  }, [isCrear, remisiones]);
-
-  // ✅ al entrar a /editar
   useEffect(() => {
-    if (!isEditar) return;
-    if (!remisionSeleccionada) return;
+    const cargarEdicion = async () => {
+      if (!isEditar || !params.id) return;
 
-    setFormData({
-      numeroRemision: remisionSeleccionada.numeroRemision,
-      ordenVenta: remisionSeleccionada.ordenVenta,
-      cliente: remisionSeleccionada.cliente,
-      fecha: remisionSeleccionada.fecha,
-      estado: remisionSeleccionada.estado,
-      items: remisionSeleccionada.items,
-      total: remisionSeleccionada.total,
-      observaciones: remisionSeleccionada.observaciones,
-    });
+      try {
+        const idRemision = Number(params.id);
+        if (!Number.isFinite(idRemision)) return;
 
-    setProductosRemision(
-      remisionSeleccionada.productos
-        ? remisionSeleccionada.productos.map((p) => ({ ...p }))
-        : []
-    );
+        const [catalogos, remision] = await Promise.all([
+          remisionesVentaService.getCatalogos(selectedBodegaId, idRemision),
+          remisionesVentaService.getOne(idRemision),
+        ]);
 
-    setSelectedProductoId("");
-    setCantidadProducto(1);
-    setPrecioProducto("");
-  }, [isEditar, remisionSeleccionada]);
+        setOrdenesDisponibles(catalogos.ordenes);
+        setEstados(catalogos.estados);
 
-  const confirmCreate = () => {
-    if (!formData.ordenVenta || !formData.cliente) {
-      toast.error("Por favor selecciona una orden de venta y un cliente");
-      return;
-    }
+        const orden = catalogos.ordenes.find(
+          (item) => item.id_orden_venta === remision.id_orden_venta
+        );
 
-    if (productosRemision.length === 0) {
-      toast.error("Debes agregar al menos un producto");
-      return;
-    }
+        if (!orden) {
+          toast.error(
+            "No se pudo cargar la orden asociada a esta remisión para editarla"
+          );
+          return;
+        }
 
-    const numeroRemisionNuevo = generarNumeroRemision();
-    const totalRemision = calcularTotal();
+        const cantidadesPorProductoYLote = new Map<number, Map<number, number>>();
 
-    const nuevaRemision: RemisionVenta = {
-      id: remisiones.length > 0 ? Math.max(...remisiones.map((r) => r.id)) + 1 : 1,
-      numeroRemision: numeroRemisionNuevo,
-      ordenVenta: formData.ordenVenta,
-      cliente: formData.cliente,
-      fecha: getFechaActual(),
-      estado: formData.estado,
-      items: productosRemision.length,
-      total: totalRemision,
-      observaciones: formData.observaciones,
-      productos: productosRemision,
-      bodega:
-        selectedBodega === "Todas las bodegas"
-          ? currentUser?.bodega || "Bodega Principal"
-          : selectedBodega,
+        for (const detalle of remision.detalle_remision_venta ?? []) {
+          const idProducto = Number(
+            detalle.existencias?.id_producto ??
+              detalle.existencias?.producto?.id_producto ??
+              0
+          );
+          const idExistencia = Number(detalle.existencias?.id_existencia ?? 0);
+          const cantidad = toNumber(detalle.cantidad);
+
+          if (!idProducto || !idExistencia) continue;
+
+          if (!cantidadesPorProductoYLote.has(idProducto)) {
+            cantidadesPorProductoYLote.set(idProducto, new Map<number, number>());
+          }
+
+          cantidadesPorProductoYLote
+            .get(idProducto)!
+            .set(idExistencia, cantidad);
+        }
+
+        setFormNumeroRemision(
+          remision.codigo_remision_venta ||
+            `RMV-${String(remision.id_remision_venta).padStart(4, "0")}`
+        );
+        setFormFecha(
+          normalizeDate(remision.fecha_creacion) ||
+            new Date().toISOString().split("T")[0]
+        );
+        setFormObservaciones(remision.observaciones ?? "");
+        setFormOrdenId(String(remision.id_orden_venta));
+        setFormEstadoId(String(remision.id_estado_remision_venta));
+        setFormCliente(
+          remision.cliente?.nombre_cliente ?? orden.cliente?.nombre_cliente ?? ""
+        );
+
+        const productos = (orden.detalle ?? []).map((detalle) => {
+          const seleccionados =
+            cantidadesPorProductoYLote.get(detalle.id_producto) ??
+            new Map<number, number>();
+
+          return {
+            id_producto: detalle.id_producto,
+            nombre: detalle.producto?.nombre_producto ?? "Producto",
+            precio_unitario: toNumber(detalle.precio_unitario),
+            cantidad_orden: toNumber(detalle.cantidad_orden),
+            cantidad_remitida: toNumber(detalle.cantidad_remitida),
+            cantidad_pendiente: toNumber(detalle.cantidad_pendiente),
+            lotes: (detalle.existencias_disponibles ?? []).map((lote) => ({
+              id_existencia: lote.id_existencia,
+              lote: lote.lote ?? "",
+              codigo_barras: lote.codigo_barras ?? "",
+              fecha_vencimiento: normalizeDate(lote.fecha_vencimiento),
+              cantidad_disponible: toNumber(lote.cantidad_disponible),
+              cantidad: seleccionados.has(lote.id_existencia)
+                ? String(seleccionados.get(lote.id_existencia))
+                : "",
+            })),
+          };
+        });
+
+        setFormProductos(productos);
+      } catch (error: any) {
+        console.error(error);
+        toast.error(error?.message || "No se pudo cargar la remisión a editar");
+      }
     };
 
-    setRemisiones([...remisiones, nuevaRemision]);
-    closeToList();
-    setShowSuccessModal(true);
+    void cargarEdicion();
+  }, [isEditar, params.id, selectedBodegaId]);
+
+  const filteredRemisiones = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return remisiones;
+
+    return remisiones.filter((item) => {
+      return (
+        item.numeroRemision.toLowerCase().includes(term) ||
+        item.ordenVenta.toLowerCase().includes(term) ||
+        item.cliente.toLowerCase().includes(term) ||
+        item.estado.toLowerCase().includes(term) ||
+        item.items.toString().includes(term)
+      );
+    });
+  }, [remisiones, searchTerm]);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredRemisiones.length / itemsPerPage)
+  );
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const currentRemisiones = filteredRemisiones.slice(
+    startIndex,
+    startIndex + itemsPerPage
+  );
+
+  const stats = useMemo(() => {
+    return {
+      totalRemisiones: filteredRemisiones.length,
+      pendientes: filteredRemisiones.filter((r) => r.estado === "Pendiente")
+        .length,
+      despachadas: filteredRemisiones.filter((r) => r.estado === "Despachado")
+        .length,
+      anuladas: filteredRemisiones.filter((r) => r.estado === "Anulada").length,
+    };
+  }, [filteredRemisiones]);
+
+  const ordenSeleccionada = useMemo(() => {
+    const id = Number(formOrdenId);
+    if (!id) return null;
+    return ordenesDisponibles.find((o) => o.id_orden_venta === id) ?? null;
+  }, [formOrdenId, ordenesDisponibles]);
+
+  const bodegaFormularioNombre = useMemo(() => {
+    return (
+      ordenSeleccionada?.bodega?.nombre_bodega ??
+      selectedBodegaNombre ??
+      "Sin bodega"
+    );
+  }, [ordenSeleccionada, selectedBodegaNombre]);
+
+  const totalFormulario = useMemo(() => {
+    return formProductos.reduce((acc, producto) => {
+      const subtotal = producto.lotes.reduce(
+        (sum, lote) => sum + toNumber(lote.cantidad) * producto.precio_unitario,
+        0
+      );
+      return acc + subtotal;
+    }, 0);
+  }, [formProductos]);
+
+  const cantidadTotalItemsFormulario = useMemo(() => {
+    return formProductos.reduce(
+      (acc, producto) =>
+        acc + producto.lotes.filter((lote) => toNumber(lote.cantidad) > 0).length,
+      0
+    );
+  }, [formProductos]);
+
+  const limpiarFirma = () => {
+    const canvas = firmaCanvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = "#111827";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    setFirmaDigital("");
+    setFirmaValida(false);
   };
 
-  const confirmEdit = () => {
-    if (!remisionSeleccionada || !formData.ordenVenta || !formData.cliente) {
-      toast.error("Por favor completa todos los campos obligatorios");
-      return;
+  useEffect(() => {
+    if (!showFirmaModal) return;
+
+    const canvas = firmaCanvasRef.current;
+    if (!canvas) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.max(rect.width, 1);
+    const height = Math.max(rect.height, 1);
+
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.scale(dpr, dpr);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, width, height);
+    ctx.strokeStyle = "#111827";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    setFirmaDigital("");
+    setFirmaValida(false);
+  }, [showFirmaModal]);
+
+  const getFirmaPoint = (event: ReactMouseEvent<HTMLCanvasElement> | ReactTouchEvent<HTMLCanvasElement>) => {
+    const canvas = firmaCanvasRef.current;
+    if (!canvas) return null;
+
+    const rect = canvas.getBoundingClientRect();
+
+    if ("touches" in event) {
+      const touch = event.touches[0] ?? event.changedTouches[0];
+      if (!touch) return null;
+
+      return {
+        x: touch.clientX - rect.left,
+        y: touch.clientY - rect.top,
+      };
     }
 
-    if (remisionSeleccionada.estado === "Anulada") {
-      toast.error("No puedes editar una remisión anulada");
-      return;
-    }
+    return {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
+  };
 
-    if (productosRemision.length === 0) {
-      toast.error("Debes agregar al menos un producto");
-      return;
-    }
+  const iniciarFirma = (event: ReactMouseEvent<HTMLCanvasElement> | ReactTouchEvent<HTMLCanvasElement>) => {
+    event.preventDefault();
 
-    setRemisiones(
-      remisiones.map((remision) =>
-        remision.id === remisionSeleccionada.id
-          ? {
-            ...remision,
-            ...formData,
-            items: productosRemision.length,
-            total: calcularTotal(),
-            productos: productosRemision,
-          }
-          : remision
-      )
+    const canvas = firmaCanvasRef.current;
+    const point = getFirmaPoint(event);
+
+    if (!canvas || !point) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    firmaDibujandoRef.current = true;
+    ctx.beginPath();
+    ctx.moveTo(point.x, point.y);
+  };
+
+  const moverFirma = (event: ReactMouseEvent<HTMLCanvasElement> | ReactTouchEvent<HTMLCanvasElement>) => {
+    if (!firmaDibujandoRef.current) return;
+
+    event.preventDefault();
+
+    const canvas = firmaCanvasRef.current;
+    const point = getFirmaPoint(event);
+
+    if (!canvas || !point) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.lineTo(point.x, point.y);
+    ctx.stroke();
+
+    setFirmaValida(true);
+    setFirmaDigital(canvas.toDataURL("image/png"));
+  };
+
+  const finalizarFirma = () => {
+    if (!firmaDibujandoRef.current) return;
+
+    firmaDibujandoRef.current = false;
+
+    const canvas = firmaCanvasRef.current;
+    if (!canvas) return;
+
+    setFirmaDigital(canvas.toDataURL("image/png"));
+  };
+
+  const handleOrdenChange = (ordenId: string) => {
+    setFormOrdenId(ordenId);
+
+    const orden = ordenesDisponibles.find(
+      (item) => item.id_orden_venta === Number(ordenId)
     );
 
-    toast.success("Remisión actualizada exitosamente");
-    closeToList();
-  };
-
-  const confirmAnular = () => {
-    if (!remisionSeleccionada) return;
-
-    if (remisionSeleccionada.estado === "Anulada") {
-      toast.error("La remisión ya está anulada");
+    if (!orden) {
+      setFormCliente("");
+      setFormProductos([]);
       return;
     }
 
-    setRemisiones(
-      remisiones.map((remision) =>
-        remision.id === remisionSeleccionada.id
-          ? { ...remision, estado: "Anulada" }
-          : remision
-      )
-    );
+    setFormCliente(orden.cliente?.nombre_cliente ?? "");
 
-    toast.success("Remisión anulada exitosamente");
-    closeToList();
+    const productos = (orden.detalle ?? []).map((detalle) => ({
+      id_producto: detalle.id_producto,
+      nombre: detalle.producto?.nombre_producto ?? "Producto",
+      precio_unitario: toNumber(detalle.precio_unitario),
+      cantidad_orden: toNumber(detalle.cantidad_orden),
+      cantidad_remitida: toNumber(detalle.cantidad_remitida),
+      cantidad_pendiente: toNumber(detalle.cantidad_pendiente),
+      lotes: (detalle.existencias_disponibles ?? []).map((lote) => ({
+        id_existencia: lote.id_existencia,
+        lote: lote.lote ?? "",
+        codigo_barras: lote.codigo_barras ?? "",
+        fecha_vencimiento: normalizeDate(lote.fecha_vencimiento),
+        cantidad_disponible: toNumber(lote.cantidad_disponible),
+        cantidad: "",
+      })),
+    }));
+
+    setFormProductos(productos);
   };
 
-  const handleToggleEstado = (remision: RemisionVenta) => {
-    let siguienteEstado: "Pendiente" | "Aprobada" | "Facturada" | "Anulada" | null =
-      null;
+  const handleCantidadLoteChange = (
+    idProducto: number,
+    idExistencia: number,
+    value: string
+  ) => {
+    setFormProductos((prev) =>
+      prev.map((producto) => {
+        if (producto.id_producto !== idProducto) return producto;
 
-    switch (remision.estado) {
-      case "Pendiente":
-        siguienteEstado = "Aprobada";
-        break;
-      case "Aprobada":
-        siguienteEstado = "Facturada";
-        break;
-      case "Facturada":
-        toast.info("Esta remisión ya está en estado final (Facturada)");
-        return;
-      case "Anulada":
-        toast.info("Las remisiones anuladas no pueden cambiar de estado");
-        return;
+        return {
+          ...producto,
+          lotes: producto.lotes.map((lote) =>
+            lote.id_existencia === idExistencia
+              ? { ...lote, cantidad: value }
+              : lote
+          ),
+        };
+      })
+    );
+  };
+
+  const getCantidadSolicitadaProducto = (producto: FormProductoState) =>
+    producto.lotes.reduce((acc, lote) => acc + toNumber(lote.cantidad), 0);
+
+  const validarFormulario = () => {
+    if (!currentUserId) {
+      toast.error("No se pudo identificar el usuario actual");
+      return false;
     }
 
-    setRemisionParaCambioEstado(remision);
-    setNuevoEstado(siguienteEstado);
+    if (!formOrdenId) {
+      toast.error("Debes seleccionar una orden de venta aprobada");
+      return false;
+    }
+
+    if (!formEstadoId) {
+      toast.error("Debes seleccionar un estado");
+      return false;
+    }
+
+    const detalleConCantidad = formProductos
+      .map((producto) => ({
+        ...producto,
+        cantidadSolicitada: getCantidadSolicitadaProducto(producto),
+      }))
+      .filter((producto) => producto.cantidadSolicitada > 0);
+
+    if (detalleConCantidad.length === 0) {
+      toast.error("Debes remitir al menos una cantidad");
+      return false;
+    }
+
+    for (const producto of detalleConCantidad) {
+      if (producto.cantidadSolicitada > producto.cantidad_pendiente) {
+        toast.error(
+          `La cantidad solicitada de ${producto.nombre} supera lo pendiente de la orden`
+        );
+        return false;
+      }
+
+      for (const lote of producto.lotes) {
+        const cantidad = toNumber(lote.cantidad);
+        if (cantidad > lote.cantidad_disponible) {
+          toast.error(
+            `La cantidad del lote ${lote.lote || lote.id_existencia} supera la disponible`
+          );
+          return false;
+        }
+      }
+    }
+
+    return true;
+  };
+
+  const handleGuardar = async () => {
+    if (!validarFormulario()) return;
+
+    const payload: CreateRemisionVentaPayload | UpdateRemisionVentaPayload = {
+      fecha_creacion: formFecha,
+      fecha_vencimiento: null,
+      observaciones: formObservaciones || null,
+      id_orden_venta: Number(formOrdenId),
+      id_estado_remision_venta: Number(formEstadoId),
+      id_usuario_creador: currentUserId,
+      detalle: formProductos
+        .map((producto) => ({
+          id_producto: producto.id_producto,
+          lotes: producto.lotes
+            .map((lote) => ({
+              id_existencia: lote.id_existencia,
+              cantidad: toNumber(lote.cantidad),
+            }))
+            .filter((lote) => lote.cantidad > 0),
+        }))
+        .filter((producto) => producto.lotes.length > 0),
+    };
+
+    try {
+      if (isEditar && params.id) {
+        await remisionesVentaService.update(Number(params.id), payload);
+        setSuccessMessage("La remisión de venta se actualizó correctamente.");
+      } else {
+        await remisionesVentaService.create(payload);
+        setSuccessMessage("La remisión de venta se creó correctamente.");
+      }
+
+      await cargarTodo();
+      navigate("/app/remisiones-venta");
+      setShowSuccessModal(true);
+    } catch (error: any) {
+      console.error(error);
+      toast.error(
+        error?.message ||
+          (isEditar
+            ? "No se pudo actualizar la remisión"
+            : "No se pudo crear la remisión")
+      );
+    }
+  };
+
+  const handleView = (remision: RemisionListadoUi) => {
+    navigate(`/app/remisiones-venta/${remision.id}/ver`);
+  };
+
+  const handleEdit = (remision: RemisionListadoUi) => {
+    navigate(`/app/remisiones-venta/${remision.id}/editar`);
+  };
+
+  const handleAnular = (remision: RemisionListadoUi) => {
+    navigate(`/app/remisiones-venta/${remision.id}/anular`);
+  };
+
+  const closeToList = () => navigate("/app/remisiones-venta");
+
+  const handleToggleEstado = (remision: RemisionListadoUi) => {
+    let siguiente: EstadoUi | null = null;
+
+    if (remision.estado === "Pendiente") siguiente = "Despachado";
+    else if (remision.estado === "Despachado") siguiente = "Entregado";
+    else if (remision.estado === "Entregado") {
+      toast.info("Esta remisión ya está entregada");
+      return;
+    } else if (remision.estado === "Facturada") {
+      toast.info("Esta remisión ya está facturada");
+      return;
+    } else {
+      toast.info("Las remisiones anuladas no pueden cambiar de estado");
+      return;
+    }
+
+    const estadoId = getEstadoIdPorNombre(siguiente);
+    if (!estadoId) {
+      toast.error(`No encontré el estado ${siguiente} en el backend`);
+      return;
+    }
+
+    setRemisionCambioEstado(remision);
+    setEstadoDestino({ id: estadoId, nombre: siguiente });
+
+    if (siguiente === "Entregado") {
+      setShowFirmaModal(true);
+      return;
+    }
+
     setShowConfirmEstadoModal(true);
   };
 
-  const handleConfirmEstado = () => {
-    if (!remisionParaCambioEstado || !nuevoEstado) return;
+  const resetCambioEstado = () => {
+    setShowConfirmEstadoModal(false);
+    setShowFirmaModal(false);
+    setRemisionCambioEstado(null);
+    setEstadoDestino(null);
+    setFirmaDigital("");
+    setFirmaValida(false);
+  };
 
-    if (remisionParaCambioEstado.estado === "Anulada") {
-      toast.error("No puedes cambiar el estado de una remisión anulada");
-      setShowConfirmEstadoModal(false);
-      setRemisionParaCambioEstado(null);
-      setNuevoEstado(null);
+  const handleConfirmEstado = async () => {
+    if (!remisionCambioEstado || !estadoDestino) return;
+
+    if (estadoDestino.nombre === "Entregado" && !firmaValida) {
+      toast.error("Debes capturar la firma del cliente antes de continuar");
       return;
     }
 
-    setRemisiones(
-      remisiones.map((remision) =>
-        remision.id === remisionParaCambioEstado.id
-          ? { ...remision, estado: nuevoEstado }
-          : remision
-      )
-    );
-
-    toast.success(`Estado actualizado a: ${nuevoEstado}`);
-    setShowConfirmEstadoModal(false);
-    setRemisionParaCambioEstado(null);
-    setNuevoEstado(null);
+    try {
+      await remisionesVentaService.updateEstado(remisionCambioEstado.id, {
+        id_estado_remision_venta: estadoDestino.id,
+        firma_digital: estadoDestino.nombre === "Entregado" ? firmaDigital : undefined,
+      });
+      await cargarTodo();
+      toast.success(`Estado actualizado a ${estadoDestino.nombre}`);
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error?.message || "No se pudo actualizar el estado");
+    } finally {
+      resetCambioEstado();
+    }
   };
 
-  const handleSuccessModalClose = () => {
-    setShowSuccessModal(false);
+  const confirmAnular = async () => {
+    if (!remisionSeleccionada) return;
+
+    const estadoId = getEstadoIdPorNombre("Anulada");
+    if (!estadoId) {
+      toast.error("No encontré el estado Anulada en el backend");
+      return;
+    }
+
+    try {
+      await remisionesVentaService.updateEstado(remisionSeleccionada.id, {
+        id_estado_remision_venta: estadoId,
+      });
+      await cargarTodo();
+      toast.success("Remisión anulada exitosamente");
+      closeToList();
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error?.message || "No se pudo anular la remisión");
+    }
   };
 
-  const generarPDF = (remision: RemisionVenta, incluirPrecios: boolean = true) => {
+  const generarPDF = (remision: RemisionListadoUi) => {
     const doc = new jsPDF();
 
-    doc.setFontSize(20);
+    doc.setFontSize(18);
     doc.setFont("helvetica", "bold");
-    doc.text("REMISIÓN DE VENTA", 105, 20, { align: "center" });
+    doc.text("REMISIÓN DE VENTA", 105, 18, { align: "center" });
 
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
+    doc.text(`N° Remisión: ${remision.numeroRemision}`, 20, 34);
+    doc.text(`Orden de Venta: ${remision.ordenVenta}`, 20, 40);
+    doc.text(`Cliente: ${remision.cliente}`, 20, 46);
+    doc.text(`Fecha: ${remision.fecha}`, 130, 34);
+    doc.text(`Estado: ${remision.estado}`, 130, 40);
+    doc.text(`Bodega: ${remision.bodega}`, 130, 46);
 
-    doc.text(`N° Remisión: ${remision.numeroRemision}`, 20, 40);
-    doc.text(`Orden de Venta: ${remision.ordenVenta}`, 20, 46);
-    doc.text(`Cliente: ${remision.cliente}`, 20, 52);
-
-    doc.text(
-      `Fecha: ${new Date(remision.fecha).toLocaleDateString("es-CO")}`,
-      120,
-      40
-    );
-    doc.text(`Estado: ${remision.estado}`, 120, 46);
-    doc.text(`Items: ${remision.items}`, 120, 52);
-
-    doc.setLineWidth(0.5);
-    doc.line(20, 58, 190, 58);
-
-    if (remision.productos && remision.productos.length > 0) {
-      let tableData: any[] = [];
-      let tableHeaders: any[] = [];
-      let columnStyles: any = {};
-
-      if (incluirPrecios) {
-        tableData = remision.productos.map((p) => [
-          p.producto.nombre,
-          String(p.cantidad),
-          `$${p.precio.toLocaleString("es-CO", {
-            minimumFractionDigits: 2,
-          })}`,
-          `$${p.subtotal.toLocaleString("es-CO", {
-            minimumFractionDigits: 2,
-          })}`,
-        ]);
-        tableHeaders = [["Producto", "Cantidad", "Precio Unit.", "Subtotal"]];
-        columnStyles = {
-          0: { cellWidth: 80 },
-          1: { cellWidth: 30, halign: "center" },
-          2: { cellWidth: 40, halign: "right" },
-          3: { cellWidth: 40, halign: "right" },
-        };
-      } else {
-        tableData = remision.productos.map((p) => [
-          p.producto.nombre,
-          String(p.cantidad),
-        ]);
-        tableHeaders = [["Producto", "Cantidad"]];
-        columnStyles = {
-          0: { cellWidth: 130 },
-          1: { cellWidth: 30, halign: "center" },
-        };
-      }
-
-      autoTable(doc, {
-        startY: 65,
-        head: tableHeaders,
-        body: tableData,
-        theme: "grid",
-        headStyles: {
-          fillColor: [37, 99, 235],
-          textColor: 255,
-          fontSize: 10,
-          fontStyle: "bold",
-        },
-        styles: { fontSize: 9, cellPadding: 3 },
-        columnStyles,
-      });
-    }
-
-    const finalY = (doc as any).lastAutoTable?.finalY || 65;
-    const totalesY = finalY + 10;
-
-    if (incluirPrecios) {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
-      doc.text("Total:", 130, totalesY);
-      doc.text(
-        `$${remision.total.toLocaleString("es-CO", {
+    autoTable(doc, {
+      startY: 56,
+      head: [["Producto", "Lote", "Cantidad", "Precio", "Subtotal"]],
+      body: remision.detalle.map((item) => [
+        item.producto,
+        item.lote,
+        String(item.cantidad),
+        `$${item.precio.toLocaleString("es-CO", { minimumFractionDigits: 2 })}`,
+        `$${item.subtotal.toLocaleString("es-CO", {
           minimumFractionDigits: 2,
         })}`,
-        190,
-        totalesY,
-        { align: "right" }
-      );
-    }
+      ]),
+      theme: "grid",
+      headStyles: {
+        fillColor: [37, 99, 235],
+        textColor: 255,
+      },
+      styles: {
+        fontSize: 9,
+      },
+    });
+
+    const finalY = (doc as any).lastAutoTable?.finalY || 56;
+    doc.setFont("helvetica", "bold");
+    doc.text(
+      `Total: $${remision.total.toLocaleString("es-CO", {
+        minimumFractionDigits: 2,
+      })}`,
+      190,
+      finalY + 12,
+      { align: "right" }
+    );
 
     if (remision.observaciones) {
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      const obsY = incluirPrecios ? totalesY + 20 : totalesY + 10;
-      doc.text("Observaciones:", 20, obsY);
-      const split = doc.splitTextToSize(remision.observaciones, 170);
-      doc.text(split, 20, obsY + 6);
+      doc.text(`Observaciones: ${remision.observaciones}`, 20, finalY + 24);
     }
 
-    const pageHeight = doc.internal.pageSize.height;
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "italic");
-    doc.text(
-      `Generado el ${new Date().toLocaleString("es-CO")}`,
-      105,
-      pageHeight - 10,
-      {
-        align: "center",
-      }
-    );
-
-    const suffix = incluirPrecios ? "" : "_SinPrecios";
-    doc.save(`Remision_${remision.numeroRemision}${suffix}.pdf`);
-    toast.success("PDF descargado exitosamente");
-  };
-
-  const openPdfOptionsModal = (remision: RemisionVenta) => {
-    setRemisionParaPdf(remision);
-    setIsPdfOptionsModalOpen(true);
+    doc.save(`Remision_${remision.numeroRemision}.pdf`);
   };
 
   return (
     <div className="space-y-6">
-      {/* Estadísticas */}
+       <div>
+        <h2 className="text-gray-900">Remisiones de venta</h2>
+        <p className="text-gray-600 mt-1">
+          Gestiona las remisiones de Venta
+        </p>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white">
           <div className="flex items-center justify-between">
@@ -688,15 +2383,14 @@ export default function Remisiones() {
         <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-6 text-white">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-green-100 text-sm">Aprobadas</p>
-              <p className="text-3xl mt-2">{stats.aprobadas}</p>
+              <p className="text-green-100 text-sm">Despachadas</p>
+              <p className="text-3xl mt-2">{stats.despachadas}</p>
             </div>
             <CheckCircle className="text-green-200" size={40} />
           </div>
         </div>
       </div>
 
-      {/* Barra de búsqueda y acciones */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
         <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
           <div className="relative flex-1 w-full sm:w-auto">
@@ -706,14 +2400,15 @@ export default function Remisiones() {
             />
             <Input
               type="text"
-              placeholder="Buscar por remisión, orden, cliente, estado o número de items..."
+              placeholder="Buscar por remisión, orden, cliente, estado o items..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 w-full"
             />
           </div>
+
           <Button
-            onClick={handleCreate}
+            onClick={() => navigate("/app/remisiones-venta/crear")}
             className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto"
           >
             <Plus size={20} className="mr-2" />
@@ -722,13 +2417,12 @@ export default function Remisiones() {
         </div>
       </div>
 
-      {/* Tabla */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50">
-                <TableHead className="w-16">#</TableHead>
+                <TableHead>#</TableHead>
                 <TableHead>N° Remisión</TableHead>
                 <TableHead>Orden de Venta</TableHead>
                 <TableHead>Cliente</TableHead>
@@ -740,49 +2434,49 @@ export default function Remisiones() {
             </TableHeader>
 
             <TableBody>
-              {currentRemisiones.length === 0 ? (
+              {loading ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={8}
-                    className="text-center py-8 text-gray-500"
-                  >
-                    <FileText size={48} className="mx-auto mb-2 text-gray-300" />
-                    <p>No se encontraron remisiones de venta</p>
+                  <TableCell colSpan={8} className="text-center py-8">
+                    Cargando...
+                  </TableCell>
+                </TableRow>
+              ) : currentRemisiones.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                    No se encontraron remisiones de venta
                   </TableCell>
                 </TableRow>
               ) : (
                 currentRemisiones.map((remision, index) => (
                   <TableRow key={remision.id} className="hover:bg-gray-50">
-                    <TableCell className="text-gray-500">
-                      {startIndex + index + 1}
-                    </TableCell>
+                    <TableCell>{startIndex + index + 1}</TableCell>
                     <TableCell className="font-medium">
                       {remision.numeroRemision}
                     </TableCell>
                     <TableCell>{remision.ordenVenta}</TableCell>
                     <TableCell>{remision.cliente}</TableCell>
-                    <TableCell>
-                      {new Date(remision.fecha).toLocaleDateString("es-CO")}
-                    </TableCell>
+                    <TableCell>{remision.fecha}</TableCell>
                     <TableCell>{remision.items}</TableCell>
+
                     <TableCell className="text-center">
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleToggleEstado(remision)}
-                        disabled={remision.estado === "Anulada"}
-                        className={`h-7 ${remision.estado === "Facturada"
-                          ? "bg-green-100 text-green-800 hover:bg-green-200"
-                          : remision.estado === "Aprobada"
-                            ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
-                            : remision.estado === "Pendiente"
-                              ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                              : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
-                          }`}
+                        disabled={!puedeCambiarEstadoRemision(remision.estado)}
+                        className={`h-8 rounded-full px-3 text-xs font-medium ${getEstadoBadgeClass(
+                          remision.estado
+                        )} ${
+                          !puedeCambiarEstadoRemision(remision.estado)
+                            ? "cursor-not-allowed opacity-70"
+                            : ""
+                        }`}
+                        title={getSiguienteEstadoTexto(remision.estado)}
                       >
                         {remision.estado}
                       </Button>
                     </TableCell>
+
                     <TableCell>
                       <div className="flex items-center justify-center gap-2">
                         <Button
@@ -798,7 +2492,7 @@ export default function Remisiones() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => openPdfOptionsModal(remision)}
+                          onClick={() => generarPDF(remision)}
                           className="hover:bg-green-50"
                           title="Descargar PDF"
                         >
@@ -809,18 +2503,44 @@ export default function Remisiones() {
                           variant="ghost"
                           size="sm"
                           onClick={() => handleEdit(remision)}
-                          className="hover:bg-yellow-50"
-                          title="Editar"
+                          disabled={!puedeEditarRemision(remision.estado)}
+                          className={
+                            puedeEditarRemision(remision.estado)
+                              ? "hover:bg-amber-50"
+                              : "cursor-not-allowed opacity-50"
+                          }
+                          title={
+                            remision.estado === "Entregado"
+                              ? "No se puede editar una remisión entregada"
+                              : remision.estado === "Facturada"
+                              ? "No se puede editar una remisión facturada"
+                              : remision.estado === "Anulada"
+                              ? "No se puede editar una remisión anulada"
+                              : "Editar"
+                          }
                         >
-                          <Edit size={16} className="text-yellow-600" />
+                          <Edit size={16} className="text-amber-600" />
                         </Button>
 
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleAnular(remision)}
-                          className="hover:bg-red-50"
-                          title="Anular"
+                          disabled={!puedeAnularRemision(remision.estado)}
+                          className={
+                            puedeAnularRemision(remision.estado)
+                              ? "hover:bg-red-50"
+                              : "cursor-not-allowed opacity-50"
+                          }
+                          title={
+                            remision.estado === "Entregado"
+                              ? "No se puede anular una remisión entregada"
+                              : remision.estado === "Facturada"
+                              ? "No se puede anular una remisión facturada"
+                              : remision.estado === "Anulada"
+                              ? "La remisión ya está anulada"
+                              : "Anular"
+                          }
                         >
                           <Ban size={16} className="text-red-600" />
                         </Button>
@@ -833,48 +2553,34 @@ export default function Remisiones() {
           </Table>
         </div>
 
-        {/* Paginación */}
         {filteredRemisiones.length > 0 && (
-          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
-            <div className="text-sm text-gray-600">
-              Mostrando {startIndex + 1} -{" "}
-              {Math.min(endIndex, filteredRemisiones.length)} de{" "}
-              {filteredRemisiones.length} remisiones
-            </div>
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between p-4 border-t">
+            <p className="text-sm text-gray-600">
+              Mostrando {startIndex + 1} a{" "}
+              {Math.min(startIndex + itemsPerPage, filteredRemisiones.length)} de{" "}
+              {filteredRemisiones.length} registros
+            </p>
+
+            <div className="flex gap-2">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentPage(currentPage - 1)}
+                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                 disabled={currentPage === 1}
-                className="h-8"
               >
                 <ChevronLeft size={16} />
-                Anterior
               </Button>
-              <div className="flex items-center gap-1">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map(
-                  (page) => (
-                    <Button
-                      key={page}
-                      variant={currentPage === page ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setCurrentPage(page)}
-                      className="h-8 w-8 p-0"
-                    >
-                      {page}
-                    </Button>
-                  )
-                )}
-              </div>
+              <Button variant="outline" size="sm" disabled>
+                {currentPage} / {totalPages}
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentPage(currentPage + 1)}
+                onClick={() =>
+                  setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+                }
                 disabled={currentPage === totalPages}
-                className="h-8"
               >
-                Siguiente
                 <ChevronRight size={16} />
               </Button>
             </div>
@@ -882,631 +2588,342 @@ export default function Remisiones() {
         )}
       </div>
 
-      {/* Modal Crear */}
-      <Dialog
-        open={isCrear}
-        onOpenChange={(open) => {
-          if (!open) {
-            closeToList();
-            resetForm();
-          }
-        }}
-      >
-        <DialogContent
-          onInteractOutside={(e) => e.preventDefault()}
-          className="max-w-[85vw] max-h-[90vh] overflow-y-auto"
-          aria-describedby="create-remision-venta-description"
-        >
+      <Dialog open={isFormularioAbierto} onOpenChange={(open) => !open && closeToList()}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Nueva Remisión de Venta</DialogTitle>
-            <DialogDescription
-              id="create-remision-venta-description"
-              className="sr-only"
-            >
-              Formulario para crear una nueva remisión de venta
+            <DialogTitle>
+              {isEditar ? "Editar Remisión de Venta" : "Nueva Remisión de Venta"}
+            </DialogTitle>
+            <DialogDescription>
+              {isEditar
+                ? "Edita la remisión manteniéndola ligada a una orden de venta aprobada."
+                : "La remisión solo puede crearse desde una orden de venta aprobada."}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="numeroRemision">Número de Remisión</Label>
-                <Input
-                  id="numeroRemision"
-                  value={formData.numeroRemision}
-                  disabled
-                  className="bg-gray-100"
-                />
+          <div className="space-y-6">
+            <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-4">
+              <div className="flex items-center gap-2 mb-4">
+                <FileText size={18} className="text-blue-600" />
+                <h3 className="font-semibold text-gray-900">
+                  Información general
+                </h3>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="cliente">Cliente *</Label>
-                <select
-                  id="cliente"
-                  value={formData.cliente}
-                  onChange={(e) => handleClienteChange(e.target.value)}
-                  className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
-                >
-                  <option value="">Seleccionar cliente...</option>
-                  {clientesData
-                    .filter((c: any) => c.estado === "Activo")
-                    .map((cliente: any) => (
-                      <option key={cliente.id} value={cliente.nombre}>
-                        {cliente.nombre}
-                      </option>
-                    ))}
-                </select>
-              </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <Label>N° Remisión</Label>
+                  <Input value={formNumeroRemision} disabled />
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="ordenVenta">Orden de Venta *</Label>
-                <select
-                  id="ordenVenta"
-                  value={formData.ordenVenta}
-                  onChange={(e) => handleOrdenChange(e.target.value)}
-                  className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
-                >
-                  <option value="">Seleccionar orden...</option>
-                  {ordenesFiltradas.map((orden: any) => (
-                    <option key={orden.id} value={orden.numeroOrden}>
-                      {orden.numeroOrden} - {orden.cliente}
-                    </option>
-                  ))}
-                </select>
+                <div>
+                  <Label>Fecha</Label>
+                  <Input
+                    type="date"
+                    value={formFecha}
+                    onChange={(e) => setFormFecha(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <Label>Bodega</Label>
+                  <Input value={bodegaFormularioNombre} disabled />
+                </div>
+
+                <div>
+                  <Label>Estado inicial</Label>
+                  <Input
+                    value={
+                      estados.find(
+                        (estado) =>
+                          String(estado.id_estado_remision_venta) === formEstadoId
+                      )?.nombre_estado ?? "Pendiente"
+                    }
+                    disabled
+                  />
+                </div>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="observaciones">Observaciones</Label>
-              <Input
-                id="observaciones"
-                value={formData.observaciones}
-                onChange={(e) =>
-                  setFormData({ ...formData, observaciones: e.target.value })
-                }
-                placeholder="Notas adicionales..."
-              />
-            </div>
+            <div className="rounded-xl border border-gray-200 p-4">
+              <div className="flex items-center gap-2 mb-4">
+                <ShoppingCart size={18} className="text-blue-600" />
+                <h3 className="font-semibold text-gray-900">
+                  Orden asociada
+                </h3>
+              </div>
 
-            <div className="border-t pt-4">
-              <h3 className="font-medium mb-3">Agregar Productos</h3>
-              <div className="grid grid-cols-4 gap-4 mb-4">
-                <div className="space-y-2">
-                  <Label htmlFor="producto">Producto</Label>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="md:col-span-2">
+                  <Label>Orden de Venta Aprobada</Label>
                   <select
-                    id="producto"
-                    value={selectedProductoId}
-                    onChange={(e) => setSelectedProductoId(e.target.value)}
-                    className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+                    className="w-full h-10 rounded-md border border-gray-300 px-3 bg-white"
+                    value={formOrdenId}
+                    onChange={(e) => handleOrdenChange(e.target.value)}
                   >
-                    <option value="">Seleccionar producto...</option>
-                    {productosActivos.map((producto) => (
-                      <option key={producto.id} value={producto.id}>
-                        {producto.nombre}
+                    <option value="">Selecciona una orden</option>
+                    {ordenesDisponibles.map((orden) => (
+                      <option
+                        key={orden.id_orden_venta}
+                        value={orden.id_orden_venta}
+                      >
+                        {orden.codigo_orden_venta} -{" "}
+                        {orden.cliente?.nombre_cliente ?? "Cliente"} - Pendiente:{" "}
+                        {orden.cantidad_pendiente_total}
                       </option>
                     ))}
                   </select>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="cantidad">Cantidad</Label>
-                  <Input
-                    id="cantidad"
-                    type="number"
-                    min="1"
-                    value={cantidadProducto}
-                    onChange={(e) =>
-                      setCantidadProducto(parseInt(e.target.value) || 1)
-                    }
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="precio">Precio Unitario</Label>
-                  <Input
-                    id="precio"
-                    type="number"
-                    min="0"
-                    step="0"
-                    placeholder="0.00"
-                    value={precioProducto}
-                    onChange={(e) => setPrecioProducto(e.target.value)}
-                    className="sin-flechas"
-                  />
-                </div>
-
-                <div className="space-y-2 flex items-end">
-                  <Button
-                    type="button"
-                    onClick={agregarProducto}
-                    className="w-full bg-green-600 hover:bg-green-700"
-                  >
-                    <Plus size={16} className="mr-2" />
-                    Agregar
-                  </Button>
+                <div>
+                  <Label>Cliente</Label>
+                  <Input value={formCliente} disabled />
                 </div>
               </div>
             </div>
 
-            {productosRemision.length > 0 && (
-              <div className="border-t pt-4">
-                <h3 className="font-medium mb-3">Productos en la Remisión</h3>
-                <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-gray-50">
-                        <TableHead>Producto</TableHead>
-                        <TableHead>Cantidad</TableHead>
-                        <TableHead>Precio Unitario</TableHead>
-                        <TableHead>Subtotal</TableHead>
-                        <TableHead className="w-20">Acción</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {productosRemision.map((item) => (
-                        <TableRow key={item.producto.id}>
-                          <TableCell>{item.producto.nombre}</TableCell>
-                          <TableCell>{item.cantidad}</TableCell>
-                          <TableCell>
-                            $
-                            {item.precio.toLocaleString("es-CO", {
-                              minimumFractionDigits: 2,
-                            })}
-                          </TableCell>
-                          <TableCell>
-                            $
-                            {item.subtotal.toLocaleString("es-CO", {
-                              minimumFractionDigits: 2,
-                            })}
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => eliminarProducto(item.producto.id)}
-                              className="hover:bg-red-50"
-                            >
-                              <X size={16} className="text-red-600" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      <TableRow className="bg-gray-50">
-                        <TableCell colSpan={3} className="text-right font-medium">
-                          Total:
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          $
-                          {calcularTotal().toLocaleString("es-CO", {
+            <div className="rounded-xl border border-gray-200 p-4">
+              <div className="flex items-center gap-2 mb-4">
+                <Package size={18} className="text-blue-600" />
+                <h3 className="font-semibold text-gray-900">
+                  Observaciones y resumen
+                </h3>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-4">
+                <div>
+                  <Label>Observaciones</Label>
+                  <textarea
+                    className="w-full min-h-[100px] rounded-md border border-gray-300 px-3 py-2"
+                    value={formObservaciones}
+                    onChange={(e) => setFormObservaciones(e.target.value)}
+                    placeholder="Observaciones de la remisión"
+                  />
+                </div>
+
+                <div className="rounded-lg border bg-gray-50 p-4 space-y-3">
+                  <div>
+                    <p className="text-sm text-gray-500">Items seleccionados</p>
+                    <p className="text-2xl font-semibold text-gray-900">
+                      {cantidadTotalItemsFormulario}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Total remisión</p>
+                    <p className="text-xl font-semibold text-blue-700">
+                      $
+                      {totalFormulario.toLocaleString("es-CO", {
+                        minimumFractionDigits: 2,
+                      })}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 p-4">
+              <div className="flex items-center gap-2 mb-4">
+                <Package size={18} className="text-blue-600" />
+                <h3 className="font-semibold text-gray-900">
+                  Productos y lotes a remitir
+                </h3>
+              </div>
+
+              {ordenSeleccionada ? (
+                <div className="space-y-4">
+                  {formProductos.map((producto) => (
+                    <div
+                      key={producto.id_producto}
+                      className="border rounded-xl p-4 space-y-4 bg-white"
+                    >
+                      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-gray-900">
+                            {producto.nombre}
+                          </p>
+                          <div className="flex flex-wrap gap-2 mt-2 text-xs">
+                            <span className="rounded-full bg-gray-100 px-3 py-1 text-gray-700">
+                              Orden: {producto.cantidad_orden}
+                            </span>
+                            <span className="rounded-full bg-blue-100 px-3 py-1 text-blue-700">
+                              Remitido: {producto.cantidad_remitida}
+                            </span>
+                            <span className="rounded-full bg-yellow-100 px-3 py-1 text-yellow-700">
+                              Pendiente: {producto.cantidad_pendiente}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="rounded-lg bg-blue-50 px-4 py-3 text-sm font-medium text-blue-700">
+                          Precio unitario: $
+                          {producto.precio_unitario.toLocaleString("es-CO", {
                             minimumFractionDigits: 2,
                           })}
-                        </TableCell>
-                        <TableCell />
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
-            )}
-          </div>
+                        </div>
+                      </div>
 
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                closeToList();
-                resetForm();
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button
-              onClick={confirmCreate}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              Crear Remisión
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal Editar */}
-      <Dialog
-        open={isEditar}
-        onOpenChange={(open) => {
-          if (!open) {
-            closeToList();
-            resetForm();
-          }
-        }}
-      >
-        <DialogContent
-          onInteractOutside={(e) => e.preventDefault()}
-          className="max-w-[85vw] max-h-[90vh] overflow-y-auto"
-          aria-describedby="edit-remision-venta-description"
-        >
-          <DialogHeader>
-            <DialogTitle>Editar Remisión de Venta</DialogTitle>
-            <DialogDescription
-              id="edit-remision-venta-description"
-              className="sr-only"
-            >
-              Formulario para editar la remisión de venta
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-numeroRemision">Número de Remisión</Label>
-                <Input
-                  id="edit-numeroRemision"
-                  value={formData.numeroRemision}
-                  disabled
-                  className="bg-gray-100"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-estado">Estado *</Label>
-                <select
-                  id="edit-estado"
-                  value={formData.estado}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      estado: e.target.value as
-                        | "Pendiente"
-                        | "Aprobada"
-                        | "Facturada"
-                        | "Anulada",
-                    })
-                  }
-                  className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
-                >
-                  <option value="Pendiente">Pendiente</option>
-                  <option value="Aprobada">Aprobada</option>
-                  <option value="Facturada">Facturada</option>
-                  <option value="Anulada">Anulada</option>
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-fecha">Fecha</Label>
-                <Input
-                  id="edit-fecha"
-                  type="date"
-                  value={formData.fecha}
-                  disabled
-                  className="bg-gray-100"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-cliente">Cliente *</Label>
-                <select
-                  id="edit-cliente"
-                  value={formData.cliente}
-                  onChange={(e) => handleClienteChange(e.target.value)}
-                  className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
-                >
-                  <option value="">Seleccionar cliente...</option>
-                  {clientesData
-                    .filter((c: any) => c.estado === "Activo")
-                    .map((cliente: any) => (
-                      <option key={cliente.id} value={cliente.nombre}>
-                        {cliente.nombre}
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-ordenVenta">Orden de Venta *</Label>
-                <select
-                  id="edit-ordenVenta"
-                  value={formData.ordenVenta}
-                  onChange={(e) => handleOrdenChange(e.target.value)}
-                  className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
-                >
-                  <option value="">Seleccionar orden...</option>
-                  {ordenesFiltradas.map((orden: any) => (
-                    <option key={orden.id} value={orden.numeroOrden}>
-                      {orden.numeroOrden} - {orden.cliente}
-                    </option>
+                      {producto.lotes.length === 0 ? (
+                        <div className="rounded-md bg-red-50 text-red-700 px-3 py-2 text-sm">
+                          Este producto no tiene existencias disponibles en la bodega
+                          de la orden.
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto rounded-lg border">
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="bg-gray-50">
+                                <TableHead>Lote</TableHead>
+                                <TableHead>Cód. barras</TableHead>
+                                <TableHead>Vence</TableHead>
+                                <TableHead>Disponible</TableHead>
+                                <TableHead>Cantidad a remitir</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {producto.lotes.map((lote) => (
+                                <TableRow key={lote.id_existencia}>
+                                  <TableCell>{lote.lote || "-"}</TableCell>
+                                  <TableCell>{lote.codigo_barras || "-"}</TableCell>
+                                  <TableCell>{lote.fecha_vencimiento || "-"}</TableCell>
+                                  <TableCell>{lote.cantidad_disponible}</TableCell>
+                                  <TableCell>
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={lote.cantidad}
+                                      onChange={(e) =>
+                                        handleCantidadLoteChange(
+                                          producto.id_producto,
+                                          lote.id_existencia,
+                                          e.target.value
+                                        )
+                                      }
+                                      placeholder="0"
+                                      className="max-w-[150px]"
+                                    />
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                    </div>
                   ))}
-                </select>
-              </div>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed p-10 text-center text-gray-500">
+                  Selecciona una orden de venta aprobada para cargar sus productos
+                  pendientes por remitir.
+                </div>
+              )}
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="edit-observaciones">Observaciones</Label>
-              <Input
-                id="edit-observaciones"
-                value={formData.observaciones}
-                onChange={(e) =>
-                  setFormData({ ...formData, observaciones: e.target.value })
-                }
-                placeholder="Notas adicionales..."
-              />
-            </div>
-
-            <div className="border-t pt-4">
-              <h3 className="font-medium mb-3">Agregar Productos</h3>
-              <div className="grid grid-cols-4 gap-4 mb-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-producto">Producto</Label>
-                  <select
-                    id="edit-producto"
-                    value={selectedProductoId}
-                    onChange={(e) => setSelectedProductoId(e.target.value)}
-                    className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
-                  >
-                    <option value="">Seleccionar producto...</option>
-                    {productosActivos.map((producto) => (
-                      <option key={producto.id} value={producto.id}>
-                        {producto.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="edit-cantidad">Cantidad</Label>
-                  <Input
-                    id="edit-cantidad"
-                    type="number"
-                    min="1"
-                    value={cantidadProducto}
-                    onChange={(e) =>
-                      setCantidadProducto(parseInt(e.target.value) || 1)
-                    }
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="edit-precio">Precio Unitario</Label>
-                  <Input
-                    id="edit-precio"
-                    type="number"
-                    min="0"
-                    step="0"
-                    placeholder="0.00"
-                    value={precioProducto}
-                    onChange={(e) => setPrecioProducto(e.target.value)}
-                    className="sin-flechas"
-                  />
-                </div>
-
-                <div className="space-y-2 flex items-end">
-                  <Button
-                    type="button"
-                    onClick={agregarProducto}
-                    className="w-full bg-green-600 hover:bg-green-700"
-                  >
-                    <Plus size={16} className="mr-2" />
-                    Agregar
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {productosRemision.length > 0 && (
-              <div className="border-t pt-4">
-                <h3 className="font-medium mb-3">Productos en la Remisión</h3>
-                <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-gray-50">
-                        <TableHead>Producto</TableHead>
-                        <TableHead>Cantidad</TableHead>
-                        <TableHead>Precio Unitario</TableHead>
-                        <TableHead>Subtotal</TableHead>
-                        <TableHead className="w-20">Acción</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {productosRemision.map((item) => (
-                        <TableRow key={item.producto.id}>
-                          <TableCell>{item.producto.nombre}</TableCell>
-                          <TableCell>{item.cantidad}</TableCell>
-                          <TableCell>
-                            $
-                            {item.precio.toLocaleString("es-CO", {
-                              minimumFractionDigits: 2,
-                            })}
-                          </TableCell>
-                          <TableCell>
-                            $
-                            {item.subtotal.toLocaleString("es-CO", {
-                              minimumFractionDigits: 2,
-                            })}
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => eliminarProducto(item.producto.id)}
-                              className="hover:bg-red-50"
-                            >
-                              <X size={16} className="text-red-600" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      <TableRow className="bg-gray-50">
-                        <TableCell colSpan={3} className="text-right font-medium">
-                          Total:
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          $
-                          {calcularTotal().toLocaleString("es-CO", {
-                            minimumFractionDigits: 2,
-                          })}
-                        </TableCell>
-                        <TableCell />
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
-            )}
           </div>
 
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                closeToList();
-                resetForm();
-              }}
-            >
+          <DialogFooter className="pt-2">
+            <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
             <Button
-              onClick={confirmEdit}
+              onClick={handleGuardar}
               className="bg-blue-600 hover:bg-blue-700"
             >
-              Guardar Cambios
+              {isEditar ? "Guardar Cambios" : "Guardar Remisión"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal Ver */}
-      <Dialog
-        open={isVer}
-        onOpenChange={(open) => {
-          if (!open) closeToList();
-        }}
-      >
-        <DialogContent
-          onInteractOutside={(e) => e.preventDefault()}
-          className="max-w-7xl max-h-[90vh] overflow-y-auto"
-          aria-describedby="view-remision-venta-description"
-        >
+      <Dialog open={isVer} onOpenChange={(open) => !open && closeToList()}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Detalle de Remisión de Venta</DialogTitle>
-            <DialogDescription
-              id="view-remision-venta-description"
-              className="sr-only"
-            >
-              Detalles completos de la remisión de venta
-            </DialogDescription>
+            <DialogTitle>Detalle de Remisión</DialogTitle>
           </DialogHeader>
 
           {remisionSeleccionada && (
-            <div className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm text-gray-600">Número de Remisión</p>
-                  <p className="font-semibold">
-                    {remisionSeleccionada.numeroRemision}
-                  </p>
+                  <Label>N° Remisión</Label>
+                  <Input value={remisionSeleccionada.numeroRemision} disabled />
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Orden de Venta</p>
-                  <p className="font-semibold">
-                    {remisionSeleccionada.ordenVenta}
-                  </p>
+                  <Label>Orden de Venta</Label>
+                  <Input value={remisionSeleccionada.ordenVenta} disabled />
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Cliente</p>
-                  <p className="font-semibold">{remisionSeleccionada.cliente}</p>
+                  <Label>Cliente</Label>
+                  <Input value={remisionSeleccionada.cliente} disabled />
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Fecha</p>
-                  <p className="font-semibold">
-                    {remisionSeleccionada.fecha}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Items</p>
-                  <p className="font-semibold">{remisionSeleccionada.items}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Estado</p>
-                  <div className="mt-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleToggleEstado(remisionSeleccionada)}
-                      className={`h-7 px-3 ${remisionSeleccionada.estado === "Facturada"
-                        ? "bg-green-100 text-green-800 hover:bg-green-200"
-                        : remisionSeleccionada.estado === "Aprobada"
-                          ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
-                          : remisionSeleccionada.estado === "Pendiente"
-                            ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                            : "bg-red-100 text-red-800 hover:bg-red-200"
-                        }`}
-                    >
-                      {remisionSeleccionada.estado}
-                    </Button>
-                  </div>
+                  <Label>Estado</Label>
+                  <Input value={remisionSeleccionada.estado} disabled />
                 </div>
               </div>
 
-              {remisionSeleccionada.productos &&
-                remisionSeleccionada.productos.length > 0 && (
-                  <div className="border-t pt-4">
-                    <h3 className="font-medium mb-3">Productos</h3>
-                    <div className="border rounded-lg overflow-hidden">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="bg-gray-50">
-                            <TableHead>Producto</TableHead>
-                            <TableHead>Cantidad</TableHead>
-                            <TableHead>Precio Unitario</TableHead>
-                            <TableHead>Subtotal</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {remisionSeleccionada.productos.map((item) => (
-                            <TableRow key={item.producto.id}>
-                              <TableCell>{item.producto.nombre}</TableCell>
-                              <TableCell>{item.cantidad}</TableCell>
-                              <TableCell>
-                                $
-                                {item.precio.toLocaleString("es-CO", {
-                                  minimumFractionDigits: 2,
-                                })}
-                              </TableCell>
-                              <TableCell>
-                                $
-                                {item.subtotal.toLocaleString("es-CO", {
-                                  minimumFractionDigits: 2,
-                                })}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </div>
-                )}
-
-              <div className="border-t pt-4">
-                <div className="flex justify-between text-lg">
-                  <span className="font-semibold">Total:</span>
-                  <span className="font-semibold text-blue-600">
-                    $
-                    {remisionSeleccionada.total.toLocaleString("es-CO", {
-                      minimumFractionDigits: 2,
-                    })}
-                  </span>
-                </div>
+              <div className="overflow-x-auto rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Producto</TableHead>
+                      <TableHead>Lote</TableHead>
+                      <TableHead>Cantidad</TableHead>
+                      <TableHead>Precio</TableHead>
+                      <TableHead>Subtotal</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {remisionSeleccionada.detalle.map((item, index) => (
+                      <TableRow key={`${item.producto}-${index}`}>
+                        <TableCell>{item.producto}</TableCell>
+                        <TableCell>{item.lote || "-"}</TableCell>
+                        <TableCell>{item.cantidad}</TableCell>
+                        <TableCell>
+                          $
+                          {item.precio.toLocaleString("es-CO", {
+                            minimumFractionDigits: 2,
+                          })}
+                        </TableCell>
+                        <TableCell>
+                          $
+                          {item.subtotal.toLocaleString("es-CO", {
+                            minimumFractionDigits: 2,
+                          })}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
 
               {remisionSeleccionada.observaciones && (
-                <div className="border-t pt-4">
-                  <p className="text-sm text-gray-600">Observaciones</p>
-                  <p className="mt-1">{remisionSeleccionada.observaciones}</p>
+                <div>
+                  <Label>Observaciones</Label>
+                  <textarea
+                    className="w-full min-h-[90px] rounded-md border border-gray-300 px-3 py-2"
+                    value={remisionSeleccionada.observaciones}
+                    disabled
+                  />
                 </div>
               )}
+
+              <div className="flex justify-between items-center">
+                <div className="text-lg font-semibold">
+                  Total: $
+                  {remisionSeleccionada.total.toLocaleString("es-CO", {
+                    minimumFractionDigits: 2,
+                  })}
+                </div>
+
+                <Button
+                  onClick={() => generarPDF(remisionSeleccionada)}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  <Download size={16} className="mr-2" />
+                  Descargar PDF
+                </Button>
+              </div>
             </div>
           )}
 
@@ -1518,38 +2935,16 @@ export default function Remisiones() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Anular */}
-      <Dialog
-        open={isAnular}
-        onOpenChange={(open) => {
-          if (!open) closeToList();
-        }}
-      >
-        <DialogContent
-          onInteractOutside={(e) => e.preventDefault()}
-          className="max-w-md"
-          aria-describedby="delete-remision-venta-description"
-        >
+      <Dialog open={isAnular} onOpenChange={(open) => !open && closeToList()}>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Anular Remisión</DialogTitle>
-            <DialogDescription id="delete-remision-venta-description">
-              ¿Estás seguro de que deseas anular esta remisión de venta?
+            <DialogDescription>
+              Esta acción cambiará el estado de la remisión a anulada y devolverá
+              las cantidades al inventario.
             </DialogDescription>
           </DialogHeader>
-          {remisionSeleccionada && (
-            <div className="py-4">
-              <p className="text-sm text-gray-600">
-                Se anulara la remisión{" "}
-                <span className="font-medium text-gray-900">
-                  {remisionSeleccionada.numeroRemision}
-                </span>
-                .
-              </p>
-              <p className="text-sm text-red-600 mt-2">
-                Esta acción no se puede deshacer.
-              </p>
-            </div>
-          )}
+
           <DialogFooter>
             <Button variant="outline" onClick={closeToList}>
               Cancelar
@@ -1561,156 +2956,107 @@ export default function Remisiones() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Confirmar Cambio de Estado */}
       <Dialog
         open={showConfirmEstadoModal}
-        onOpenChange={setShowConfirmEstadoModal}
+        onOpenChange={(open) => {
+          if (!open) resetCambioEstado();
+          else setShowConfirmEstadoModal(open);
+        }}
       >
-        <DialogContent
-          onInteractOutside={(e) => e.preventDefault()}
-          className="max-w-md"
-          aria-describedby="confirm-estado-description"
-        >
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Confirmar Cambio de Estado</DialogTitle>
-            <DialogDescription id="confirm-estado-description">
-              ¿Deseas cambiar el estado de esta remisión?
+            <DialogTitle>Confirmar cambio de estado</DialogTitle>
+            <DialogDescription>
+              {remisionCambioEstado && estadoDestino
+                ? `La remisión ${remisionCambioEstado.numeroRemision} cambiará a estado ${estadoDestino.nombre}.`
+                : "¿Deseas cambiar el estado de esta remisión?"}
             </DialogDescription>
           </DialogHeader>
-          {remisionParaCambioEstado && nuevoEstado && (
-            <div className="py-4">
-              <p className="text-sm text-gray-600">
-                La remisión{" "}
-                <span className="font-medium text-gray-900">
-                  {remisionParaCambioEstado.numeroRemision}
-                </span>{" "}
-                pasará de{" "}
-                <span className="font-medium text-gray-900">
-                  {remisionParaCambioEstado.estado}
-                </span>{" "}
-                a <span className="font-medium text-blue-600">{nuevoEstado}</span>.
-              </p>
-            </div>
-          )}
+
           <DialogFooter>
             <Button
               variant="outline"
               onClick={() => {
-                setShowConfirmEstadoModal(false);
-                setRemisionParaCambioEstado(null);
-                setNuevoEstado(null);
+                resetCambioEstado();
               }}
             >
+              <X size={16} className="mr-2" />
               Cancelar
             </Button>
-            <Button
-              onClick={handleConfirmEstado}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
+            <Button onClick={handleConfirmEstado}>
+              <CheckCircle size={16} className="mr-2" />
               Confirmar
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal Opciones de PDF */}
       <Dialog
-        open={isPdfOptionsModalOpen}
-        onOpenChange={setIsPdfOptionsModalOpen}
+        open={showFirmaModal}
+        onOpenChange={(open) => {
+          if (!open) resetCambioEstado();
+          else setShowFirmaModal(open);
+        }}
       >
-        <DialogContent
-          onInteractOutside={(e) => e.preventDefault()}
-          className="max-w-md"
-          aria-describedby="pdf-options-description"
-        >
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Opciones de PDF</DialogTitle>
-            <DialogDescription id="pdf-options-description">
-              Selecciona cómo deseas generar el PDF de la remisión.
+            <DialogTitle>Firma del cliente</DialogTitle>
+            <DialogDescription>
+              Para cambiar la remisión a <strong>Entregado</strong>, el cliente
+              debe firmar en el recuadro.
             </DialogDescription>
           </DialogHeader>
-          {remisionParaPdf && (
-            <div className="py-4">
-              <p className="text-sm text-gray-600">
-                Generar PDF para la remisión{" "}
-                <span className="font-medium text-gray-900">
-                  {remisionParaPdf.numeroRemision}
-                </span>
-                .
-              </p>
-              <div className="space-y-2 mt-4">
-                <Button
-                  onClick={() => {
-                    generarPDF(remisionParaPdf, true);
-                    setIsPdfOptionsModalOpen(false);
-                  }}
-                  className="bg-blue-600 hover:bg-blue-700 w-full"
-                >
-                  <Download size={16} className="mr-2" />
-                  Incluir Precios
-                </Button>
-                <Button
-                  onClick={() => {
-                    generarPDF(remisionParaPdf, false);
-                    setIsPdfOptionsModalOpen(false);
-                  }}
-                  className="bg-gray-600 hover:bg-gray-700 w-full"
-                >
-                  <Download size={16} className="mr-2" />
-                  Sin Precios
-                </Button>
-              </div>
+
+          <div className="space-y-4">
+            <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-3">
+              <canvas
+                ref={firmaCanvasRef}
+                className="h-56 w-full rounded-lg border border-gray-200 bg-white touch-none"
+                onMouseDown={iniciarFirma}
+                onMouseMove={moverFirma}
+                onMouseUp={finalizarFirma}
+                onMouseLeave={finalizarFirma}
+                onTouchStart={iniciarFirma}
+                onTouchMove={moverFirma}
+                onTouchEnd={finalizarFirma}
+              />
             </div>
-          )}
+
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-gray-500">
+                El botón de aceptar solo se habilita cuando la firma ya fue
+                dibujada.
+              </p>
+
+              <Button variant="outline" onClick={limpiarFirma}>
+                Limpiar firma
+              </Button>
+            </div>
+          </div>
+
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsPdfOptionsModalOpen(false)}
-            >
+            <Button variant="outline" onClick={resetCambioEstado}>
+              <X size={16} className="mr-2" />
               Cancelar
+            </Button>
+            <Button onClick={handleConfirmEstado} disabled={!firmaValida}>
+              <CheckCircle size={16} className="mr-2" />
+              Aceptar
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal Éxito */}
-      <Dialog open={showSuccessModal} onOpenChange={handleSuccessModalClose}>
-        <DialogContent
-          className="max-w-md"
-          onPointerDownOutside={(e) => e.preventDefault()}
-          onInteractOutside={(e) => e.preventDefault()}
-          aria-describedby="success-remision-venta-description"
-        >
-          <button
-            onClick={handleSuccessModalClose}
-            className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground"
-          >
-            <X className="h-4 w-4" />
-            <span className="sr-only">Cerrar</span>
-          </button>
-          <DialogHeader className="sr-only">
-            <DialogTitle>Registro Exitoso</DialogTitle>
-            <DialogDescription id="success-remision-venta-description">
-              La remisión de venta se ha creado correctamente
-            </DialogDescription>
+      <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{isEditar ? "Remisión actualizada" : "Remisión creada"}</DialogTitle>
+            <DialogDescription>{successMessage}</DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col items-center justify-center py-6">
-            <div className="rounded-full bg-green-100 p-3 mb-4">
-              <CheckCircle className="h-12 w-12 text-green-600" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              ¡Remisión Creada!
-            </h3>
-            <p className="text-sm text-gray-600 text-center mb-6">
-              La remisión de venta se ha registrado correctamente en el sistema
-            </p>
-            <Button
-              onClick={() => setShowSuccessModal(false)}
-              className="w-full bg-green-600 hover:bg-green-700"
-            >
-              Aceptar
-            </Button>
-          </div>
+
+          <DialogFooter>
+            <Button onClick={() => setShowSuccessModal(false)}>Aceptar</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

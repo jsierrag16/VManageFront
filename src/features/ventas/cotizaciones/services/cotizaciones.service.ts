@@ -27,14 +27,14 @@ export type CreateCotizacionPayload = {
 };
 
 export type UpdateCotizacionPayload = {
-    fecha: string;
-    fecha_vencimiento: string;
-    id_cliente: number;
-    id_bodega: number;
-    id_estado_cotizacion: number;
-    observaciones?: string;
-    detalle: DetalleCotizacionPayload[];
-  };
+  fecha: string;
+  fecha_vencimiento: string;
+  id_cliente: number;
+  id_bodega: number;
+  id_estado_cotizacion: number;
+  observaciones?: string;
+  detalle: DetalleCotizacionPayload[];
+};
 
 type IvaApi = {
   id_iva: number;
@@ -69,6 +69,7 @@ type DetalleCotizacionApi = {
   cantidad: number | string;
   precio_unitario: number | string;
   id_iva: number;
+  iva_porcentaje?: number | string | null;
   producto?: ProductoApi | null;
   iva?: IvaApi | null;
 };
@@ -97,6 +98,15 @@ type CotizacionApi = {
   } | null;
   detalle_cotizacion?: DetalleCotizacionApi[];
 };
+
+type CotizacionesListResponse =
+  | CotizacionApi[]
+  | {
+      data?: CotizacionApi[];
+      rows?: CotizacionApi[];
+      items?: CotizacionApi[];
+      results?: CotizacionApi[];
+    };
 
 export type CotizacionProductoUI = {
   producto: Producto;
@@ -133,6 +143,10 @@ export const ESTADO_COTIZACION_FALLBACK: Record<EstadoCotizacionUI, number> = {
   Anulada: 5,
 };
 
+export type GetCotizacionesParams = {
+  idBodega?: number;
+};
+
 function normalizeDate(value?: string | null) {
   if (!value) return "";
   return String(value).slice(0, 10);
@@ -151,6 +165,18 @@ function normalizeEstado(nombre?: string | null): EstadoCotizacionUI {
   if (text === "vencida") return "Vencida";
   if (text === "anulada") return "Anulada";
   return "Pendiente";
+}
+
+function extractCotizacionesArray(
+  payload: CotizacionesListResponse | null | undefined
+): CotizacionApi[] {
+  if (!payload) return [];
+  if (Array.isArray(payload)) return payload;
+
+  const candidate =
+    payload.data ?? payload.rows ?? payload.items ?? payload.results ?? [];
+
+  return Array.isArray(candidate) ? candidate : [];
 }
 
 function mapProductoApiToUi(
@@ -185,7 +211,10 @@ export function mapCotizacionApiToUi(item: CotizacionApi): CotizacionUI {
       const precio = toNumber(detalle.precio_unitario);
       const subtotal = cantidad * precio;
       const ivaPorcentaje = toNumber(
-        detalle.iva?.porcentaje ?? detalle.producto?.iva?.porcentaje ?? 0
+        detalle.iva_porcentaje ??
+          detalle.iva?.porcentaje ??
+          detalle.producto?.iva?.porcentaje ??
+          0
       );
 
       return {
@@ -213,7 +242,8 @@ export function mapCotizacionApiToUi(item: CotizacionApi): CotizacionUI {
   return {
     id: item.id_cotizacion,
     numeroCotizacion:
-      item.codigo_cotizacion || `COT-${String(item.id_cotizacion).padStart(4, "0")}`,
+      item.codigo_cotizacion ||
+      `COT-${String(item.id_cotizacion).padStart(4, "0")}`,
     cliente: item.cliente?.nombre_cliente ?? "Cliente",
     idCliente: item.id_cliente,
     fecha: normalizeDate(item.fecha),
@@ -235,9 +265,15 @@ export function mapCotizacionApiToUi(item: CotizacionApi): CotizacionUI {
 }
 
 export const cotizacionesService = {
-  async getAll() {
-    const response = await api.get<CotizacionApi[]>("/cotizaciones");
-    return response.data.map(mapCotizacionApiToUi);
+  async getAll(params?: GetCotizacionesParams) {
+    const response = await api.get<CotizacionesListResponse>("/cotizaciones", {
+      params:
+        params?.idBodega && Number.isFinite(params.idBodega)
+          ? { id_bodega: params.idBodega }
+          : undefined,
+    });
+
+    return extractCotizacionesArray(response.data).map(mapCotizacionApiToUi);
   },
 
   async getById(id: number) {
@@ -251,14 +287,20 @@ export const cotizacionesService = {
   },
 
   async updateEstado(id: number, id_estado_cotizacion: number) {
-    const response = await api.patch<CotizacionApi>(`/cotizaciones/${id}/estado`, {
-      id_estado_cotizacion,
-    });
+    const response = await api.patch<CotizacionApi>(
+      `/cotizaciones/${id}/estado`,
+      {
+        id_estado_cotizacion,
+      }
+    );
     return mapCotizacionApiToUi(response.data);
   },
 
   async update(id: number, payload: UpdateCotizacionPayload) {
-    const response = await api.patch<CotizacionApi>(`/cotizaciones/${id}`, payload);
+    const response = await api.patch<CotizacionApi>(
+      `/cotizaciones/${id}`,
+      payload
+    );
     return mapCotizacionApiToUi(response.data);
   },
 };

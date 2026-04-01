@@ -77,6 +77,14 @@ export default function Cotizaciones() {
 
   const selectedBodega = selectedBodegaNombre;
 
+  const currentUserId = useMemo(() => {
+    const parsed = Number(
+      currentUser?.id ?? currentUser?.id_usuario ?? currentUser?.sub ?? 0
+    );
+
+    return Number.isFinite(parsed) ? parsed : 0;
+  }, [currentUser]);
+
   const isCrear = location.pathname.endsWith("/crear");
   const isVer = location.pathname.endsWith("/ver");
   const isEditar = location.pathname.endsWith("/editar");
@@ -196,18 +204,32 @@ export default function Cotizaciones() {
   }, [cotizaciones]);
 
   useEffect(() => {
-    const cargar = async () => {
+    const cargarCotizaciones = async () => {
       try {
-        const [cotizacionesApi, clientesApi, productosApi] = await Promise.all([
-          cotizacionesService.getAll(),
-          clientesService.getAll({ incluirInactivos: true }),
-          getProductosVista("active", selectedBodegaId ?? undefined),
-        ]);
-
+        const cotizacionesApi = await cotizacionesService.getAll({
+          idBodega: selectedBodegaId ?? undefined,
+        });
+  
         setCotizaciones(cotizacionesApi);
-
+      } catch (error) {
+        console.error("Error cargando cotizaciones:", error);
+        toast.error("No se pudo cargar el listado de cotizaciones");
+      }
+    };
+  
+    void cargarCotizaciones();
+  }, [selectedBodegaId]);
+  
+  useEffect(() => {
+    const cargarCatalogos = async () => {
+      const [clientesResult, productosResult] = await Promise.allSettled([
+        clientesService.getAll({ incluirInactivos: true }),
+        getProductosVista("active", selectedBodegaId ?? undefined),
+      ]);
+  
+      if (clientesResult.status === "fulfilled") {
         setClientes(
-          clientesApi.map(mapClienteApiToUi).map((cliente) => ({
+          clientesResult.value.map(mapClienteApiToUi).map((cliente) => ({
             id: String(cliente.id),
             nombre: cliente.nombre,
             email: cliente.email,
@@ -224,9 +246,16 @@ export default function Cotizaciones() {
             fechaRegistro: "",
           }))
         );
-
+      } else {
+        console.error(
+          "Error cargando clientes para cotizaciones:",
+          clientesResult.reason
+        );
+      }
+  
+      if (productosResult.status === "fulfilled") {
         setProductosCatalogo(
-          productosApi.map((producto) => ({
+          productosResult.value.map((producto) => ({
             id: String(producto.id_producto),
             nombre: producto.nombre_producto,
             categoria: producto.categoria_producto?.nombre_categoria ?? "",
@@ -244,22 +273,34 @@ export default function Cotizaciones() {
             })),
           }))
         );
-      } catch (error) {
-        console.error("Error cargando cotizaciones:", error);
-        toast.error("No se pudo cargar el módulo de cotizaciones");
+      } else {
+        console.error(
+          "Error cargando productos para cotizaciones:",
+          productosResult.reason
+        );
       }
     };
-
-    void cargar();
+  
+    void cargarCatalogos();
   }, [selectedBodegaId]);
+
+  // const getFechaActual = () => {
+  //   return new Date().toISOString().split("T")[0];
+  // };
+
+  // const getFechaVencimiento = () => {
+  //   const fecha = new Date();
+  //   fecha.setDate(fecha.getDate() + 7);
+  //   return fecha.toISOString().split("T")[0];
+  // };
 
   const getFechaActual = () => {
     return new Date().toISOString().split("T")[0];
   };
-
+  
   const getFechaVencimiento = () => {
     const fecha = new Date();
-    fecha.setDate(fecha.getDate() + 7);
+    fecha.setDate(fecha.getDate() + 10);
     return fecha.toISOString().split("T")[0];
   };
 
@@ -268,22 +309,19 @@ export default function Cotizaciones() {
   }, [clientes]);
 
   const filteredCotizaciones = useMemo(() => {
-    return cotizaciones
-      .filter(
-        (cotizacion) =>
-          selectedBodega === "Todas las bodegas" ||
-          cotizacion.bodega === selectedBodega
-      )
-      .filter(
-        (cotizacion) =>
-          cotizacion.numeroCotizacion
-            .toLowerCase()
-            .includes(searchTerm.toLowerCase()) ||
-          cotizacion.cliente.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          cotizacion.estado.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          cotizacion.items.toString().includes(searchTerm)
+    const term = searchTerm.trim().toLowerCase();
+  
+    if (!term) return cotizaciones;
+  
+    return cotizaciones.filter((cotizacion) => {
+      return (
+        cotizacion.numeroCotizacion.toLowerCase().includes(term) ||
+        cotizacion.cliente.toLowerCase().includes(term) ||
+        cotizacion.estado.toLowerCase().includes(term) ||
+        cotizacion.items.toString().includes(term)
       );
-  }, [cotizaciones, searchTerm, selectedBodega]);
+    });
+  }, [cotizaciones, searchTerm]);
 
   const totalPages = Math.ceil(filteredCotizaciones.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -292,7 +330,7 @@ export default function Cotizaciones() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedBodega]);
+  }, [searchTerm, selectedBodegaId]);
 
   const stats = useMemo(() => {
     const totalCotizaciones = cotizaciones.length;
@@ -331,18 +369,18 @@ export default function Cotizaciones() {
 
   useEffect(() => {
     if (!isCrear) return;
-
+  
     const bodegaInicial =
       selectedBodega !== "Todas las bodegas"
         ? bodegasDisponibles.find((bodega) => bodega.id === selectedBodegaId)
             ?.nombre ?? ""
         : "";
-
+  
     const idBodegaInicial =
       selectedBodega !== "Todas las bodegas" && selectedBodegaId
         ? String(selectedBodegaId)
         : "";
-
+  
     setFormData({
       numeroCotizacion: generarNumeroCotizacion(),
       cliente: "",
@@ -357,7 +395,7 @@ export default function Cotizaciones() {
       bodega: bodegaInicial,
       idBodega: idBodegaInicial,
     });
-
+  
     setProductosOrden([]);
     setSelectedProductoId("");
     setCantidadProducto("0");
@@ -616,13 +654,18 @@ export default function Cotizaciones() {
       return;
     }
 
+    if (!currentUserId) {
+      toast.error("No se pudo identificar el usuario actual");
+      return;
+    }
+
     try {
       const creada = await cotizacionesService.create({
         fecha: formData.fecha,
         fecha_vencimiento: formData.fechaVencimiento,
         id_cliente: Number(formData.idCliente),
         id_bodega: Number(formData.idBodega),
-        id_usuario_creador: Number(currentUser?.id ?? 0),
+        id_usuario_creador: currentUserId,
         id_estado_cotizacion: estadoIds.Pendiente,
         observaciones: formData.observaciones.trim() || undefined,
         detalle: productosOrden.map((item) => ({
@@ -637,61 +680,18 @@ export default function Cotizaciones() {
       resetForm();
       closeToList();
       toast.success("Cotización creada exitosamente");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creando cotización:", error);
-      toast.error("No se pudo crear la cotización");
+      toast.error(
+        error?.response?.data?.message || "No se pudo crear la cotización"
+      );
     }
   };
 
   const confirmEdit = async () => {
-    if (!cotizacionSeleccionada) return;
-
-    if (
-      !formData.idCliente ||
-      !formData.fecha ||
-      !formData.fechaVencimiento ||
-      !formData.idBodega
-    ) {
-      toast.error("Por favor completa todos los campos obligatorios");
-      return;
-    }
-
-    if (productosOrden.length === 0) {
-      toast.error("Debes agregar al menos un producto a la cotización");
-      return;
-    }
-
-    try {
-      const actualizada = await cotizacionesService.update(
-        cotizacionSeleccionada.id,
-        {
-          fecha: formData.fecha,
-          fecha_vencimiento: formData.fechaVencimiento,
-          id_cliente: Number(formData.idCliente),
-          id_bodega: Number(formData.idBodega),
-          id_estado_cotizacion: estadoIds[formData.estado],
-          observaciones: formData.observaciones.trim() || undefined,
-          detalle: productosOrden.map((item) => ({
-            id_producto: Number(item.producto.id),
-            cantidad: Number(item.cantidad),
-            precio_unitario: Number(item.precio),
-            ...(item.idIva ? { id_iva: item.idIva } : {}),
-          })),
-        }
-      );
-
-      setCotizaciones((prev) =>
-        prev.map((cotizacion) =>
-          cotizacion.id === cotizacionSeleccionada.id ? actualizada : cotizacion
-        )
-      );
-
-      toast.success("Cotización actualizada exitosamente");
-      closeToList();
-    } catch (error) {
-      console.error("Error editando cotización:", error);
-      toast.error("No se pudo actualizar la cotización");
-    }
+    toast.info(
+      "Editar cotización todavía no está disponible porque tu backend actual no tiene PATCH /cotizaciones/:id"
+    );
   };
 
   const confirmAnular = async () => {
@@ -933,7 +933,7 @@ export default function Cotizaciones() {
     <div className="space-y-6">
       <div>
         <h2 className="text-gray-900">Cotizaciones</h2>
-        <p className="mt-1 text-gray-600">
+        <p className="text-gray-600 mt-1">
           Gestiona las cotizaciones de productos
         </p>
       </div>
@@ -1217,9 +1217,9 @@ export default function Cotizaciones() {
                   id="fecha"
                   type="date"
                   value={formData.fecha}
-                  onChange={(e) =>
-                    setFormData({ ...formData, fecha: e.target.value })
-                  }
+                  disabled
+                  readOnly
+                  className="bg-gray-100 cursor-not-allowed"
                 />
               </div>
             </div>
@@ -1279,12 +1279,9 @@ export default function Cotizaciones() {
                   id="fechaVencimiento"
                   type="date"
                   value={formData.fechaVencimiento}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      fechaVencimiento: e.target.value,
-                    })
-                  }
+                  disabled
+                  readOnly
+                  className="bg-gray-100 cursor-not-allowed"
                 />
               </div>
 
@@ -1465,7 +1462,7 @@ export default function Cotizaciones() {
                   </span>
                 </div>
 
-                {Object.keys(calcularTotales.impuestosPorPorcentaje).length > 0 && (
+                {/* {Object.keys(calcularTotales.impuestosPorPorcentaje).length > 0 && (
                   <div className="space-y-1 border-t pt-2">
                     {Object.entries(calcularTotales.impuestosPorPorcentaje)
                       .sort(([a], [b]) => Number(a) - Number(b))
@@ -1487,7 +1484,41 @@ export default function Cotizaciones() {
                         </div>
                       ))}
                   </div>
-                )}
+                )} */}
+
+                {(() => {
+                  const ivaEntries = Object.entries(calcularTotales.impuestosPorPorcentaje).sort(
+                    ([a], [b]) => Number(a) - Number(b)
+                  );
+
+                  if (!ivaEntries.length) return null;
+
+                  return (
+                    <div className="space-y-2 border-t pt-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Subtotal IVA:</span>
+                        <span className="font-medium text-gray-700">
+                          {ivaEntries.map(([porcentaje]) => `${porcentaje}%`).join(", ")}
+                        </span>
+                      </div>
+
+                      {ivaEntries.map(([porcentaje, monto]) => (
+                        <div key={porcentaje} className="flex justify-between text-sm">
+                          <span className="text-gray-600">
+                            Subtotal IVA {porcentaje}%:
+                          </span>
+                          <span className="font-medium">
+                            $
+                            {monto.toLocaleString("es-CO", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
 
                 <div className="flex justify-between border-t pt-2 text-lg">
                   <span className="font-semibold">Total:</span>
