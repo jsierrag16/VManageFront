@@ -173,9 +173,8 @@ export const getProductosVista = async (
     const { data } = await api.get("/existencias/productos-vista", {
         params: {
             scope,
-            ...(idBodega ? { id_bodega: idBodega } : {}),
+            ...(idBodega != null ? { id_bodega: idBodega } : {}),
         },
     });
     return data;
 };
-

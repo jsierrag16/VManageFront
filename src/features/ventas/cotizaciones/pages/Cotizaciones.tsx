@@ -209,24 +209,29 @@ export default function Cotizaciones() {
         const cotizacionesApi = await cotizacionesService.getAll({
           idBodega: selectedBodegaId ?? undefined,
         });
-  
+
         setCotizaciones(cotizacionesApi);
       } catch (error) {
         console.error("Error cargando cotizaciones:", error);
         toast.error("No se pudo cargar el listado de cotizaciones");
       }
     };
-  
+
     void cargarCotizaciones();
   }, [selectedBodegaId]);
-  
+
   useEffect(() => {
     const cargarCatalogos = async () => {
+      const promesaProductos =
+        selectedBodegaNombre !== "Todas las bodegas" && selectedBodegaId
+          ? getProductosVista("active", selectedBodegaId)
+          : getProductosVista("all");
+
       const [clientesResult, productosResult] = await Promise.allSettled([
         clientesService.getAll({ incluirInactivos: true }),
-        getProductosVista("active", selectedBodegaId ?? undefined),
+        promesaProductos,
       ]);
-  
+
       if (clientesResult.status === "fulfilled") {
         setClientes(
           clientesResult.value.map(mapClienteApiToUi).map((cliente) => ({
@@ -252,7 +257,7 @@ export default function Cotizaciones() {
           clientesResult.reason
         );
       }
-  
+
       if (productosResult.status === "fulfilled") {
         setProductosCatalogo(
           productosResult.value.map((producto) => ({
@@ -280,24 +285,14 @@ export default function Cotizaciones() {
         );
       }
     };
-  
+
     void cargarCatalogos();
-  }, [selectedBodegaId]);
-
-  // const getFechaActual = () => {
-  //   return new Date().toISOString().split("T")[0];
-  // };
-
-  // const getFechaVencimiento = () => {
-  //   const fecha = new Date();
-  //   fecha.setDate(fecha.getDate() + 7);
-  //   return fecha.toISOString().split("T")[0];
-  // };
+  }, [selectedBodegaId, selectedBodegaNombre]);
 
   const getFechaActual = () => {
     return new Date().toISOString().split("T")[0];
   };
-  
+
   const getFechaVencimiento = () => {
     const fecha = new Date();
     fecha.setDate(fecha.getDate() + 10);
@@ -310,9 +305,9 @@ export default function Cotizaciones() {
 
   const filteredCotizaciones = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
-  
+
     if (!term) return cotizaciones;
-  
+
     return cotizaciones.filter((cotizacion) => {
       return (
         cotizacion.numeroCotizacion.toLowerCase().includes(term) ||
@@ -369,18 +364,18 @@ export default function Cotizaciones() {
 
   useEffect(() => {
     if (!isCrear) return;
-  
+
     const bodegaInicial =
       selectedBodega !== "Todas las bodegas"
         ? bodegasDisponibles.find((bodega) => bodega.id === selectedBodegaId)
-            ?.nombre ?? ""
+          ?.nombre ?? ""
         : "";
-  
+
     const idBodegaInicial =
       selectedBodega !== "Todas las bodegas" && selectedBodegaId
         ? String(selectedBodegaId)
         : "";
-  
+
     setFormData({
       numeroCotizacion: generarNumeroCotizacion(),
       cliente: "",
@@ -395,7 +390,7 @@ export default function Cotizaciones() {
       bodega: bodegaInicial,
       idBodega: idBodegaInicial,
     });
-  
+
     setProductosOrden([]);
     setSelectedProductoId("");
     setCantidadProducto("0");
@@ -566,13 +561,13 @@ export default function Cotizaciones() {
     estadoActual: Cotizacion["estado"]
   ): Cotizacion["estado"] | null => {
     const flujoEstados: Record<Cotizacion["estado"], Cotizacion["estado"] | null> =
-      {
-        Pendiente: "Aprobada",
-        Aprobada: null,
-        Rechazada: null,
-        Vencida: null,
-        Anulada: null,
-      };
+    {
+      Pendiente: "Aprobada",
+      Aprobada: null,
+      Rechazada: null,
+      Vencida: null,
+      Anulada: null,
+    };
 
     return flujoEstados[estadoActual];
   };
@@ -1045,17 +1040,16 @@ export default function Cotizaciones() {
                         size="sm"
                         onClick={() => handleToggleEstado(cotizacion)}
                         disabled={cotizacion.estado === "Anulada"}
-                        className={`h-7 ${
-                          cotizacion.estado === "Aprobada"
+                        className={`h-7 ${cotizacion.estado === "Aprobada"
                             ? "bg-green-100 text-green-800 hover:bg-green-200"
                             : cotizacion.estado === "Pendiente"
-                            ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                            : cotizacion.estado === "Rechazada"
-                            ? "bg-red-100 text-red-800 hover:bg-red-200"
-                            : cotizacion.estado === "Anulada"
-                            ? "cursor-not-allowed bg-gray-100 text-gray-800 opacity-60 hover:bg-gray-100"
-                            : "bg-gray-100 text-gray-800 hover:bg-gray-200"
-                        }`}
+                              ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                              : cotizacion.estado === "Rechazada"
+                                ? "bg-red-100 text-red-800 hover:bg-red-200"
+                                : cotizacion.estado === "Anulada"
+                                  ? "cursor-not-allowed bg-gray-100 text-gray-800 opacity-60 hover:bg-gray-100"
+                                  : "bg-gray-100 text-gray-800 hover:bg-gray-200"
+                          }`}
                       >
                         {cotizacion.estado}
                       </Button>
@@ -1115,8 +1109,8 @@ export default function Cotizaciones() {
                             cotizacion.estado === "Aprobada"
                               ? "No se puede anular una cotización aprobada"
                               : cotizacion.estado === "Anulada"
-                              ? "La cotización ya está anulada"
-                              : "Anular"
+                                ? "La cotización ya está anulada"
+                                : "Anular"
                           }
                         >
                           <Ban size={16} className="text-red-600" />
@@ -1938,15 +1932,14 @@ export default function Cotizaciones() {
                       variant="ghost"
                       size="sm"
                       onClick={() => handleToggleEstado(cotizacionSeleccionada)}
-                      className={`h-7 px-3 ${
-                        cotizacionSeleccionada.estado === "Aprobada"
+                      className={`h-7 px-3 ${cotizacionSeleccionada.estado === "Aprobada"
                           ? "bg-green-100 text-green-800 hover:bg-green-200"
                           : cotizacionSeleccionada.estado === "Pendiente"
-                          ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                          : cotizacionSeleccionada.estado === "Rechazada"
-                          ? "bg-red-100 text-red-800 hover:bg-red-200"
-                          : "bg-gray-100 text-gray-800 hover:bg-gray-200"
-                      }`}
+                            ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                            : cotizacionSeleccionada.estado === "Rechazada"
+                              ? "bg-red-100 text-red-800 hover:bg-red-200"
+                              : "bg-gray-100 text-gray-800 hover:bg-gray-200"
+                        }`}
                     >
                       {cotizacionSeleccionada.estado}
                     </Button>
