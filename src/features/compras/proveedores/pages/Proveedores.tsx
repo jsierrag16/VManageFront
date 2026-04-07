@@ -838,11 +838,10 @@ export default function Proveedores() {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleToggleEstado(proveedor)}
-                        className={`h-7 ${
-                          proveedor.estado === "Activo"
+                        className={`h-7 ${proveedor.estado === "Activo"
                             ? "bg-green-100 text-green-800 hover:bg-green-200"
                             : "bg-red-100 text-red-800 hover:bg-red-200"
-                        }`}
+                          }`}
                       >
                         {proveedor.estado}
                       </Button>
@@ -887,7 +886,9 @@ export default function Proveedores() {
             </TableBody>
           </Table>
         </div>
+      </div>
 
+      <div>
         {pagination.total > 0 && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
             <div className="text-sm text-gray-600">
@@ -1542,11 +1543,10 @@ export default function Proveedores() {
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Estado Actual:</span>
               <span
-                className={`font-medium ${
-                  proveedorParaCambioEstado?.estado === "Activo"
+                className={`font-medium ${proveedorParaCambioEstado?.estado === "Activo"
                     ? "text-green-700"
                     : "text-red-700"
-                }`}
+                  }`}
               >
                 {proveedorParaCambioEstado?.estado}
               </span>
@@ -1555,11 +1555,10 @@ export default function Proveedores() {
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Nuevo Estado:</span>
               <span
-                className={`font-medium ${
-                  proveedorParaCambioEstado?.estado === "Inactivo"
+                className={`font-medium ${proveedorParaCambioEstado?.estado === "Inactivo"
                     ? "text-green-700"
                     : "text-red-700"
-                }`}
+                  }`}
               >
                 {proveedorParaCambioEstado?.estado === "Activo"
                   ? "Inactivo"

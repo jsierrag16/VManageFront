@@ -362,8 +362,8 @@ export default function RemisionesVenta() {
         for (const detalle of remision.detalle_remision_venta ?? []) {
           const idProducto = Number(
             detalle.existencias?.id_producto ??
-              detalle.existencias?.producto?.id_producto ??
-              0
+            detalle.existencias?.producto?.id_producto ??
+            0
           );
           const idExistencia = Number(detalle.existencias?.id_existencia ?? 0);
           const cantidad = toNumber(detalle.cantidad);
@@ -381,11 +381,11 @@ export default function RemisionesVenta() {
 
         setFormNumeroRemision(
           remision.codigo_remision_venta ||
-            `RMV-${String(remision.id_remision_venta).padStart(4, "0")}`
+          `RMV-${String(remision.id_remision_venta).padStart(4, "0")}`
         );
         setFormFecha(
           normalizeDate(remision.fecha_creacion) ||
-            new Date().toISOString().split("T")[0]
+          new Date().toISOString().split("T")[0]
         );
         setFormObservaciones(remision.observaciones ?? "");
         setFormOrdenId(String(remision.id_orden_venta));
@@ -762,9 +762,9 @@ export default function RemisionesVenta() {
       console.error(error);
       toast.error(
         error?.message ||
-          (isEditar
-            ? "No se pudo actualizar la remisión"
-            : "No se pudo crear la remisión")
+        (isEditar
+          ? "No se pudo actualizar la remisión"
+          : "No se pudo crear la remisión")
       );
     }
   };
@@ -929,7 +929,7 @@ export default function RemisionesVenta() {
 
   return (
     <div className="space-y-6">
-       <div>
+      <div>
         <h2 className="text-gray-900">Remisiones de venta</h2>
         <p className="text-gray-600 mt-1">
           Gestiona las remisiones de Venta
@@ -1042,11 +1042,10 @@ export default function RemisionesVenta() {
                         disabled={!puedeCambiarEstadoRemision(remision.estado)}
                         className={`h-8 rounded-full px-3 text-xs font-medium ${getEstadoBadgeClass(
                           remision.estado
-                        )} ${
-                          !puedeCambiarEstadoRemision(remision.estado)
+                        )} ${!puedeCambiarEstadoRemision(remision.estado)
                             ? "cursor-not-allowed opacity-70"
                             : ""
-                        }`}
+                          }`}
                         title={getSiguienteEstadoTexto(remision.estado)}
                       >
                         {remision.estado}
@@ -1089,10 +1088,10 @@ export default function RemisionesVenta() {
                             remision.estado === "Entregado"
                               ? "No se puede editar una remisión entregada"
                               : remision.estado === "Facturada"
-                              ? "No se puede editar una remisión facturada"
-                              : remision.estado === "Anulada"
-                              ? "No se puede editar una remisión anulada"
-                              : "Editar"
+                                ? "No se puede editar una remisión facturada"
+                                : remision.estado === "Anulada"
+                                  ? "No se puede editar una remisión anulada"
+                                  : "Editar"
                           }
                         >
                           <Edit size={16} className="text-amber-600" />
@@ -1112,10 +1111,10 @@ export default function RemisionesVenta() {
                             remision.estado === "Entregado"
                               ? "No se puede anular una remisión entregada"
                               : remision.estado === "Facturada"
-                              ? "No se puede anular una remisión facturada"
-                              : remision.estado === "Anulada"
-                              ? "La remisión ya está anulada"
-                              : "Anular"
+                                ? "No se puede anular una remisión facturada"
+                                : remision.estado === "Anulada"
+                                  ? "La remisión ya está anulada"
+                                  : "Anular"
                           }
                         >
                           <Ban size={16} className="text-red-600" />
@@ -1128,7 +1127,9 @@ export default function RemisionesVenta() {
             </TableBody>
           </Table>
         </div>
+      </div>
 
+      <div>
         {filteredRemisiones.length > 0 && (
           <div className="flex items-center justify-between p-4 border-t">
             <p className="text-sm text-gray-600">

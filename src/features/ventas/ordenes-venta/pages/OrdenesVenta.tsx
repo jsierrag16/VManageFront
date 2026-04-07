@@ -891,20 +891,19 @@ export default function OrdenesVenta() {
                           size="sm"
                           onClick={() => handleToggleEstado(orden)}
                           disabled={isCancelada}
-                          className={`h-7 ${
-                            estadoKey.includes("pendiente")
+                          className={`h-7 ${estadoKey.includes("pendiente")
                               ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
                               : estadoKey.includes("procesando") ||
                                 estadoKey.includes("aprobada") ||
                                 estadoKey.includes("aprobado")
-                              ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
-                              : estadoKey.includes("enviada")
-                              ? "bg-purple-100 text-purple-800 hover:bg-purple-200"
-                              : estadoKey.includes("entregada") ||
-                                estadoKey.includes("aplicada")
-                              ? "bg-green-100 text-green-800 hover:bg-green-200"
-                              : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
-                          }`}
+                                ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
+                                : estadoKey.includes("enviada")
+                                  ? "bg-purple-100 text-purple-800 hover:bg-purple-200"
+                                  : estadoKey.includes("entregada") ||
+                                    estadoKey.includes("aplicada")
+                                    ? "bg-green-100 text-green-800 hover:bg-green-200"
+                                    : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
+                            }`}
                         >
                           {estadoNombre}
                         </Button>
@@ -952,7 +951,9 @@ export default function OrdenesVenta() {
             </TableBody>
           </Table>
         </div>
+      </div>
 
+      <div>
         {filteredOrdenes.length > 0 && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
             <div className="text-sm text-gray-600">
@@ -1092,17 +1093,17 @@ export default function OrdenesVenta() {
                   value={
                     formMode === "create"
                       ? getEstadoNombre(
-                          estados.find(
-                            (estado) => estado.id_estado_orden_venta === estadoPendienteId
-                          )
+                        estados.find(
+                          (estado) => estado.id_estado_orden_venta === estadoPendienteId
                         )
+                      )
                       : getEstadoNombre(
-                          estados.find(
-                            (estado) =>
-                              String(estado.id_estado_orden_venta) ===
-                              String(formData.id_estado_orden_venta)
-                          )
+                        estados.find(
+                          (estado) =>
+                            String(estado.id_estado_orden_venta) ===
+                            String(formData.id_estado_orden_venta)
                         )
+                      )
                   }
                   readOnly
                   disabled
@@ -1407,9 +1408,8 @@ export default function OrdenesVenta() {
 
           <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             {selectedOrden
-              ? `Vas a anular la orden ${
-                  selectedOrden.codigo_orden_venta || `OV-${selectedOrden.id_orden_venta}`
-                }.`
+              ? `Vas a anular la orden ${selectedOrden.codigo_orden_venta || `OV-${selectedOrden.id_orden_venta}`
+              }.`
               : "No hay orden seleccionada."}
           </div>
 

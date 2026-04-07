@@ -432,17 +432,15 @@ export default function Compras() {
     doc.text(`Bodega: ${compra.bodega || "-"}`, 20, 58);
 
     doc.text(
-      `Fecha: ${
-        compra.fecha ? new Date(compra.fecha).toLocaleDateString("es-CO") : "-"
+      `Fecha: ${compra.fecha ? new Date(compra.fecha).toLocaleDateString("es-CO") : "-"
       }`,
       120,
       40
     );
     doc.text(
-      `Fecha Entrega: ${
-        compra.fechaEntrega
-          ? new Date(compra.fechaEntrega).toLocaleDateString("es-CO")
-          : "-"
+      `Fecha Entrega: ${compra.fechaEntrega
+        ? new Date(compra.fechaEntrega).toLocaleDateString("es-CO")
+        : "-"
       }`,
       120,
       46
@@ -888,7 +886,7 @@ export default function Compras() {
       <div>
         <h2 className="text-gray-900">Órdenes de Compra</h2>
         <p className="text-gray-600 mt-1">
-          Administra la información de tus órdenes de compra  
+          Administra la información de tus órdenes de compra
         </p>
       </div>
 
@@ -1022,13 +1020,12 @@ export default function Compras() {
                         size="sm"
                         onClick={() => handleToggleEstado(compra)}
                         disabled={compra.estado === "Anulada"}
-                        className={`h-7 ${
-                          compra.estado === "Aprobada"
+                        className={`h-7 ${compra.estado === "Aprobada"
                             ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
                             : compra.estado === "Pendiente"
-                            ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                            : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
-                        }`}
+                              ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                              : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
+                          }`}
                       >
                         {compra.estado}
                       </Button>
@@ -1070,7 +1067,7 @@ export default function Compras() {
                             size={16}
                             className={
                               compra.estado === "Aprobada" ||
-                              compra.estado === "Anulada"
+                                compra.estado === "Anulada"
                                 ? "text-gray-400"
                                 : "text-yellow-600"
                             }
@@ -1092,7 +1089,7 @@ export default function Compras() {
                             size={16}
                             className={
                               compra.estado === "Aprobada" ||
-                              compra.estado === "Anulada"
+                                compra.estado === "Anulada"
                                 ? "text-gray-400"
                                 : "text-red-600"
                             }
@@ -1106,7 +1103,9 @@ export default function Compras() {
             </TableBody>
           </Table>
         </div>
+      </div>
 
+      <div>
         {filteredCompras.length > 0 && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
             <div className="text-sm text-gray-600">
@@ -1626,13 +1625,12 @@ export default function Compras() {
                       size="sm"
                       onClick={() => handleToggleEstado(compraSeleccionada)}
                       disabled={compraSeleccionada.estado === "Anulada"}
-                      className={`h-7 px-3 ${
-                        compraSeleccionada.estado === "Aprobada"
+                      className={`h-7 px-3 ${compraSeleccionada.estado === "Aprobada"
                           ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
                           : compraSeleccionada.estado === "Pendiente"
-                          ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                          : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
-                      }`}
+                            ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                            : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
+                        }`}
                     >
                       {compraSeleccionada.estado}
                     </Button>
@@ -1675,8 +1673,8 @@ export default function Compras() {
                   <p className="font-medium">
                     {compraSeleccionada.fecha
                       ? new Date(compraSeleccionada.fecha).toLocaleDateString(
-                          "es-CO"
-                        )
+                        "es-CO"
+                      )
                       : "-"}
                   </p>
                 </div>
@@ -1686,8 +1684,8 @@ export default function Compras() {
                   <p className="font-medium">
                     {compraSeleccionada.fechaEntrega
                       ? new Date(compraSeleccionada.fechaEntrega).toLocaleDateString(
-                          "es-CO"
-                        )
+                        "es-CO"
+                      )
                       : "-"}
                   </p>
                 </div>
@@ -2287,11 +2285,10 @@ export default function Compras() {
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Estado Actual:</span>
               <span
-                className={`font-medium ${
-                  compraParaCambioEstado?.estado === "Aprobada"
+                className={`font-medium ${compraParaCambioEstado?.estado === "Aprobada"
                     ? "text-blue-700"
                     : "text-yellow-700"
-                }`}
+                  }`}
               >
                 {compraParaCambioEstado?.estado}
               </span>

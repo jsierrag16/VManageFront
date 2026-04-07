@@ -576,13 +576,13 @@ export default function RemisionesCompra() {
       numeroRemision:
         options?.keepNumeroRemision === true
           ? prev.numeroRemision ||
-            options?.numeroRemisionFallback ||
-            compra.numeroRemisionSugerido ||
-            ""
+          options?.numeroRemisionFallback ||
+          compra.numeroRemisionSugerido ||
+          ""
           : compra.numeroRemisionSugerido ||
-            prev.numeroRemision ||
-            options?.numeroRemisionFallback ||
-            "",
+          prev.numeroRemision ||
+          options?.numeroRemisionFallback ||
+          "",
       id_compra: String(compra.id),
       ordenCompra: compra.codigo,
       id_proveedor: String(compra.proveedorId),
@@ -1115,199 +1115,197 @@ export default function RemisionesCompra() {
     navigate("/app/remisiones-compra", { replace: true });
   };
 
-const generateRemisionPDF = (remision: RemisionCompraUI) => {
-  const doc = new jsPDF();
+  const generateRemisionPDF = (remision: RemisionCompraUI) => {
+    const doc = new jsPDF();
 
-  doc.setFontSize(20);
-  doc.setFont("helvetica", "bold");
-  doc.text("REMISIÓN DE COMPRA", 105, 20, { align: "center" });
+    doc.setFontSize(20);
+    doc.setFont("helvetica", "bold");
+    doc.text("REMISIÓN DE COMPRA", 105, 20, { align: "center" });
 
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
 
-  doc.text(`N° Remisión: ${remision.numeroRemision}`, 20, 40);
-  doc.text(`Proveedor: ${remision.proveedor || "-"}`, 20, 46);
-  doc.text(
-    `Tipo Doc.: ${remision.proveedorTipoDocumento || "-"}`,
-    20,
-    52
-  );
-  doc.text(
-    `N° Documento: ${remision.proveedorNumeroDocumento || "-"}`,
-    20,
-    58
-  );
-  doc.text(`Bodega: ${remision.bodega || "-"}`, 20, 64);
+    doc.text(`N° Remisión: ${remision.numeroRemision}`, 20, 40);
+    doc.text(`Proveedor: ${remision.proveedor || "-"}`, 20, 46);
+    doc.text(
+      `Tipo Doc.: ${remision.proveedorTipoDocumento || "-"}`,
+      20,
+      52
+    );
+    doc.text(
+      `N° Documento: ${remision.proveedorNumeroDocumento || "-"}`,
+      20,
+      58
+    );
+    doc.text(`Bodega: ${remision.bodega || "-"}`, 20, 64);
 
-  doc.text(
-    `Fecha: ${
-      remision.fecha
+    doc.text(
+      `Fecha: ${remision.fecha
         ? new Date(remision.fecha).toLocaleDateString("es-CO")
         : "-"
-    }`,
-    120,
-    40
-  );
+      }`,
+      120,
+      40
+    );
 
-  doc.text(
-    `Fecha Venc.: ${
-      remision.fechaVencimiento
+    doc.text(
+      `Fecha Venc.: ${remision.fechaVencimiento
         ? new Date(remision.fechaVencimiento).toLocaleDateString("es-CO")
         : "-"
-    }`,
-    120,
-    46
-  );
+      }`,
+      120,
+      46
+    );
 
-  doc.text(`Estado: ${remision.estado || "-"}`, 120, 52);
-  doc.text(`Orden Compra: ${remision.ordenCompra || "-"}`, 120, 58);
+    doc.text(`Estado: ${remision.estado || "-"}`, 120, 52);
+    doc.text(`Orden Compra: ${remision.ordenCompra || "-"}`, 120, 58);
 
-  doc.setLineWidth(0.5);
-  doc.line(20, 70, 190, 70);
+    doc.setLineWidth(0.5);
+    doc.line(20, 70, 190, 70);
 
-  if (remision.items && remision.items.length > 0) {
-    const tableData = remision.items.map((item) => {
-      const subtotal = Number(item.cantidad || 0) * Number(item.precio_unitario || 0);
+    if (remision.items && remision.items.length > 0) {
+      const tableData = remision.items.map((item) => {
+        const subtotal = Number(item.cantidad || 0) * Number(item.precio_unitario || 0);
 
-      const detalleProducto = [
-        item.productoNombre || "-",
-        item.lote ? `Lote: ${item.lote}` : null,
-        item.fecha_vencimiento
-          ? `Vence: ${new Date(item.fecha_vencimiento).toLocaleDateString("es-CO")}`
-          : null,
-        (item.codigo_barras || item.cod_barras)
-          ? `Cod. barras: ${item.codigo_barras || item.cod_barras}`
-          : null,
-        item.nota ? `Nota: ${item.nota}` : null,
-      ]
-        .filter(Boolean)
-        .join("\n");
+        const detalleProducto = [
+          item.productoNombre || "-",
+          item.lote ? `Lote: ${item.lote}` : null,
+          item.fecha_vencimiento
+            ? `Vence: ${new Date(item.fecha_vencimiento).toLocaleDateString("es-CO")}`
+            : null,
+          (item.codigo_barras || item.cod_barras)
+            ? `Cod. barras: ${item.codigo_barras || item.cod_barras}`
+            : null,
+          item.nota ? `Nota: ${item.nota}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n");
 
-      return [
-        detalleProducto,
-        String(item.cantidad),
-        `IVA (${Number(item.ivaPorcentaje || 0).toFixed(2)}%)`,
-        `$${Number(item.precio_unitario || 0).toLocaleString("es-CO", {
-          minimumFractionDigits: 2,
-        })}`,
-        `$${subtotal.toLocaleString("es-CO", {
-          minimumFractionDigits: 2,
-        })}`,
-      ];
-    });
+        return [
+          detalleProducto,
+          String(item.cantidad),
+          `IVA (${Number(item.ivaPorcentaje || 0).toFixed(2)}%)`,
+          `$${Number(item.precio_unitario || 0).toLocaleString("es-CO", {
+            minimumFractionDigits: 2,
+          })}`,
+          `$${subtotal.toLocaleString("es-CO", {
+            minimumFractionDigits: 2,
+          })}`,
+        ];
+      });
 
-    autoTable(doc, {
-      startY: 76,
-      head: [["Producto", "Cantidad", "IVA", "Precio Unit.", "Subtotal"]],
-      body: tableData,
-      theme: "grid",
-      styles: {
-        fontSize: 8,
-        cellPadding: 3,
-        valign: "middle",
-      },
-      headStyles: {
-        fontStyle: "bold",
-      },
-      columnStyles: {
-        0: { cellWidth: 78 },
-        1: { cellWidth: 20, halign: "center" },
-        2: { cellWidth: 22, halign: "center" },
-        3: { cellWidth: 32, halign: "right" },
-        4: { cellWidth: 32, halign: "right" },
-      },
-    });
-  }
+      autoTable(doc, {
+        startY: 76,
+        head: [["Producto", "Cantidad", "IVA", "Precio Unit.", "Subtotal"]],
+        body: tableData,
+        theme: "grid",
+        styles: {
+          fontSize: 8,
+          cellPadding: 3,
+          valign: "middle",
+        },
+        headStyles: {
+          fontStyle: "bold",
+        },
+        columnStyles: {
+          0: { cellWidth: 78 },
+          1: { cellWidth: 20, halign: "center" },
+          2: { cellWidth: 22, halign: "center" },
+          3: { cellWidth: 32, halign: "right" },
+          4: { cellWidth: 32, halign: "right" },
+        },
+      });
+    }
 
-  const finalY = (doc as any).lastAutoTable?.finalY || 76;
-  const totalesY = finalY + 10;
+    const finalY = (doc as any).lastAutoTable?.finalY || 76;
+    const totalesY = finalY + 10;
 
-  const subtotalGeneral = remision.items.reduce(
-    (acc, item) =>
-      acc + Number(item.cantidad || 0) * Number(item.precio_unitario || 0),
-    0
-  );
+    const subtotalGeneral = remision.items.reduce(
+      (acc, item) =>
+        acc + Number(item.cantidad || 0) * Number(item.precio_unitario || 0),
+      0
+    );
 
-  const ivaGeneral = remision.items.reduce((acc, item) => {
-    const subtotal =
-      Number(item.cantidad || 0) * Number(item.precio_unitario || 0);
-    return acc + subtotal * (Number(item.ivaPorcentaje || 0) / 100);
-  }, 0);
+    const ivaGeneral = remision.items.reduce((acc, item) => {
+      const subtotal =
+        Number(item.cantidad || 0) * Number(item.precio_unitario || 0);
+      return acc + subtotal * (Number(item.ivaPorcentaje || 0) / 100);
+    }, 0);
 
-  const totalGeneral = subtotalGeneral + ivaGeneral;
+    const totalGeneral = subtotalGeneral + ivaGeneral;
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-
-  doc.text("Subtotal:", 130, totalesY);
-  doc.text(
-    `$${subtotalGeneral.toLocaleString("es-CO", {
-      minimumFractionDigits: 2,
-    })}`,
-    190,
-    totalesY,
-    { align: "right" }
-  );
-
-  doc.text("IVA:", 130, totalesY + 6);
-  doc.text(
-    `$${ivaGeneral.toLocaleString("es-CO", {
-      minimumFractionDigits: 2,
-    })}`,
-    190,
-    totalesY + 6,
-    { align: "right" }
-  );
-
-  doc.setLineWidth(0.3);
-  doc.line(130, totalesY + 10, 190, totalesY + 10);
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  doc.text("Total:", 130, totalesY + 16);
-  doc.text(
-    `$${totalGeneral.toLocaleString("es-CO", {
-      minimumFractionDigits: 2,
-    })}`,
-    190,
-    totalesY + 16,
-    { align: "right" }
-  );
-
-  if (remision.observaciones) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
-    doc.text("Observaciones:", 20, totalesY + 30);
-    const splitObs = doc.splitTextToSize(remision.observaciones, 170);
-    doc.text(splitObs, 20, totalesY + 36);
-  }
 
-  const pageHeight = doc.internal.pageSize.height;
-  doc.setFontSize(8);
-  doc.setFont("helvetica", "italic");
-  doc.text(
-    `Generado el ${new Date().toLocaleString("es-CO")}`,
-    105,
-    pageHeight - 10,
-    { align: "center" }
-  );
+    doc.text("Subtotal:", 130, totalesY);
+    doc.text(
+      `$${subtotalGeneral.toLocaleString("es-CO", {
+        minimumFractionDigits: 2,
+      })}`,
+      190,
+      totalesY,
+      { align: "right" }
+    );
 
-  doc.save(`Remision_Compra_${remision.numeroRemision}.pdf`);
-};
+    doc.text("IVA:", 130, totalesY + 6);
+    doc.text(
+      `$${ivaGeneral.toLocaleString("es-CO", {
+        minimumFractionDigits: 2,
+      })}`,
+      190,
+      totalesY + 6,
+      { align: "right" }
+    );
 
-const handleDescargarRemision = async (remision: RemisionCompraUI) => {
-  try {
-    const detalle =
-      remision.items.length > 0
-        ? remision
-        : await getRemisionCompraById(remision.id);
+    doc.setLineWidth(0.3);
+    doc.line(130, totalesY + 10, 190, totalesY + 10);
 
-    generateRemisionPDF(detalle);
-    toast.success(`PDF de la remisión ${detalle.numeroRemision} descargado exitosamente`);
-  } catch (error) {
-    toast.error(getErrorMessage(error, "Error al descargar la remisión en PDF"));
-  }
-};
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text("Total:", 130, totalesY + 16);
+    doc.text(
+      `$${totalGeneral.toLocaleString("es-CO", {
+        minimumFractionDigits: 2,
+      })}`,
+      190,
+      totalesY + 16,
+      { align: "right" }
+    );
+
+    if (remision.observaciones) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.text("Observaciones:", 20, totalesY + 30);
+      const splitObs = doc.splitTextToSize(remision.observaciones, 170);
+      doc.text(splitObs, 20, totalesY + 36);
+    }
+
+    const pageHeight = doc.internal.pageSize.height;
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "italic");
+    doc.text(
+      `Generado el ${new Date().toLocaleString("es-CO")}`,
+      105,
+      pageHeight - 10,
+      { align: "center" }
+    );
+
+    doc.save(`Remision_Compra_${remision.numeroRemision}.pdf`);
+  };
+
+  const handleDescargarRemision = async (remision: RemisionCompraUI) => {
+    try {
+      const detalle =
+        remision.items.length > 0
+          ? remision
+          : await getRemisionCompraById(remision.id);
+
+      generateRemisionPDF(detalle);
+      toast.success(`PDF de la remisión ${detalle.numeroRemision} descargado exitosamente`);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Error al descargar la remisión en PDF"));
+    }
+  };
 
   const totalFormulario = useMemo(() => {
     return items.reduce((acc, item) => {
@@ -1455,13 +1453,12 @@ const handleDescargarRemision = async (remision: RemisionCompraUI) => {
                           size="sm"
                           onClick={() => handleEstadoClick(remision)}
                           disabled={remision.estadoKey !== "PENDIENTE"}
-                          className={`h-7 ${
-                            remision.estadoKey === "APLICADA"
+                          className={`h-7 ${remision.estadoKey === "APLICADA"
                               ? "bg-green-100 text-green-800 hover:bg-green-200"
                               : remision.estadoKey === "PENDIENTE"
-                              ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                              : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
-                          }`}
+                                ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                                : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
+                            }`}
                         >
                           {remision.estado}
                         </Button>
@@ -1536,7 +1533,9 @@ const handleDescargarRemision = async (remision: RemisionCompraUI) => {
             </TableBody>
           </Table>
         </div>
+      </div>
 
+      <div>
         {filteredRemisiones.length > 0 && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
             <div className="text-sm text-gray-600">

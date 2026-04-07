@@ -1041,14 +1041,14 @@ export default function Cotizaciones() {
                         onClick={() => handleToggleEstado(cotizacion)}
                         disabled={cotizacion.estado === "Anulada"}
                         className={`h-7 ${cotizacion.estado === "Aprobada"
-                            ? "bg-green-100 text-green-800 hover:bg-green-200"
-                            : cotizacion.estado === "Pendiente"
-                              ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                              : cotizacion.estado === "Rechazada"
-                                ? "bg-red-100 text-red-800 hover:bg-red-200"
-                                : cotizacion.estado === "Anulada"
-                                  ? "cursor-not-allowed bg-gray-100 text-gray-800 opacity-60 hover:bg-gray-100"
-                                  : "bg-gray-100 text-gray-800 hover:bg-gray-200"
+                          ? "bg-green-100 text-green-800 hover:bg-green-200"
+                          : cotizacion.estado === "Pendiente"
+                            ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                            : cotizacion.estado === "Rechazada"
+                              ? "bg-red-100 text-red-800 hover:bg-red-200"
+                              : cotizacion.estado === "Anulada"
+                                ? "cursor-not-allowed bg-gray-100 text-gray-800 opacity-60 hover:bg-gray-100"
+                                : "bg-gray-100 text-gray-800 hover:bg-gray-200"
                           }`}
                       >
                         {cotizacion.estado}
@@ -1123,7 +1123,10 @@ export default function Cotizaciones() {
             </TableBody>
           </Table>
         </div>
+      </div>
 
+
+      <div>
         {filteredCotizaciones.length > 0 && (
           <div className="flex items-center justify-between border-t border-gray-200 px-6 py-4">
             <div className="text-sm text-gray-600">
@@ -1933,12 +1936,12 @@ export default function Cotizaciones() {
                       size="sm"
                       onClick={() => handleToggleEstado(cotizacionSeleccionada)}
                       className={`h-7 px-3 ${cotizacionSeleccionada.estado === "Aprobada"
-                          ? "bg-green-100 text-green-800 hover:bg-green-200"
-                          : cotizacionSeleccionada.estado === "Pendiente"
-                            ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                            : cotizacionSeleccionada.estado === "Rechazada"
-                              ? "bg-red-100 text-red-800 hover:bg-red-200"
-                              : "bg-gray-100 text-gray-800 hover:bg-gray-200"
+                        ? "bg-green-100 text-green-800 hover:bg-green-200"
+                        : cotizacionSeleccionada.estado === "Pendiente"
+                          ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                          : cotizacionSeleccionada.estado === "Rechazada"
+                            ? "bg-red-100 text-red-800 hover:bg-red-200"
+                            : "bg-gray-100 text-gray-800 hover:bg-gray-200"
                         }`}
                     >
                       {cotizacionSeleccionada.estado}
