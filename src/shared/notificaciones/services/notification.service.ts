@@ -1,162 +1,147 @@
-import { Traslado } from "@/data/traslados";
-import { Producto } from "@/data/productos";
-import {
+import api from "@/shared/services/api";
+import type {
   NotificationItem,
-  NotificationPriority,
+  NotificationsListResult,
 } from "../types/notification.types";
 
-interface GenerateNotificationsParams {
-  traslados: Traslado[];
-  productos: Producto[];
-  selectedBodegaNombre: string;
-}
+type GetNotificationsParams = {
+  idBodega?: number | null;
+  soloNoLeidas?: boolean;
+  limit?: number;
+};
 
-function getPrioridadTraslado(diasTranscurridos: number): NotificationPriority {
-  if (diasTranscurridos > 3) return "alta";
-  if (diasTranscurridos > 1) return "media";
-  return "baja";
-}
+const toNumber = (value: unknown, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
 
-function getPrioridadVencimiento(diasParaVencer: number): NotificationPriority {
-  if (diasParaVencer <= 7) return "alta";
-  if (diasParaVencer <= 15) return "media";
-  return "baja";
-}
+const unwrapEntityResponse = <T = any>(response: any): T => {
+  return (response?.data?.data ?? response?.data ?? response) as T;
+};
 
-function getPrioridadStock(stock: number): NotificationPriority {
-  if (stock < 20) return "alta";
-  return "media";
-}
-
-export function generateNotifications({
-  traslados,
-  productos,
-  selectedBodegaNombre,
-}: GenerateNotificationsParams): NotificationItem[] {
-  const notifs: NotificationItem[] = [];
-  const hoy = new Date();
-
-  const trasladosFiltrados =
-    selectedBodegaNombre === "Todas las bodegas"
-      ? traslados
-      : traslados.filter(
-        (t) =>
-          t.bodegaOrigen === selectedBodegaNombre ||
-          t.bodegaDestino === selectedBodegaNombre
-      );
-
-  trasladosFiltrados
-    .filter((t) => t.estado === "Enviado")
-    .forEach((traslado) => {
-      const diasTranscurridos = Math.floor(
-        (hoy.getTime() - new Date(traslado.fecha).getTime()) /
-        (1000 * 60 * 60 * 24)
-      );
-
-      notifs.push({
-        id: `traslado-${traslado.id}`,
-        tipo: "traslado",
-        titulo: `Traslado pendiente: ${traslado.codigo}`,
-        descripcion: `De ${traslado.bodegaOrigen} a ${traslado.bodegaDestino} - ${traslado.items.length} productos - ${diasTranscurridos} día(s) en tránsito`,
-        fecha: traslado.fecha,
-        prioridad: getPrioridadTraslado(diasTranscurridos),
-        leida: false,
-        datos: traslado,
-        action: {
-          module: "traslados",
-          entityId: traslado.id,
-          action: "detalle",
-        },
-      });
-    });
-
-  productos.forEach((producto) => {
-    producto.lotes.forEach((lote) => {
-      if (
-        selectedBodegaNombre !== "Todas las bodegas" &&
-        lote.bodega !== selectedBodegaNombre
-      ) {
-        return;
-      }
-
-      const fechaVencimiento = new Date(lote.fechaVencimiento);
-      const diasParaVencer = Math.floor(
-        (fechaVencimiento.getTime() - hoy.getTime()) /
-        (1000 * 60 * 60 * 24)
-      );
-
-      if (diasParaVencer <= 30 && lote.cantidadDisponible > 0) {
-        const estaVencido = diasParaVencer < 0;
-        const diasTexto = estaVencido
-          ? `Vencido hace ${Math.abs(diasParaVencer)} día(s)`
-          : `Vence en ${diasParaVencer} día(s)`;
-
-        notifs.push({
-          id: `vencimiento-${lote.id}`,
-          tipo: "vencimiento",
-          titulo: estaVencido
-            ? `Producto vencido: ${producto.nombre}`
-            : `Producto próximo a vencer: ${producto.nombre}`,
-          descripcion: `Lote ${lote.numeroLote} - ${lote.cantidadDisponible} unidades - ${diasTexto} - ${lote.bodega}`,
-          fecha: lote.fechaVencimiento,
-          prioridad: estaVencido ? "alta" : getPrioridadVencimiento(diasParaVencer),
-          leida: false,
-          datos: { producto, lote },
-          action: {
-            module: "existencias",
-            entityId: producto.id,
-            action: "detalle",
-          },
-        });
-      }
-    });
-  });
-
-  productos.forEach((producto) => {
-    const stockPorBodega: Record<string, number> = {};
-
-    producto.lotes.forEach((lote) => {
-      stockPorBodega[lote.bodega] =
-        (stockPorBodega[lote.bodega] ?? 0) + lote.cantidadDisponible;
-    });
-
-    Object.entries(stockPorBodega).forEach(([bodega, stock]) => {
-      if (
-        selectedBodegaNombre !== "Todas las bodegas" &&
-        bodega !== selectedBodegaNombre
-      ) {
-        return;
-      }
-
-      if (stock > 0 && stock < 50) {
-        notifs.push({
-          id: `stock-${producto.id}-${bodega}`,
-          tipo: "stockBajo",
-          titulo: `Stock bajo: ${producto.nombre}`,
-          descripcion: `Solo ${stock} unidades disponibles en ${bodega}`,
-          fecha: hoy.toISOString(),
-          prioridad: getPrioridadStock(stock),
-          leida: false,
-          datos: { producto, bodega, stock },
-          action: {
-            module: "existencias",
-            entityId: producto.id,
-            action: "detalle",
-          },
-        });
-      }
-    });
-  });
-
-  const prioridadPeso: Record<NotificationPriority, number> = {
-    alta: 3,
-    media: 2,
-    baja: 1,
+const normalizeNotification = (raw: any): NotificationItem => {
+  return {
+    id: String(raw?.id ?? ""),
+    tipo: raw?.tipo ?? "stockBajo",
+    titulo: String(raw?.titulo ?? ""),
+    descripcion: String(raw?.descripcion ?? ""),
+    fecha: String(raw?.fecha ?? new Date().toISOString()),
+    prioridad: raw?.prioridad ?? "media",
+    leida: Boolean(raw?.leida),
+    datos: raw?.datos ?? null,
+    action: raw?.action
+      ? {
+          module: String(raw.action.module ?? ""),
+          entityId:
+            raw.action.entityId === null || raw.action.entityId === undefined
+              ? undefined
+              : raw.action.entityId,
+          action: raw.action.action
+            ? String(raw.action.action)
+            : undefined,
+          route: raw.action.route ? String(raw.action.route) : undefined,
+        }
+      : undefined,
+    ruta: raw?.ruta ? String(raw.ruta) : undefined,
+    id_bodega:
+      raw?.id_bodega === null || raw?.id_bodega === undefined
+        ? null
+        : toNumber(raw.id_bodega),
+    id_bodega_relacionada:
+      raw?.id_bodega_relacionada === null ||
+      raw?.id_bodega_relacionada === undefined
+        ? null
+        : toNumber(raw.id_bodega_relacionada),
   };
+};
 
-  return notifs.sort((a, b) => {
-    const pesoDiff = prioridadPeso[b.prioridad] - prioridadPeso[a.prioridad];
-    if (pesoDiff !== 0) return pesoDiff;
-    return new Date(b.fecha).getTime() - new Date(a.fecha).getTime();
-  });
-}
+const normalizeListResult = (raw: any): NotificationsListResult => {
+  const rows = Array.isArray(raw?.data)
+    ? raw.data.map(normalizeNotification)
+    : [];
+
+  return {
+    data: rows,
+    unreadCount: toNumber(raw?.unreadCount),
+    scope: Array.isArray(raw?.scope?.ids_bodegas)
+      ? {
+          ids_bodegas: raw.scope.ids_bodegas.map((item: unknown) =>
+            toNumber(item),
+          ),
+        }
+      : undefined,
+  };
+};
+
+export const notificationService = {
+  async getNotifications(
+    params: GetNotificationsParams = {},
+  ): Promise<NotificationsListResult> {
+    const response = await api.get("/notificaciones", {
+      params: {
+        id_bodega:
+          params.idBodega === null || params.idBodega === undefined
+            ? undefined
+            : params.idBodega,
+        solo_no_leidas:
+          params.soloNoLeidas === undefined ? undefined : params.soloNoLeidas,
+        limit: params.limit ?? 50,
+      },
+    });
+
+    return normalizeListResult(response.data);
+  },
+
+  async getUnreadCount(idBodega?: number | null): Promise<number> {
+    const response = await api.get("/notificaciones/contador", {
+      params: {
+        id_bodega:
+          idBodega === null || idBodega === undefined ? undefined : idBodega,
+      },
+    });
+
+    return toNumber(response?.data?.unreadCount);
+  },
+
+  async sync(idBodega?: number | null) {
+    const response = await api.post(
+      "/notificaciones/sincronizar",
+      {},
+      {
+        params: {
+          id_bodega:
+            idBodega === null || idBodega === undefined ? undefined : idBodega,
+        },
+      },
+    );
+
+    return response.data;
+  },
+
+  async markAsRead(id: string | number): Promise<NotificationItem> {
+    const response = await api.patch(`/notificaciones/${id}/leida`);
+    return normalizeNotification(unwrapEntityResponse(response));
+  },
+
+  async markAllAsRead(idBodega?: number | null) {
+    const response = await api.patch(
+      "/notificaciones/marcar-todas-leidas",
+      {},
+      {
+        params: {
+          id_bodega:
+            idBodega === null || idBodega === undefined
+              ? undefined
+              : idBodega,
+        },
+      },
+    );
+
+    return response.data as { updated: number };
+  },
+
+  async remove(id: string | number) {
+    const response = await api.delete(`/notificaciones/${id}`);
+    return response.data as { message?: string };
+  },
+};

@@ -3,9 +3,10 @@ export type NotificationType = "traslado" | "vencimiento" | "stockBajo";
 export type NotificationPriority = "alta" | "media" | "baja";
 
 export interface NotificationAction {
-  module: "traslados" | "existencias";
+  module: string;
   entityId?: number | string;
-  action?: "ver" | "editar" | "detalle";
+  action?: string;
+  route?: string;
 }
 
 export interface NotificationItem {
@@ -18,4 +19,15 @@ export interface NotificationItem {
   leida: boolean;
   datos?: unknown;
   action?: NotificationAction;
+  ruta?: string;
+  id_bodega?: number | null;
+  id_bodega_relacionada?: number | null;
+}
+
+export interface NotificationsListResult {
+  data: NotificationItem[];
+  unreadCount: number;
+  scope?: {
+    ids_bodegas: number[];
+  };
 }
