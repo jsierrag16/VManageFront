@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import {
+  useLocation,
+  useNavigate,
+  useParams,
+  useOutletContext,
+} from "react-router-dom";
 import {
   Search,
   Plus,
@@ -9,9 +14,12 @@ import {
   Filter,
   ChevronLeft,
   ChevronRight,
+  Building2,
 } from "lucide-react";
+import { Badge } from "@/shared/components/ui/badge";
 import { toast } from "sonner";
 import { useAuth } from "@/shared/context/AuthContext";
+import type { AppOutletContext } from "@/layouts/MainLayout";
 
 import { Button } from "../../../../shared/components/ui/button";
 import { Input } from "../../../../shared/components/ui/input";
@@ -63,6 +71,7 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
   // Contexto, navegación y permisos
   // =========================================================
   const { tienePermiso } = useAuth();
+  const { selectedBodegaNombre } = useOutletContext<AppOutletContext>();
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -152,6 +161,8 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
   }, [bodegas, editId]);
 
   const filteredBodegas = useMemo(() => {
+    const selectedBodegaNormalizada = (selectedBodegaNombre || "").trim().toLowerCase();
+
     return bodegas.filter((bodega) => {
       const searchLower = searchTerm.toLowerCase();
 
@@ -169,9 +180,18 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
         matchesEstado = bodega.estado === false;
       }
 
-      return matchesSearch && matchesEstado;
+      const sinFiltroBodega =
+        !selectedBodegaNormalizada ||
+        selectedBodegaNormalizada === "todas" ||
+        selectedBodegaNormalizada === "todas las bodegas";
+
+      const matchesBodega = sinFiltroBodega
+        ? true
+        : bodega.nombre.trim().toLowerCase() === selectedBodegaNormalizada;
+
+      return matchesSearch && matchesEstado && matchesBodega;
     });
-  }, [bodegas, searchTerm, estadoFilter]);
+  }, [bodegas, searchTerm, estadoFilter, selectedBodegaNombre]);
 
   const totalPages = Math.ceil(filteredBodegas.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -727,10 +747,21 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-gray-900">Gestión de Bodegas</h2>
-        <p className="text-gray-600 mt-1">
-          Administra las bodegas y centros de almacenamiento
-        </p>
+        <h2 className="text-xl font-semibold text-gray-900">Bodegas</h2>
+        <div className="flex items-center gap-2 mt-1">
+          <p className="text-gray-600">
+            Gestiona la información en
+          </p>
+          <Badge
+            variant="outline"
+            className="bg-purple-50 text-purple-700 border-purple-200"
+          >
+            <Building2 size={14} className="mr-1" />
+            {selectedBodegaNombre === "Todas" || selectedBodegaNombre === "Todas las bodegas"
+              ? "Todas las bodegas"
+              : selectedBodegaNombre}
+          </Badge>
+        </div>
       </div>
 
       {/* Search + filtros + botón */}
@@ -756,8 +787,8 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
             variant={estadoFilter === "todos" ? "default" : "ghost"}
             onClick={() => setEstadoFilter("todos")}
             className={`h-8 ${estadoFilter === "todos"
-                ? "bg-blue-600 text-white hover:bg-blue-700"
-                : "hover:bg-gray-200"
+              ? "bg-blue-600 text-white hover:bg-blue-700"
+              : "hover:bg-gray-200"
               }`}
           >
             Todas
@@ -767,8 +798,8 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
             variant={estadoFilter === "activas" ? "default" : "ghost"}
             onClick={() => setEstadoFilter("activas")}
             className={`h-8 ${estadoFilter === "activas"
-                ? "bg-green-600 text-white hover:bg-green-700"
-                : "hover:bg-gray-200"
+              ? "bg-green-600 text-white hover:bg-green-700"
+              : "hover:bg-gray-200"
               }`}
           >
             Activas
@@ -778,8 +809,8 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
             variant={estadoFilter === "inactivas" ? "default" : "ghost"}
             onClick={() => setEstadoFilter("inactivas")}
             className={`h-8 ${estadoFilter === "inactivas"
-                ? "bg-red-600 text-white hover:bg-red-700"
-                : "hover:bg-gray-200"
+              ? "bg-red-600 text-white hover:bg-red-700"
+              : "hover:bg-gray-200"
               }`}
           >
             Inactivas
@@ -892,8 +923,8 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                             onClick={() => onClickDelete(bodega)}
                             disabled={bodega.tieneUsuariosAsignados}
                             className={`h-8 w-8 ${bodega.tieneUsuariosAsignados
-                                ? "text-gray-400 cursor-not-allowed"
-                                : "text-red-600 hover:text-red-700 hover:bg-red-50"
+                              ? "text-gray-400 cursor-not-allowed"
+                              : "text-red-600 hover:text-red-700 hover:bg-red-50"
                               }`}
                             title={
                               bodega.tieneUsuariosAsignados

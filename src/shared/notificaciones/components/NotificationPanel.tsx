@@ -62,7 +62,7 @@ export default function NotificationPanel({
           </div>
         </DialogHeader>
 
-        <ScrollArea className="h-[500px] pr-4">
+        <ScrollArea className="h-125 pr-4">
           {notifications.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-gray-500">
               <Bell className="w-12 h-12 mb-3 opacity-30" />

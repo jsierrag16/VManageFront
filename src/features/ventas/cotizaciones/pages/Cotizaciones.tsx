@@ -19,6 +19,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Ban,
+  Building2,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -927,10 +928,19 @@ export default function Cotizaciones() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-gray-900">Cotizaciones</h2>
-        <p className="text-gray-600 mt-1">
-          Gestiona las cotizaciones de productos
-        </p>
+        <h2 className="text-xl font-semibold text-gray-900">Cotizaciones</h2>
+        <div className="flex items-center gap-2 mt-1">
+          <p className="text-gray-600">
+            Gestiona las cotizaciones de productos en
+          </p>
+          <Badge
+            variant="outline"
+            className="bg-purple-50 text-purple-700 border-purple-200"
+          >
+            <Building2 size={14} className="mr-1" />
+            {selectedBodega}
+          </Badge>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -2027,7 +2037,7 @@ export default function Cotizaciones() {
                 )}
 
               <div className="flex justify-end">
-                <div className="min-w-[300px] rounded-lg border border-blue-200 bg-blue-50 p-4">
+                <div className="min-w-75 rounded-lg border border-blue-200 bg-blue-50 p-4">
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Subtotal:</span>

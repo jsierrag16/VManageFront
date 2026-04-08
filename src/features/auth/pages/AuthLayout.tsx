@@ -27,10 +27,10 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
             alt="Login"
             className="w-full h-full object-cover"
           />
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent to-black/5" />
+          <div className="absolute inset-0 bg-linear-to-r from-transparent to-black/5" />
         </motion.div>
 
-        <div className="w-full md:w-[50%] flex items-center justify-center p-8 bg-gradient-to-br from-white via-blue-50/20 to-green-50/20 relative overflow-hidden">
+        <div className="w-full md:w-[50%] flex items-center justify-center p-8 bg-linear-to-r from-white via-blue-50/20 to-green-50/20 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-96 h-96 bg-blue-100/30 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
           <div className="absolute bottom-0 left-0 w-96 h-96 bg-green-100/30 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2" />
 

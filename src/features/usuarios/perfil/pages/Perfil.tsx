@@ -288,7 +288,7 @@ export default function Perfil() {
 
   if (loadingPerfil) {
     return (
-      <div className="h-full bg-gradient-to-br from-gray-50 to-blue-50 p-1">
+      <div className="h-full bg-linear-to-br from-gray-50 to-blue-50 p-1">
         <div className="max-w-7xl mx-auto py-10 text-gray-500">
           Cargando perfil...
         </div>
@@ -299,11 +299,11 @@ export default function Perfil() {
   if (!currentUser) return null;
 
   return (
-    <div className="h-full bg-gradient-to-br from-gray-50 to-blue-50 p-1">
+    <div className="h-full bg-linear-to-br from-gray-50 to-blue-50 p-1">
       <div className="max-w-7xl mx-auto">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h1 className="text-gray-900">Mi Perfil</h1>
+            <h1 className="text-xl font-semibold text-gray-900">Mi Perfil</h1>
             <p className="text-gray-500 mt-1">Actualiza tu información personal</p>
           </div>
           <Button variant="outline" onClick={handleBack} className="gap-2">
@@ -319,7 +319,7 @@ export default function Perfil() {
                 <div className="relative">
                   <Avatar className="h-32 w-32 border-4 border-white shadow-lg">
                     <AvatarImage src={avatarUrl || undefined} />
-                    <AvatarFallback className="bg-gradient-to-br from-blue-500 to-blue-600 text-white text-3xl">
+                    <AvatarFallback className="bg-linear-to-br from-blue-500 to-blue-600 text-white text-3xl">
                       {getInitials()}
                     </AvatarFallback>
                   </Avatar>

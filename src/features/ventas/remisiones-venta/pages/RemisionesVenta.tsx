@@ -27,7 +27,9 @@ import {
   Search,
   ShoppingCart,
   X,
+  Building2,
 } from "lucide-react";
+import { Badge } from "@/shared/components/ui/badge";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { toast } from "sonner";
@@ -930,13 +932,23 @@ export default function RemisionesVenta() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-gray-900">Remisiones de venta</h2>
-        <p className="text-gray-600 mt-1">
-          Gestiona las remisiones de Venta
-        </p>
+        <h2 className="text-xl font-semibold text-gray-900">Remisiones de Venta</h2>
+        <div className="flex items-center gap-2 mt-1">
+          <p className="text-gray-600">
+            Gestiona las remisiones de venta en
+          </p>
+          <Badge
+            variant="outline"
+            className="bg-purple-50 text-purple-700 border-purple-200"
+          >
+            <Building2 size={14} className="mr-1" />
+            {selectedBodegaNombre}
+          </Badge>
+        </div>
       </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white">
+        <div className="bg-linear-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-blue-100 text-sm">Total Remisiones</p>
@@ -946,7 +958,7 @@ export default function RemisionesVenta() {
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl shadow-lg p-6 text-white">
+        <div className="bg-linear-to-br from-yellow-500 to-yellow-600 rounded-xl shadow-lg p-6 text-white">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-yellow-100 text-sm">Pendientes</p>
@@ -956,7 +968,7 @@ export default function RemisionesVenta() {
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-6 text-white">
+        <div className="bg-linear-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-6 text-white">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-green-100 text-sm">Despachadas</p>
@@ -1043,8 +1055,8 @@ export default function RemisionesVenta() {
                         className={`h-8 rounded-full px-3 text-xs font-medium ${getEstadoBadgeClass(
                           remision.estado
                         )} ${!puedeCambiarEstadoRemision(remision.estado)
-                            ? "cursor-not-allowed opacity-70"
-                            : ""
+                          ? "cursor-not-allowed opacity-70"
+                          : ""
                           }`}
                         title={getSiguienteEstadoTexto(remision.estado)}
                       >
@@ -1271,7 +1283,7 @@ export default function RemisionesVenta() {
                 <div>
                   <Label>Observaciones</Label>
                   <textarea
-                    className="w-full min-h-[100px] rounded-md border border-gray-300 px-3 py-2"
+                    className="w-full min-h-25 rounded-md border border-gray-300 px-3 py-2"
                     value={formObservaciones}
                     onChange={(e) => setFormObservaciones(e.target.value)}
                     placeholder="Observaciones de la remisión"
@@ -1377,7 +1389,7 @@ export default function RemisionesVenta() {
                                         )
                                       }
                                       placeholder="0"
-                                      className="max-w-[150px]"
+                                      className="max-w-37.5"
                                     />
                                   </TableCell>
                                 </TableRow>
@@ -1478,7 +1490,7 @@ export default function RemisionesVenta() {
                 <div>
                   <Label>Observaciones</Label>
                   <textarea
-                    className="w-full min-h-[90px] rounded-md border border-gray-300 px-3 py-2"
+                    className="w-full min-h-22.5 rounded-md border border-gray-300 px-3 py-2"
                     value={remisionSeleccionada.observaciones}
                     disabled
                   />

@@ -44,7 +44,7 @@ export function StatsCard({
     >
       {/* Círculo decorativo de fondo */}
       <div
-        className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${colorClasses[color]} opacity-10 rounded-full -translate-y-1/2 translate-x-1/2`}
+        className={`absolute top-0 right-0 w-32 h-32 bg-linear-to-br ${colorClasses[color]} opacity-10 rounded-full -translate-y-1/2 translate-x-1/2`}
       />
       
       <div className="relative">

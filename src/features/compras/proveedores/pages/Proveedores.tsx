@@ -648,7 +648,7 @@ export default function Proveedores() {
 
     return (
       <div className="space-y-4">
-        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-100">
+        <div className="bg-linear-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-100">
           <h3 className="text-xl font-semibold text-gray-900 mb-2">
             {proveedorDetalle.nombre}
           </h3>
@@ -742,9 +742,9 @@ export default function Proveedores() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-gray-900">Gestión de Proveedores</h2>
+        <h2 className="text-xl font-semibold text-gray-900">Proveedores</h2>
         <p className="text-gray-600 mt-1">
-          Administra la información de tus proveedores
+          Gestiona la información de tus proveedores
         </p>
       </div>
 

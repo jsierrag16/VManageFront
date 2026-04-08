@@ -782,9 +782,9 @@ export default function Roles() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-gray-900">Gestión de Roles</h2>
+        <h2 className="text-xl font-semibold text-gray-900">Roles</h2>
         <p className="text-gray-600 mt-1">
-          Administra los roles y permisos del sistema
+          Gestiona los roles y permisos del sistema
         </p>
       </div>
 

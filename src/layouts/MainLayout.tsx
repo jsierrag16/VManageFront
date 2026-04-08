@@ -112,6 +112,7 @@ export default function MainLayout({
             productos={productos}
             onNavigateToTraslados={handleNavigateToTraslados}
             onNavigateToExistencias={handleNavigateToExistencias}
+            isOpen={isSidebarOpen} // <--- ¡AQUÍ ESTÁ LA CORRECCIÓN!
           />
 
           <main className="flex-1 p-4 lg:p-8">

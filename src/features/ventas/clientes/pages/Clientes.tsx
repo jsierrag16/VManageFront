@@ -632,9 +632,9 @@ export default function Clientes() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-gray-900">Gestión de Clientes</h2>
+        <h2 className="text-xl font-semibold text-gray-900">Clientes</h2>
         <p className="text-gray-600 mt-1">
-          Administra la información de tus clientes
+          Gestiona la información de tus clientes
         </p>
       </div>
 
@@ -890,7 +890,7 @@ export default function Clientes() {
 
           {clienteSeleccionado && (
             <div className="space-y-4">
-              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-100">
+              <div className="bg-linear-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-100">
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">
                   {clienteSeleccionado.nombre}
                 </h3>

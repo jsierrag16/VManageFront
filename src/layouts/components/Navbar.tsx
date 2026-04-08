@@ -1,4 +1,12 @@
-import { Menu, Building2, ChevronDown, Edit, LogOut } from "lucide-react";
+import {
+  Menu,
+  Building2,
+  ChevronDown,
+  Edit,
+  LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from "lucide-react";
 import { motion } from "motion/react";
 import {
   Avatar,
@@ -35,6 +43,7 @@ interface NavbarProps {
   productos: Producto[];
   onNavigateToTraslados: (notification?: NotificationItem) => void;
   onNavigateToExistencias: (notification?: NotificationItem) => void;
+  isOpen?: boolean;
 }
 
 export function Navbar({
@@ -47,7 +56,7 @@ export function Navbar({
   productos,
   onNavigateToTraslados,
   onNavigateToExistencias,
-
+  isOpen = true,
 }: NavbarProps) {
   const {
     bodegasDisponibles,
@@ -66,16 +75,16 @@ export function Navbar({
     selectedBodegaId === 0 && tieneVariasBodegas
       ? "Todas las bodegas"
       : opciones.find((b) => b.id === selectedBodegaId)?.nombre ||
-      bodegasDisponibles[0]?.nombre ||
-      "Sin bodega";
+        bodegasDisponibles[0]?.nombre ||
+        "Sin bodega";
 
   return (
-    <header className="sticky top-0 z-20 bg-blue-600 border-b border-blue-700 shadow-md">
-      <div className="flex items-center justify-between pl-1 pr-2 lg:pl-2 lg:pr-8 py-2.5">
+    <header className="sticky top-0 z-20 bg-[#2563EB] border-b border-[#1D4ED8] shadow-md">
+      <div className="flex items-center justify-between pl-1 pr-2 lg:pl-2 lg:pr-8 py-1.5">
         <div className="flex items-center">
           <button
             onClick={onMobileMenuToggle}
-            className="lg:hidden p-2 hover:bg-blue-700 rounded-lg transition-colors text-white"
+            className="lg:hidden p-2 text-white hover:bg-[#1D4ED8] rounded-lg transition-colors"
             type="button"
           >
             <Menu size={22} />
@@ -85,14 +94,15 @@ export function Navbar({
             onClick={onSidebarToggle}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            className="hidden lg:flex p-2 hover:bg-blue-700 rounded-lg transition-colors text-white"
+            className="hidden lg:flex p-2 text-white hover:bg-[#1D4ED8] rounded-lg transition-colors focus:outline-none"
             type="button"
+            title={isOpen ? "Comprimir panel lateral" : "Expandir panel lateral"}
           >
-            <Menu size={22} />
+            {isOpen ? <PanelLeftClose size={22} /> : <PanelLeftOpen size={22} />}
           </motion.button>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {opciones.length > 0 && (
             <DropdownMenu>
               <DropdownMenuTrigger
@@ -101,21 +111,22 @@ export function Navbar({
               >
                 <button
                   type="button"
-                  className={`flex items-center gap-2 p-2 px-3 rounded-lg transition-colors text-white ${isBodegaFijada || !tieneVariasBodegas
-                      ? "opacity-80 cursor-not-allowed"
-                      : "hover:bg-blue-700"
-                    }`}
+                  className={`flex items-center gap-2 p-1.5 px-2.5 rounded-lg text-sm transition-colors text-white ${
+                    isBodegaFijada || !tieneVariasBodegas
+                      ? "opacity-60 cursor-not-allowed"
+                      : "hover:bg-[#1D4ED8]"
+                  }`}
                   title={
                     isBodegaFijada || !tieneVariasBodegas
                       ? "No puedes cambiar de bodega"
                       : "Seleccionar bodega"
                   }
                 >
-                  <Building2 size={20} />
-                  <span className="hidden lg:block text-sm">
+                  <Building2 size={18} className="text-white" />
+                  <span className="hidden lg:block font-medium">
                     {selectedNombre}
                   </span>
-                  <ChevronDown size={16} className="hidden lg:block" />
+                  <ChevronDown size={16} className="hidden lg:block text-white" />
                 </button>
               </DropdownMenuTrigger>
 
@@ -129,10 +140,10 @@ export function Navbar({
                       onClick={() => setSelectedBodegaId(bodega.id)}
                       className="cursor-pointer"
                     >
-                      <div className="flex justify-between w-full">
+                      <div className="flex justify-between w-full items-center">
                         <span>{bodega.nombre}</span>
                         {selectedBodegaId === bodega.id && (
-                          <span className="text-blue-600">✓</span>
+                          <span className="text-[#2563EB]">✓</span>
                         )}
                       </div>
                     </DropdownMenuItem>
@@ -142,31 +153,35 @@ export function Navbar({
             </DropdownMenu>
           )}
 
-          <Notificaciones
-            traslados={traslados}
-            productos={productos}
-            onNavigateToTraslados={onNavigateToTraslados}
-            onNavigateToExistencias={onNavigateToExistencias}
-          />
+          <div className="text-white">
+            <Notificaciones
+              traslados={traslados}
+              productos={productos}
+              onNavigateToTraslados={onNavigateToTraslados}
+              onNavigateToExistencias={onNavigateToExistencias}
+            />
+          </div>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
-                className="flex items-center gap-3 hover:bg-blue-700 px-3 py-2 rounded-lg transition-colors"
+                className="flex items-center gap-3 text-white hover:bg-[#1D4ED8] px-2.5 py-1.5 rounded-lg transition-colors focus:outline-none"
                 type="button"
               >
-                <Avatar className="h-8 w-8">
+                <Avatar className="h-8 w-8 border border-white/20">
                   <AvatarImage src={currentUser?.avatarUrl || ""} />
-                  <AvatarFallback className="bg-white text-blue-600">
+                  <AvatarFallback className="bg-white text-[#2563EB] font-medium border border-[#1D4ED8]">
                     {currentUser?.nombre?.charAt(0) || "U"}
                   </AvatarFallback>
                 </Avatar>
 
-                <div className="hidden md:block text-white text-left">
-                  <p className="text-sm">
+                <div className="hidden md:block text-left leading-none">
+                  <p className="text-sm font-medium">
                     {currentUser?.nombre} {currentUser?.apellido}
                   </p>
-                  <p className="text-xs text-blue-100">{currentUser?.rol}</p>
+                  <p className="text-xs text-blue-100 mt-0.5">
+                    {currentUser?.rol}
+                  </p>
                 </div>
 
                 <ChevronDown size={16} className="text-white hidden md:block" />
@@ -176,7 +191,7 @@ export function Navbar({
             <DropdownMenuContent className="w-64" align="end">
               <DropdownMenuLabel>
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium">
+                  <p className="text-sm font-medium text-slate-900">
                     {currentUser?.nombre} {currentUser?.apellido}
                   </p>
                   <p className="text-xs text-muted-foreground">
@@ -191,7 +206,7 @@ export function Navbar({
                 onClick={onOpenProfile}
                 className="cursor-pointer"
               >
-                <Edit size={16} className="mr-2" />
+                <Edit size={16} className="mr-2 text-slate-400" />
                 Editar perfil
               </DropdownMenuItem>
 
@@ -199,7 +214,7 @@ export function Navbar({
 
               <DropdownMenuItem
                 onClick={onLogout}
-                className="cursor-pointer text-red-600"
+                className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50"
               >
                 <LogOut size={16} className="mr-2" />
                 Cerrar sesión

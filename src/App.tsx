@@ -1,5 +1,4 @@
 import RoutesModule from "./routes/RoutesModule";
-
 import { AuthProvider } from "./shared/context/AuthContext";
 import { TrasladosProvider } from "./shared/context/TrasladosContext";
 import { ProductosProvider } from "./shared/context/ProductosContext";
@@ -11,12 +10,9 @@ export default function App() {
     <AuthProvider>
       <TrasladosProvider>
         <ProductosProvider>
-
           {/* 🔔 Toaster global */}
           <Toaster />
-
           <RoutesModule />
-
         </ProductosProvider>
       </TrasladosProvider>
     </AuthProvider>

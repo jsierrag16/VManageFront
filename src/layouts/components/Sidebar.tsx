@@ -407,7 +407,7 @@ export function Sidebar({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 2, scale: 0.985 }}
             transition={{ duration: 0.14, ease: "easeOut" }}
-            className="fixed z-[99999] w-[270px] rounded-2xl border border-gray-200 bg-white p-3 shadow-[0_24px_70px_rgba(15,23,42,0.20)]"
+            className="fixed z-99999 w-67.5 rounded-2xl border border-gray-200 bg-white p-3 shadow-[0_24px_70px_rgba(15,23,42,0.20)]"
             style={{
               top: compactPopupPosition.top,
               left: compactPopupPosition.left,
@@ -438,7 +438,7 @@ export function Sidebar({
         ref={sidebarRef}
         initial={{ x: -300 }}
         animate={{ x: 0 }}
-        className={`fixed lg:sticky top-0 left-0 h-screen bg-white border-r border-gray-200 transition-all duration-300 z-40 flex-shrink-0 ${isOpen ? "w-64" : "w-20"
+        className={`fixed lg:sticky top-0 left-0 h-screen bg-white border-r border-gray-200 transition-all duration-300 z-40 shrink-0 ${isOpen ? "w-64" : "w-20"
           } ${isMobileOpen
             ? "translate-x-0"
             : "-translate-x-full lg:translate-x-0"
@@ -499,7 +499,7 @@ export function Sidebar({
                     >
                       <Icon
                         size={20}
-                        className={`flex-shrink-0 ${mainActive ? "text-blue-600" : "text-gray-500"
+                        className={`shrink-0 ${mainActive ? "text-blue-600" : "text-gray-500"
                           }`}
                       />
                       {isOpen && (
@@ -604,7 +604,7 @@ function SubMenuItem({
     >
       <Icon
         size={18}
-        className={`flex-shrink-0 ${active ? "text-gray-900" : "text-gray-400"
+        className={`shrink-0 ${active ? "text-gray-900" : "text-gray-400"
           }`}
       />
       <span className="truncate font-semibold">{label}</span>
@@ -636,7 +636,7 @@ function CompactSubMenuItem({
     >
       <Icon
         size={18}
-        className={`flex-shrink-0 ${active ? "text-gray-900" : "text-gray-400"
+        className={`shrink-0 ${active ? "text-gray-900" : "text-gray-400"
           }`}
       />
       <span className="truncate block font-semibold">{label}</span>

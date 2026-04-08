@@ -1096,10 +1096,21 @@ export default function Usuarios() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-gray-900">Gestión de Usuarios</h2>
-        <p className="text-gray-600 mt-1">
-          Administra los usuarios del sistema
-        </p>
+        <h2 className="text-xl font-semibold text-gray-900">
+          Usuarios
+        </h2>
+        <div className="flex items-center gap-2 mt-1">
+          <p className="text-gray-600">
+            Gestiona los usuarios del sistema en
+          </p>
+          <Badge
+            variant="outline"
+            className="bg-purple-50 text-purple-700 border-purple-200"
+          >
+            <Building2 size={14} className="mr-1" />
+            {selectedBodega}
+          </Badge>
+        </div>
       </div>
 
       {/* Search Bar and Action Buttons */}
@@ -1207,7 +1218,7 @@ export default function Usuarios() {
                         {usuario.telefono}
                       </TableCell>
 
-                      <TableCell className="max-w-[240px] whitespace-normal break-words">
+                      <TableCell className="max-w-60 whitespace-normal wrap-break-word">
                         <Badge
                           variant="outline"
                           className="bg-purple-50 text-purple-700 border-purple-200 whitespace-normal"
@@ -1369,12 +1380,12 @@ export default function Usuarios() {
         }}
       >
         <DialogContent
-          className="max-w-4xl !p-0 overflow-hidden"
+          className="max-w-4xl p-0! overflow-hidden"
           aria-describedby="view-usuario-description"
           onInteractOutside={(e) => e.preventDefault()}
         >
           {usuarioSeleccionado && (
-            <div className="max-h-[85vh] overflow-y-auto bg-gradient-to-br from-gray-50 to-blue-50">
+            <div className="max-h-[85vh] overflow-y-auto bg-linear-to-br from-gray-50 to-blue-50">
               <div className="p-5 border-b border-gray-200 bg-white sticky top-0 z-10">
                 <DialogHeader className="pr-8">
                   <DialogTitle className="flex items-center gap-2 text-gray-900">
@@ -1403,7 +1414,7 @@ export default function Usuarios() {
                               className="h-full w-full object-cover"
                             />
                           ) : (
-                            <div className="h-full w-full flex items-center justify-center bg-gradient-to-br from-blue-500 to-blue-600 text-white text-3xl font-semibold">
+                            <div className="h-full w-full flex items-center justify-center bg-linear-to-br from-blue-500 to-blue-600 text-white text-3xl font-semibold">
                               {getUsuarioIniciales(usuarioSeleccionado)}
                             </div>
                           )}
@@ -1856,7 +1867,7 @@ export default function Usuarios() {
 
             <Button
               onClick={handleOpenCreateConfirm}
-              className="bg-blue-600 hover:bg-blue-700 min-w-[150px]"
+              className="bg-blue-600 hover:bg-blue-700 min-w-37.5"
               disabled={isCreatingUsuario}
             >
               {isCreatingUsuario ? (
@@ -2324,7 +2335,7 @@ export default function Usuarios() {
             </Button>
 
             <Button
-              className="bg-blue-600 hover:bg-blue-700 min-w-[140px]"
+              className="bg-blue-600 hover:bg-blue-700 min-w-35"
               onClick={confirmCreate}
               disabled={isCreatingUsuario}
             >

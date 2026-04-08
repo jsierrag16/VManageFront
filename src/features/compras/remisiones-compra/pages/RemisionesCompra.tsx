@@ -23,6 +23,7 @@ import {
   Barcode,
   Download,
   Loader2,
+  Building2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "../../../../shared/components/ui/button";
@@ -1330,14 +1331,23 @@ export default function RemisionesCompra() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-gray-900">Gestión de Remisiones de Compra</h2>
-        <p className="text-gray-600 mt-1">
-          Administra la información de tus remisiones de compra
-        </p>
+        <h2 className="text-xl font-semibold text-gray-900">Remisiones de Compra</h2>
+        <div className="flex items-center gap-2 mt-1">
+          <p className="text-gray-600">
+            Gestiona las remisiones de compra en
+          </p>
+          <Badge
+            variant="outline"
+            className="bg-purple-50 text-purple-700 border-purple-200"
+          >
+            <Building2 size={14} className="mr-1" />
+            {selectedBodegaNombre}
+          </Badge>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white">
+        <div className="bg-linear-to-r from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-blue-100 text-sm">Total Remisiones</p>
@@ -1347,7 +1357,7 @@ export default function RemisionesCompra() {
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl shadow-lg p-6 text-white">
+        <div className="bg-linear-to-r from-yellow-500 to-yellow-600 rounded-xl shadow-lg p-6 text-white">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-yellow-100 text-sm">Pendientes</p>
@@ -1357,7 +1367,7 @@ export default function RemisionesCompra() {
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-6 text-white">
+        <div className="bg-linear-to-r from-green-500 to-green-600 rounded-xl shadow-lg p-6 text-white">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-green-100 text-sm">Aprobadas</p>
@@ -1454,10 +1464,10 @@ export default function RemisionesCompra() {
                           onClick={() => handleEstadoClick(remision)}
                           disabled={remision.estadoKey !== "PENDIENTE"}
                           className={`h-7 ${remision.estadoKey === "APLICADA"
-                              ? "bg-green-100 text-green-800 hover:bg-green-200"
-                              : remision.estadoKey === "PENDIENTE"
-                                ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                                : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
+                            ? "bg-green-100 text-green-800 hover:bg-green-200"
+                            : remision.estadoKey === "PENDIENTE"
+                              ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                              : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
                             }`}
                         >
                           {remision.estado}
