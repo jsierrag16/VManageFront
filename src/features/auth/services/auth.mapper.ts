@@ -1,5 +1,5 @@
-import { createEmptyPermisos } from "@/data/roles";
-import type { UsuarioSistema } from "@/data/usuarios-sistema";
+import { createEmptyPermisos } from "@/features/configuracion/roles/types/roles.types";
+import type { UsuarioSistema } from "@/features/auth/types/auth.types";
 import type { PermisoBackend } from "@/features/configuracion/roles/services/permisos.service";
 
 const permisoPathMap: Record<string, string[]> = {

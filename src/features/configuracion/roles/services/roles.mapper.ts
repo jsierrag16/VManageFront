@@ -1,5 +1,5 @@
-import type { Permisos } from "@/data/roles";
-import { createEmptyPermisos } from "@/data/roles";
+import type { Permisos } from "@/features/configuracion/roles/types/roles.types";
+import { createEmptyPermisos } from "@/features/configuracion/roles/types/roles.types";
 import type { PermisoBackend, RolBackend } from "./roles.services";
 
 type RolUI = {

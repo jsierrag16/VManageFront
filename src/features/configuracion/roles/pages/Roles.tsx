@@ -33,7 +33,7 @@ import { Label } from "../../../../shared/components/ui/label";
 import { Badge } from "../../../../shared/components/ui/badge";
 import { Textarea } from "../../../../shared/components/ui/textarea";
 import { toast } from "sonner";
-import { Rol, Permisos, createEmptyPermisos } from "../../../../data/roles";
+import { Rol, Permisos, createEmptyPermisos } from "../types/roles.types";
 import {
   getRoles,
   createRol,

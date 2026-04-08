@@ -1,6 +1,6 @@
 import { Checkbox } from "../../../../shared/components/ui/checkbox";
 import { Label } from "../../../../shared/components/ui/label";
-import { Permisos } from "../../../../data/roles";
+import { Permisos } from "../types/roles.types";
 
 interface PermisosFormProps {
   formPermisos: Permisos;

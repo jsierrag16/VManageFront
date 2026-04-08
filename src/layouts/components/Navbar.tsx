@@ -23,8 +23,6 @@ import {
 } from "../../shared/components/ui/dropdown-menu";
 import Notificaciones from "../../shared/notificaciones/Notificaciones";
 import { useAuth } from "../../shared/context/AuthContext";
-import { Traslado } from "../../data/traslados";
-import { Producto } from "../../data/productos";
 import { NotificationItem } from "../../shared/notificaciones/types/notification.types";
 
 interface NavbarProps {
@@ -39,8 +37,6 @@ interface NavbarProps {
   } | null;
   onLogout: () => void;
   onOpenProfile: () => void;
-  traslados: Traslado[];
-  productos: Producto[];
   onNavigateToTraslados: (notification?: NotificationItem) => void;
   onNavigateToExistencias: (notification?: NotificationItem) => void;
   isOpen?: boolean;
@@ -52,8 +48,6 @@ export function Navbar({
   currentUser,
   onLogout,
   onOpenProfile,
-  traslados,
-  productos,
   onNavigateToTraslados,
   onNavigateToExistencias,
   isOpen = true,
@@ -155,8 +149,6 @@ export function Navbar({
 
           <div className="text-white">
             <Notificaciones
-              traslados={traslados}
-              productos={productos}
               onNavigateToTraslados={onNavigateToTraslados}
               onNavigateToExistencias={onNavigateToExistencias}
             />

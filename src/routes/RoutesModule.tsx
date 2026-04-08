@@ -33,10 +33,6 @@ import vManageLogo from "@/assets/images/VManageLogo.png";
 import vManageLogoSmall from "@/assets/images/VLogo.png";
 import gvmLogo from "@/assets/images/GVMLogo.png";
 
-// data mock
-import { productosData } from "@/data/productos";
-import { trasladosData } from "@/data/traslados";
-
 type CrudRouteConfig = {
   basePath: string;
   element: ReactElement;
@@ -174,8 +170,6 @@ export default function RoutesModule() {
                 vManageLogo={vManageLogo}
                 vManageLogoSmall={vManageLogoSmall}
                 gvmLogo={gvmLogo}
-                traslados={trasladosData}
-                productos={productosData}
               />
             </ProtectedRoute>
           }

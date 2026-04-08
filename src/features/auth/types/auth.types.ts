@@ -1,5 +1,5 @@
-import { Permisos } from "./roles";
-import { Bodega } from "./bodegas";
+import type { Permisos } from "@/features/configuracion/roles/types/roles.types";
+import type { Bodega } from "@/features/existencias/bodegas/types/bodega.types";
 
 export interface UsuarioSistema {
   id: number;

@@ -8,11 +8,11 @@ import {
   useCallback,
 } from "react";
 
-import { UsuarioSistema } from "../../data/usuarios-sistema";
-import { Permisos } from "../../data/roles";
-import { Bodega } from "../../data/bodegas";
-import { authUserToUsuarioSistema } from "../../features/auth/services/auth.mapper";
-import { getMe } from "../../features/auth/services/auth.services";
+import type { UsuarioSistema } from "@/features/auth/types/auth.types";
+import type { Permisos } from "@/features/configuracion/roles/types/roles.types";
+import type { Bodega } from "@/features/existencias/bodegas/types/bodega.types";
+import { authUserToUsuarioSistema } from "@/features/auth/services/auth.mapper";
+import { getMe } from "@/features/auth/services/auth.services";
 
 type BodegaId = number;
 
