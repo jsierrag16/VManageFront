@@ -30,6 +30,7 @@ import { Button } from "../../../../shared/components/ui/button";
 import { Input } from "../../../../shared/components/ui/input";
 import { Label } from "../../../../shared/components/ui/label";
 import { Badge } from "../../../../shared/components/ui/badge";
+import logoVManage from "../../../../assets/images/VLogo.png"
 import {
   Table,
   TableBody,
@@ -353,6 +354,42 @@ const renderReadonlyBox = (value: string, emptyLabel = "—") => (
     {value || emptyLabel}
   </div>
 );
+
+type PdfImageInfo = {
+  dataUrl: string;
+  width: number;
+  height: number;
+};
+
+const loadImageInfoAsDataUrl = (src: string): Promise<PdfImageInfo> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        reject(new Error("No se pudo obtener el contexto del canvas"));
+        return;
+      }
+
+      ctx.drawImage(img, 0, 0);
+
+      resolve({
+        dataUrl: canvas.toDataURL("image/png"),
+        width: img.naturalWidth,
+        height: img.naturalHeight,
+      });
+    };
+
+    img.onerror = () => reject(new Error("No se pudo cargar el logo"));
+    img.src = src;
+  });
+};
 
 export default function RemisionesCompra() {
   const { selectedBodegaId, selectedBodegaNombre } = useOutletContext<
@@ -1116,197 +1153,372 @@ export default function RemisionesCompra() {
     navigate("/app/remisiones-compra", { replace: true });
   };
 
-  const generateRemisionPDF = (remision: RemisionCompraUI) => {
-    const doc = new jsPDF();
+const generateRemisionPDF = async (remision: RemisionCompraUI) => {
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+  });
 
-    doc.setFontSize(20);
-    doc.setFont("helvetica", "bold");
-    doc.text("REMISIÓN DE COMPRA", 105, 20, { align: "center" });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const marginX = 14;
+  const rightX = pageWidth - marginX;
 
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
+  const COLORS = {
+    primary: [14, 116, 217] as const,
+    primarySoft: [239, 246, 255] as const,
+    primaryLine: [191, 219, 254] as const,
+    text: [51, 65, 85] as const,
+    muted: [100, 116, 139] as const,
+    card: [248, 250, 252] as const,
+    successBg: [220, 252, 231] as const,
+    successText: [22, 101, 52] as const,
+    dangerBg: [254, 226, 226] as const,
+    dangerText: [153, 27, 27] as const,
+    warningBg: [255, 247, 237] as const,
+    warningText: [180, 83, 9] as const,
+    border: [226, 232, 240] as const,
+  };
 
-    doc.text(`N° Remisión: ${remision.numeroRemision}`, 20, 40);
-    doc.text(`Proveedor: ${remision.proveedor || "-"}`, 20, 46);
-    doc.text(
-      `Tipo Doc.: ${remision.proveedorTipoDocumento || "-"}`,
-      20,
-      52
-    );
-    doc.text(
-      `N° Documento: ${remision.proveedorNumeroDocumento || "-"}`,
-      20,
-      58
-    );
-    doc.text(`Bodega: ${remision.bodega || "-"}`, 20, 64);
+  const formatMoneyPdf = (value: number) =>
+    `$${Number(value || 0).toLocaleString("es-CO", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
 
-    doc.text(
-      `Fecha: ${remision.fecha
-        ? new Date(remision.fecha).toLocaleDateString("es-CO")
-        : "-"
-      }`,
-      120,
-      40
-    );
+  const formatDatePdf = (value?: string | null) =>
+    value ? new Date(value).toLocaleDateString("es-CO") : "-";
 
-    doc.text(
-      `Fecha Venc.: ${remision.fechaVencimiento
-        ? new Date(remision.fechaVencimiento).toLocaleDateString("es-CO")
-        : "-"
-      }`,
-      120,
-      46
-    );
+  const getEstadoStyle = (estado: string) => {
+    const normalized = (estado || "").toLowerCase();
 
-    doc.text(`Estado: ${remision.estado || "-"}`, 120, 52);
-    doc.text(`Orden Compra: ${remision.ordenCompra || "-"}`, 120, 58);
-
-    doc.setLineWidth(0.5);
-    doc.line(20, 70, 190, 70);
-
-    if (remision.items && remision.items.length > 0) {
-      const tableData = remision.items.map((item) => {
-        const subtotal = Number(item.cantidad || 0) * Number(item.precio_unitario || 0);
-
-        const detalleProducto = [
-          item.productoNombre || "-",
-          item.lote ? `Lote: ${item.lote}` : null,
-          item.fecha_vencimiento
-            ? `Vence: ${new Date(item.fecha_vencimiento).toLocaleDateString("es-CO")}`
-            : null,
-          (item.codigo_barras || item.cod_barras)
-            ? `Cod. barras: ${item.codigo_barras || item.cod_barras}`
-            : null,
-          item.nota ? `Nota: ${item.nota}` : null,
-        ]
-          .filter(Boolean)
-          .join("\n");
-
-        return [
-          detalleProducto,
-          String(item.cantidad),
-          `IVA (${Number(item.ivaPorcentaje || 0).toFixed(2)}%)`,
-          `$${Number(item.precio_unitario || 0).toLocaleString("es-CO", {
-            minimumFractionDigits: 2,
-          })}`,
-          `$${subtotal.toLocaleString("es-CO", {
-            minimumFractionDigits: 2,
-          })}`,
-        ];
-      });
-
-      autoTable(doc, {
-        startY: 76,
-        head: [["Producto", "Cantidad", "IVA", "Precio Unit.", "Subtotal"]],
-        body: tableData,
-        theme: "grid",
-        styles: {
-          fontSize: 8,
-          cellPadding: 3,
-          valign: "middle",
-        },
-        headStyles: {
-          fontStyle: "bold",
-        },
-        columnStyles: {
-          0: { cellWidth: 78 },
-          1: { cellWidth: 20, halign: "center" },
-          2: { cellWidth: 22, halign: "center" },
-          3: { cellWidth: 32, halign: "right" },
-          4: { cellWidth: 32, halign: "right" },
-        },
-      });
+    if (
+      normalized.includes("aplic") ||
+      normalized.includes("recibid") ||
+      normalized.includes("aprobad") ||
+      normalized.includes("confirm")
+    ) {
+      return {
+        bg: COLORS.successBg,
+        text: COLORS.successText,
+        label: estado,
+      };
     }
 
-    const finalY = (doc as any).lastAutoTable?.finalY || 76;
-    const totalesY = finalY + 10;
+    if (normalized.includes("anulad")) {
+      return {
+        bg: COLORS.dangerBg,
+        text: COLORS.dangerText,
+        label: estado,
+      };
+    }
 
-    const subtotalGeneral = remision.items.reduce(
-      (acc, item) =>
-        acc + Number(item.cantidad || 0) * Number(item.precio_unitario || 0),
-      0
+    return {
+      bg: COLORS.warningBg,
+      text: COLORS.warningText,
+      label: estado || "Pendiente",
+    };
+  };
+
+  let logo: PdfImageInfo | null = null;
+  try {
+    logo = await loadImageInfoAsDataUrl(logoVManage);
+  } catch (error) {
+    console.warn("No se pudo cargar el logo para el PDF:", error);
+  }
+
+  const subtotalGeneral = remision.items.reduce(
+    (acc, item) =>
+      acc + Number(item.cantidad || 0) * Number(item.precio_unitario || 0),
+    0
+  );
+
+  const ivaGeneral = remision.items.reduce((acc, item) => {
+    const subtotal =
+      Number(item.cantidad || 0) * Number(item.precio_unitario || 0);
+    return acc + subtotal * (Number(item.ivaPorcentaje || 0) / 100);
+  }, 0);
+
+  const totalGeneral = subtotalGeneral + ivaGeneral;
+
+  // Header
+  doc.setFillColor(...COLORS.primary);
+  doc.rect(0, 0, pageWidth, 34, "F");
+
+  doc.setFillColor(9, 92, 181);
+  doc.rect(0, 34, pageWidth, 1.2, "F");
+
+  // Logo sin caja blanca
+  if (logo) {
+    const maxLogoWidth = 22;
+    const maxLogoHeight = 14;
+    const scale = Math.min(
+      maxLogoWidth / logo.width,
+      maxLogoHeight / logo.height
     );
 
-    const ivaGeneral = remision.items.reduce((acc, item) => {
+    const drawWidth = logo.width * scale;
+    const drawHeight = logo.height * scale;
+    const logoX = marginX;
+    const logoY = (34 - drawHeight) / 2;
+
+    doc.addImage(logo.dataUrl, "PNG", logoX, logoY, drawWidth, drawHeight);
+  }
+
+  // Título
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.text("REMISIÓN DE COMPRA", pageWidth / 2, 14.8, { align: "center" });
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.text("VManage • Gestión empresarial", pageWidth / 2, 21.8, {
+    align: "center",
+  });
+
+  // Datos derecha
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.7);
+  doc.text(`Código: ${remision.numeroRemision || "-"}`, rightX, 11.5, {
+    align: "right",
+  });
+  doc.text(`Fecha: ${formatDatePdf(remision.fecha)}`, rightX, 17.8, {
+    align: "right",
+  });
+  doc.text(
+    `Vencimiento: ${formatDatePdf(remision.fechaVencimiento)}`,
+    rightX,
+    24.1,
+    { align: "right" }
+  );
+
+  // Tarjeta información general
+  doc.setFillColor(...COLORS.card);
+  doc.roundedRect(marginX, 42, pageWidth - marginX * 2, 42, 3, 3, "F");
+
+  doc.setTextColor(...COLORS.text);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10.5);
+  doc.text("Información general", marginX + 4, 49);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9.2);
+
+  const proveedorLines = doc.splitTextToSize(remision.proveedor || "-", 64);
+
+  doc.text("Proveedor:", marginX + 4, 56);
+  doc.text(proveedorLines, marginX + 28, 56);
+
+  doc.text("Tipo Doc.:", marginX + 4, 65);
+  doc.text(remision.proveedorTipoDocumento || "-", marginX + 28, 65);
+
+  doc.text("N° Documento:", marginX + 4, 74);
+  doc.text(remision.proveedorNumeroDocumento || "-", marginX + 32, 74);
+
+  doc.text("Bodega:", 112, 56);
+  doc.text(remision.bodega || "-", 128, 56);
+
+  doc.text("Orden compra:", 112, 65);
+  doc.text(remision.ordenCompra || "-", 136, 65);
+
+  const estadoStyle = getEstadoStyle(remision.estado);
+  doc.setFillColor(...estadoStyle.bg);
+  doc.roundedRect(112, 69, 44, 9.5, 3, 3, "F");
+
+  doc.setTextColor(...estadoStyle.text);
+  doc.setFont("helvetica", "bold");
+  doc.text(`Estado: ${estadoStyle.label}`, 134, 75.4, { align: "center" });
+
+  // Línea separadora
+  doc.setDrawColor(...COLORS.primaryLine);
+  doc.setLineWidth(0.6);
+  doc.line(marginX, 90, rightX, 90);
+
+  // Tabla
+  const tableData =
+    remision.items?.map((item) => {
       const subtotal =
         Number(item.cantidad || 0) * Number(item.precio_unitario || 0);
-      return acc + subtotal * (Number(item.ivaPorcentaje || 0) / 100);
-    }, 0);
 
-    const totalGeneral = subtotalGeneral + ivaGeneral;
+      const detalleProducto = [
+        item.productoNombre || "-",
+        item.lote ? `Lote: ${item.lote}` : null,
+        item.fecha_vencimiento
+          ? `Vence: ${new Date(item.fecha_vencimiento).toLocaleDateString("es-CO")}`
+          : null,
+        item.codigo_barras || item.cod_barras
+          ? `Cod. barras: ${item.codigo_barras || item.cod_barras}`
+          : null,
+        item.nota ? `Nota: ${item.nota}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
+      return [
+        detalleProducto,
+        String(item.cantidad ?? 0),
+        `IVA (${Number(item.ivaPorcentaje || 0).toFixed(2)}%)`,
+        formatMoneyPdf(item.precio_unitario || 0),
+        formatMoneyPdf(subtotal),
+      ];
+    }) || [];
 
-    doc.text("Subtotal:", 130, totalesY);
-    doc.text(
-      `$${subtotalGeneral.toLocaleString("es-CO", {
-        minimumFractionDigits: 2,
-      })}`,
-      190,
-      totalesY,
-      { align: "right" }
-    );
+  autoTable(doc, {
+    startY: 96,
+    margin: { left: marginX, right: marginX },
+    head: [["Producto", "Cantidad", "IVA", "Precio Unit.", "Subtotal"]],
+    body: tableData.length
+      ? tableData
+      : [["Sin productos", "-", "-", "-", "-"]],
+    theme: "grid",
+    headStyles: {
+      fillColor: [...COLORS.primary],
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+      fontSize: 9,
+      halign: "center",
+      valign: "middle",
+      lineColor: [...COLORS.primary],
+      lineWidth: 0.1,
+    },
+    bodyStyles: {
+      fontSize: 8.3,
+      textColor: [...COLORS.text],
+      lineColor: [...COLORS.border],
+      lineWidth: 0.1,
+      valign: "middle",
+    },
+    alternateRowStyles: {
+      fillColor: [...COLORS.primarySoft],
+    },
+    styles: {
+      cellPadding: 3.2,
+      overflow: "linebreak",
+    },
+    columnStyles: {
+      0: { cellWidth: 82 },
+      1: { cellWidth: 20, halign: "center" },
+      2: { cellWidth: 24, halign: "center" },
+      3: { cellWidth: 28, halign: "right" },
+      4: { cellWidth: 32, halign: "right" },
+    },
+  });
 
-    doc.text("IVA:", 130, totalesY + 6);
-    doc.text(
-      `$${ivaGeneral.toLocaleString("es-CO", {
-        minimumFractionDigits: 2,
-      })}`,
-      190,
-      totalesY + 6,
-      { align: "right" }
-    );
+  let currentY = ((doc as any).lastAutoTable?.finalY || 96) + 8;
 
-    doc.setLineWidth(0.3);
-    doc.line(130, totalesY + 10, 190, totalesY + 10);
+  const observacionesLines = remision.observaciones
+    ? doc.splitTextToSize(remision.observaciones, 95)
+    : [];
 
+  const observacionesHeight = remision.observaciones
+    ? Math.max(24, 12 + observacionesLines.length * 4.5)
+    : 0;
+
+  const totalsHeight = 31;
+  const blockHeight = Math.max(observacionesHeight, totalsHeight);
+
+  if (currentY + blockHeight > pageHeight - 24) {
+    doc.addPage();
+    currentY = 20;
+  }
+
+  // Observaciones
+  if (remision.observaciones) {
+    doc.setFillColor(255, 251, 235);
+    doc.roundedRect(marginX, currentY, 108, observacionesHeight, 3, 3, "F");
+
+    doc.setTextColor(146, 64, 14);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
-    doc.text("Total:", 130, totalesY + 16);
-    doc.text(
-      `$${totalGeneral.toLocaleString("es-CO", {
-        minimumFractionDigits: 2,
-      })}`,
-      190,
-      totalesY + 16,
-      { align: "right" }
-    );
+    doc.setFontSize(10);
+    doc.text("Observaciones", marginX + 4, currentY + 7);
 
-    if (remision.observaciones) {
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      doc.text("Observaciones:", 20, totalesY + 30);
-      const splitObs = doc.splitTextToSize(remision.observaciones, 170);
-      doc.text(splitObs, 20, totalesY + 36);
-    }
+    doc.setTextColor(87, 83, 78);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.7);
+    doc.text(observacionesLines, marginX + 4, currentY + 13);
+  }
 
-    const pageHeight = doc.internal.pageSize.height;
-    doc.setFontSize(8);
+  // Totales
+  const totalsX = remision.observaciones ? 128 : 124;
+  const totalsWidth = remision.observaciones ? 68 : 72;
+
+  doc.setFillColor(...COLORS.card);
+  doc.roundedRect(totalsX, currentY, totalsWidth, totalsHeight, 3, 3, "F");
+
+  doc.setTextColor(...COLORS.text);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9.5);
+
+  doc.text("Subtotal:", totalsX + 4, currentY + 8);
+  doc.text(
+    formatMoneyPdf(subtotalGeneral),
+    totalsX + totalsWidth - 4,
+    currentY + 8,
+    { align: "right" }
+  );
+
+  doc.text("IVA:", totalsX + 4, currentY + 15);
+  doc.text(
+    formatMoneyPdf(ivaGeneral),
+    totalsX + totalsWidth - 4,
+    currentY + 15,
+    { align: "right" }
+  );
+
+  doc.setFillColor(...COLORS.primary);
+  doc.roundedRect(totalsX + 2, currentY + 20, totalsWidth - 4, 9, 2, 2, "F");
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10.5);
+  doc.text("TOTAL", totalsX + 5, currentY + 26);
+  doc.text(
+    formatMoneyPdf(totalGeneral),
+    totalsX + totalsWidth - 4,
+    currentY + 26,
+    { align: "right" }
+  );
+
+  // Footer
+  const generatedAt = new Date().toLocaleString("es-CO");
+  const totalPages = doc.getNumberOfPages();
+
+  for (let page = 1; page <= totalPages; page++) {
+    doc.setPage(page);
+
+    doc.setDrawColor(...COLORS.border);
+    doc.setLineWidth(0.3);
+    doc.line(marginX, pageHeight - 14, rightX, pageHeight - 14);
+
     doc.setFont("helvetica", "italic");
-    doc.text(
-      `Generado el ${new Date().toLocaleString("es-CO")}`,
-      105,
-      pageHeight - 10,
-      { align: "center" }
+    doc.setFontSize(8);
+    doc.setTextColor(...COLORS.muted);
+    doc.text(`Generado el ${generatedAt} • VManage`, marginX, pageHeight - 8);
+    doc.text(`Página ${page} de ${totalPages}`, rightX, pageHeight - 8, {
+      align: "right",
+    });
+  }
+
+  doc.save(`Remision_Compra_${remision.numeroRemision}.pdf`);
+};
+
+const handleDescargarRemision = async (remision: RemisionCompraUI) => {
+  try {
+    const detalle =
+      remision.items.length > 0
+        ? remision
+        : await getRemisionCompraById(remision.id);
+
+    await generateRemisionPDF(detalle);
+    toast.success(
+      `PDF de la remisión ${detalle.numeroRemision} descargado exitosamente`
     );
-
-    doc.save(`Remision_Compra_${remision.numeroRemision}.pdf`);
-  };
-
-  const handleDescargarRemision = async (remision: RemisionCompraUI) => {
-    try {
-      const detalle =
-        remision.items.length > 0
-          ? remision
-          : await getRemisionCompraById(remision.id);
-
-      generateRemisionPDF(detalle);
-      toast.success(`PDF de la remisión ${detalle.numeroRemision} descargado exitosamente`);
-    } catch (error) {
-      toast.error(getErrorMessage(error, "Error al descargar la remisión en PDF"));
-    }
-  };
+  } catch (error) {
+    toast.error(getErrorMessage(error, "Error al descargar la remisión en PDF"));
+  }
+};
 
   const totalFormulario = useMemo(() => {
     return items.reduce((acc, item) => {
