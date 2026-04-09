@@ -774,6 +774,7 @@ export default function Proveedores() {
             <TableHeader>
               <TableRow className="bg-gray-50">
                 <TableHead className="w-16">#</TableHead>
+                <TableHead>Código</TableHead>
                 <TableHead>Nombre</TableHead>
                 <TableHead>Tipo Doc.</TableHead>
                 <TableHead>N° Documento</TableHead>
@@ -805,6 +806,10 @@ export default function Proveedores() {
                 proveedores.map((proveedor, index) => (
                   <TableRow key={proveedor.id} className="hover:bg-gray-50">
                     <TableCell>{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</TableCell>
+
+                    <TableCell className="font-mono text-sm">
+                      {proveedor.codigo}
+                    </TableCell>
 
                     <TableCell className="font-medium text-gray-900">
                       {proveedor.nombre}
@@ -839,8 +844,8 @@ export default function Proveedores() {
                         size="sm"
                         onClick={() => handleToggleEstado(proveedor)}
                         className={`h-7 ${proveedor.estado === "Activo"
-                            ? "bg-green-100 text-green-800 hover:bg-green-200"
-                            : "bg-red-100 text-red-800 hover:bg-red-200"
+                          ? "bg-green-100 text-green-800 hover:bg-green-200"
+                          : "bg-red-100 text-red-800 hover:bg-red-200"
                           }`}
                       >
                         {proveedor.estado}
@@ -1544,8 +1549,8 @@ export default function Proveedores() {
               <span className="text-gray-600">Estado Actual:</span>
               <span
                 className={`font-medium ${proveedorParaCambioEstado?.estado === "Activo"
-                    ? "text-green-700"
-                    : "text-red-700"
+                  ? "text-green-700"
+                  : "text-red-700"
                   }`}
               >
                 {proveedorParaCambioEstado?.estado}
@@ -1556,8 +1561,8 @@ export default function Proveedores() {
               <span className="text-gray-600">Nuevo Estado:</span>
               <span
                 className={`font-medium ${proveedorParaCambioEstado?.estado === "Inactivo"
-                    ? "text-green-700"
-                    : "text-red-700"
+                  ? "text-green-700"
+                  : "text-red-700"
                   }`}
               >
                 {proveedorParaCambioEstado?.estado === "Activo"
