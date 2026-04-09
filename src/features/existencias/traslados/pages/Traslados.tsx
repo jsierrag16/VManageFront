@@ -269,8 +269,22 @@ export default function Traslados({
     return existenciaSeleccionada?.cantidadDisponible ?? 0;
   }, [existenciaSeleccionada]);
 
+  const formatFecha = (fecha: string) => {
+    const date = new Date(fecha);
+    if (Number.isNaN(date.getTime())) return fecha;
+
+    return date.toLocaleDateString("es-CO", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  };
+
+  const calcularTotalItems = (items: TrasladoItemUI[]) =>
+    items.reduce((sum, item) => sum + Number(item.cantidad), 0);
+
   const filteredTraslados = useMemo(() => {
-    return traslados.filter((traslado) => {
+    const filtrados = traslados.filter((traslado) => {
       const searchLower = searchTerm.toLowerCase().trim();
 
       if (selectedBodega && selectedBodega !== "Todas las bodegas") {
@@ -312,6 +326,12 @@ export default function Traslados({
         totalUnidades.toString().includes(searchLower) ||
         itemsMatch
       );
+    });
+
+    return filtrados.sort((a, b) => {
+      const numeroA = Number(a.codigo.replace(/\D/g, ""));
+      const numeroB = Number(b.codigo.replace(/\D/g, ""));
+      return numeroA - numeroB;
     });
   }, [traslados, searchTerm, fechaInicio, fechaFin, selectedBodega]);
 
@@ -538,20 +558,6 @@ export default function Traslados({
   // =========================================================
   // Validaciones y helpers
   // =========================================================
-  const formatFecha = (fecha: string) => {
-    const date = new Date(fecha);
-    if (Number.isNaN(date.getTime())) return fecha;
-
-    return date.toLocaleDateString("es-CO", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    });
-  };
-
-  const calcularTotalItems = (items: TrasladoItemUI[]) =>
-    items.reduce((sum, item) => sum + Number(item.cantidad), 0);
-
   const getEstadoBadge = (estado: EstadoTrasladoUI) => {
     const badges: Record<EstadoTrasladoUI, { class: string; icon: any }> = {
       Pendiente: {
@@ -1235,6 +1241,7 @@ export default function Traslados({
             <TableHeader>
               <TableRow className="bg-gray-50">
                 <TableHead className="w-16">#</TableHead>
+                <TableHead>Codigo</TableHead>
                 <TableHead>Fecha</TableHead>
                 <TableHead>Bodega Origen</TableHead>
                 <TableHead>Bodega Destino</TableHead>
@@ -1271,6 +1278,10 @@ export default function Traslados({
                   return (
                     <TableRow key={traslado.id} className="hover:bg-gray-50">
                       <TableCell>{startIndex + index + 1}</TableCell>
+
+                      <TableCell className="font-medium">
+                        {traslado.codigo}
+                      </TableCell>
 
                       <TableCell className="font-medium">
                         {formatFecha(traslado.fecha)}

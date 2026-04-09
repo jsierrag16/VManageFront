@@ -1060,10 +1060,10 @@ const generarPDF = async (remision: RemisionListadoUi) => {
   doc.text(String(remision.items || 0), 126, 56);
 
   const estadoStyle = getEstadoStyle(remision.estado);
-  doc.setFillColor(...estadoStyle.bg);
+  doc.setFillColor(estadoStyle.bg[0], estadoStyle.bg[1], estadoStyle.bg[2]);
   doc.roundedRect(112, 60, 44, 9.5, 3, 3, "F");
 
-  doc.setTextColor(...estadoStyle.text);
+  doc.setTextColor(estadoStyle.text[0], estadoStyle.text[1], estadoStyle.text[2]);
   doc.setFont("helvetica", "bold");
   doc.text(`Estado: ${estadoStyle.label}`, 134, 66.4, { align: "center" });
 

@@ -219,7 +219,7 @@ export async function cambiarEstadoUsuario(
 export async function asignarBodegaAUsuario(
     payload: AsignarBodegaUsuarioPayload
 ) {
-    const { data } = await api.post("/bodegas-por-usuario/asignar", payload);
+    const { data } = await api.post("/bodegas-por-usuario", payload);
     return data;
 }
 
@@ -228,7 +228,7 @@ export async function quitarBodegaAUsuario(
     id_bodega: number
 ) {
     const { data } = await api.delete(
-        `/bodegas-por-usuario/usuario/${id_usuario}/${id_bodega}`
+        `/bodegas-por-usuario/${id_usuario}/${id_bodega}`
     );
     return data;
 }

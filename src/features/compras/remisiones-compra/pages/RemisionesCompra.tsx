@@ -1200,23 +1200,23 @@ const generateRemisionPDF = async (remision: RemisionCompraUI) => {
       normalized.includes("confirm")
     ) {
       return {
-        bg: COLORS.successBg,
-        text: COLORS.successText,
+        bg: [...COLORS.successBg] as const,
+        text: [...COLORS.successText] as const,
         label: estado,
       };
     }
 
     if (normalized.includes("anulad")) {
       return {
-        bg: COLORS.dangerBg,
-        text: COLORS.dangerText,
+        bg: [...COLORS.dangerBg] as const,
+        text: [...COLORS.dangerText] as const,
         label: estado,
       };
     }
 
     return {
-      bg: COLORS.warningBg,
-      text: COLORS.warningText,
+      bg: [...COLORS.warningBg] as const,
+      text: [...COLORS.warningText] as const,
       label: estado || "Pendiente",
     };
   };
@@ -1324,10 +1324,10 @@ const generateRemisionPDF = async (remision: RemisionCompraUI) => {
   doc.text(remision.ordenCompra || "-", 136, 65);
 
   const estadoStyle = getEstadoStyle(remision.estado);
-  doc.setFillColor(...estadoStyle.bg);
+  doc.setFillColor(...(estadoStyle.bg as [number, number, number]));
   doc.roundedRect(112, 69, 44, 9.5, 3, 3, "F");
 
-  doc.setTextColor(...estadoStyle.text);
+  doc.setTextColor(...(estadoStyle.text as [number, number, number]));
   doc.setFont("helvetica", "bold");
   doc.text(`Estado: ${estadoStyle.label}`, 134, 75.4, { align: "center" });
 

@@ -1020,10 +1020,10 @@ export default function OrdenesVenta() {
     doc.text(getTerminoNombre(orden.termino_pago), 138, 66);
 
     const estadoStyle = getEstadoStyle(estadoNombre);
-    doc.setFillColor(...estadoStyle.bg);
+    doc.setFillColor(estadoStyle.bg[0], estadoStyle.bg[1], estadoStyle.bg[2]);
     doc.roundedRect(112, 70, 44, 9.5, 3, 3, "F");
 
-    doc.setTextColor(...estadoStyle.text);
+    doc.setTextColor(estadoStyle.text[0], estadoStyle.text[1], estadoStyle.text[2]);
     doc.setFont("helvetica", "bold");
     doc.text(`Estado: ${estadoStyle.label}`, 134, 76.4, {
       align: "center",
