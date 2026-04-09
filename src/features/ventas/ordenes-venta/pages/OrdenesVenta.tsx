@@ -13,8 +13,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Building2,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 import { Button } from "../../../../shared/components/ui/button";
 import { Input } from "../../../../shared/components/ui/input";
@@ -57,6 +60,7 @@ import type {
   DetalleOrdenVentaApi,
   OrdenVentaApi,
 } from "../types/ordenes-venta.types";
+import logoVmanage from "../../../../assets/images/VLogo.png";
 
 type FormMode = "create" | "edit";
 
@@ -252,6 +256,56 @@ function getSiguienteEstadoInfo(
   };
 }
 
+type PdfImageInfo = {
+  dataUrl: string;
+  width: number;
+  height: number;
+};
+
+const loadImageInfoAsDataUrl = (src: string): Promise<PdfImageInfo> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        reject(new Error("No se pudo obtener el contexto del canvas"));
+        return;
+      }
+
+      ctx.drawImage(img, 0, 0);
+
+      resolve({
+        dataUrl: canvas.toDataURL("image/png"),
+        width: img.naturalWidth,
+        height: img.naturalHeight,
+      });
+    };
+
+    img.onerror = () => reject(new Error("No se pudo cargar el logo"));
+    img.src = src;
+  });
+};
+
+const toPdfNumber = (value: unknown) => {
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const formatPdfMoney = (value: number) =>
+  `$${Number(value || 0).toLocaleString("es-CO", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+
+const formatPdfDate = (value?: string | null) =>
+  value ? new Date(value).toLocaleDateString("es-CO") : "-";
+
 export default function OrdenesVenta() {
   const { currentUser, selectedBodegaId, selectedBodegaNombre, bodegasDisponibles } =
     useOutletContext<AppOutletContext>();
@@ -273,12 +327,14 @@ export default function OrdenesVenta() {
   const [isAnularModalOpen, setIsAnularModalOpen] = useState(false);
 
   const [selectedOrden, setSelectedOrden] = useState<OrdenVentaApi | null>(null);
-  const [selectedCotizacionId, setSelectedCotizacionId] = useState<string>("sin-cotizacion");
+  const [selectedCotizacionId, setSelectedCotizacionId] =
+    useState<string>("sin-cotizacion");
   const [selectedProductoId, setSelectedProductoId] = useState<string>("");
   const [cantidadProducto, setCantidadProducto] = useState<string>("");
   const [precioProducto, setPrecioProducto] = useState<string>("");
 
-  const [isConfirmEstadoModalOpen, setIsConfirmEstadoModalOpen] = useState(false);
+  const [isConfirmEstadoModalOpen, setIsConfirmEstadoModalOpen] =
+    useState(false);
   const [estadoCambioPendiente, setEstadoCambioPendiente] = useState<{
     orden: OrdenVentaApi;
     siguienteEstadoId: number;
@@ -306,8 +362,12 @@ export default function OrdenesVenta() {
 
   const estadoCanceladoId = useMemo(() => {
     return (
-      findEstadoIdByNames(estados, ["cancelada", "cancelado", "anulada", "anulado"]) ||
-      0
+      findEstadoIdByNames(estados, [
+        "cancelada",
+        "cancelado",
+        "anulada",
+        "anulado",
+      ]) || 0
     );
   }, [estados]);
 
@@ -338,7 +398,7 @@ export default function OrdenesVenta() {
   };
 
   useEffect(() => {
-    cargarModulo();
+    void cargarModulo();
   }, [selectedBodegaId]);
 
   useEffect(() => {
@@ -374,7 +434,9 @@ export default function OrdenesVenta() {
     const term = normalizarTexto(searchTerm);
 
     return ordenes.filter((orden) => {
-      const codigo = normalizarTexto(orden.codigo_orden_venta || String(orden.id_orden_venta));
+      const codigo = normalizarTexto(
+        orden.codigo_orden_venta || String(orden.id_orden_venta)
+      );
       const cliente = normalizarTexto(getClienteNombre(orden.cliente));
       const estado = normalizarTexto(getEstadoNombre(orden.estado_orden_venta));
       const bodega = normalizarTexto(getBodegaNombre(orden.bodega));
@@ -391,9 +453,15 @@ export default function OrdenesVenta() {
     });
   }, [ordenes, searchTerm]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredOrdenes.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredOrdenes.length / ITEMS_PER_PAGE)
+  );
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const currentOrdenes = filteredOrdenes.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  const currentOrdenes = filteredOrdenes.slice(
+    startIndex,
+    startIndex + ITEMS_PER_PAGE
+  );
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -405,7 +473,9 @@ export default function OrdenesVenta() {
     const totalOrdenes = ordenes.length;
 
     const pendientes = ordenes.filter((orden) =>
-      normalizarTexto(getEstadoNombre(orden.estado_orden_venta)).includes("pendiente")
+      normalizarTexto(getEstadoNombre(orden.estado_orden_venta)).includes(
+        "pendiente"
+      )
     ).length;
 
     const procesando = ordenes.filter((orden) => {
@@ -525,11 +595,17 @@ export default function OrdenesVenta() {
 
     setFormData((prev) => ({
       ...prev,
-      id_cliente: cotizacion.id_cliente ? String(cotizacion.id_cliente) : prev.id_cliente,
-      id_bodega: cotizacion.id_bodega ? String(cotizacion.id_bodega) : prev.id_bodega,
+      id_cliente: cotizacion.id_cliente
+        ? String(cotizacion.id_cliente)
+        : prev.id_cliente,
+      id_bodega: cotizacion.id_bodega
+        ? String(cotizacion.id_bodega)
+        : prev.id_bodega,
     }));
 
-    setProductosOrden(mapDetalleCotizacionToForm(cotizacion.detalle_cotizacion));
+    setProductosOrden(
+      mapDetalleCotizacionToForm(cotizacion.detalle_cotizacion)
+    );
     toast.success("Productos cargados desde la cotización");
   };
 
@@ -741,6 +817,388 @@ export default function OrdenesVenta() {
     }
   };
 
+  const generateOrdenVentaPDF = async (orden: OrdenVentaApi) => {
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+    });
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const marginX = 14;
+    const rightX = pageWidth - marginX;
+
+    const COLORS = {
+      primary: [14, 116, 217] as const,
+      primarySoft: [239, 246, 255] as const,
+      primaryLine: [191, 219, 254] as const,
+      text: [51, 65, 85] as const,
+      muted: [100, 116, 139] as const,
+      card: [248, 250, 252] as const,
+      successBg: [220, 252, 231] as const,
+      successText: [22, 101, 52] as const,
+      dangerBg: [254, 226, 226] as const,
+      dangerText: [153, 27, 27] as const,
+      warningBg: [255, 247, 237] as const,
+      warningText: [180, 83, 9] as const,
+      infoBg: [219, 234, 254] as const,
+      infoText: [30, 64, 175] as const,
+      border: [226, 232, 240] as const,
+    };
+
+    const estadoNombre = getEstadoNombre(orden.estado_orden_venta);
+
+    const getEstadoStyle = (estado: string) => {
+      const text = normalizarTexto(estado);
+
+      if (
+        text.includes("entregada") ||
+        text.includes("aplicada") ||
+        text.includes("facturada")
+      ) {
+        return {
+          bg: COLORS.successBg,
+          text: COLORS.successText,
+          label: estado,
+        };
+      }
+
+      if (
+        text.includes("procesando") ||
+        text.includes("aprobada") ||
+        text.includes("aprobado") ||
+        text.includes("enviada")
+      ) {
+        return {
+          bg: COLORS.infoBg,
+          text: COLORS.infoText,
+          label: estado,
+        };
+      }
+
+      if (
+        text.includes("anulada") ||
+        text.includes("anulado") ||
+        text.includes("cancelada") ||
+        text.includes("cancelado")
+      ) {
+        return {
+          bg: COLORS.dangerBg,
+          text: COLORS.dangerText,
+          label: estado,
+        };
+      }
+
+      return {
+        bg: COLORS.warningBg,
+        text: COLORS.warningText,
+        label: estado || "Pendiente",
+      };
+    };
+
+    let logo: PdfImageInfo | null = null;
+    try {
+      logo = await loadImageInfoAsDataUrl(logoVmanage);
+    } catch (error) {
+      console.warn("No se pudo cargar el logo para el PDF:", error);
+    }
+
+    const detalle = (orden.detalle_orden_venta ?? []).map((item) => {
+      const cantidad = toPdfNumber(item.cantidad);
+      const precio = toPdfNumber(item.precio_unitario);
+      const ivaPorcentaje = toPdfNumber(item.producto?.iva?.porcentaje);
+      const subtotal = cantidad * precio;
+      const ivaValor = subtotal * (ivaPorcentaje / 100);
+
+      return {
+        producto: getProductoNombre(item.producto),
+        cantidad,
+        ivaPorcentaje,
+        precio,
+        subtotal,
+        ivaValor,
+      };
+    });
+
+    const subtotalGeneral = detalle.reduce(
+      (acc, item) => acc + item.subtotal,
+      0
+    );
+    const ivaGeneral = detalle.reduce((acc, item) => acc + item.ivaValor, 0);
+    const totalGeneral = subtotalGeneral + ivaGeneral;
+
+    // Header
+    doc.setFillColor(...COLORS.primary);
+    doc.rect(0, 0, pageWidth, 34, "F");
+
+    doc.setFillColor(9, 92, 181);
+    doc.rect(0, 34, pageWidth, 1.2, "F");
+
+    // Logo
+    if (logo) {
+      const maxLogoWidth = 22;
+      const maxLogoHeight = 14;
+      const scale = Math.min(
+        maxLogoWidth / logo.width,
+        maxLogoHeight / logo.height
+      );
+
+      const drawWidth = logo.width * scale;
+      const drawHeight = logo.height * scale;
+      const logoX = marginX;
+      const logoY = (34 - drawHeight) / 2;
+
+      doc.addImage(logo.dataUrl, "PNG", logoX, logoY, drawWidth, drawHeight);
+    }
+
+    // Título
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.text("ORDEN DE VENTA", pageWidth / 2, 14.8, { align: "center" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text("VManage • Gestión empresarial", pageWidth / 2, 21.8, {
+      align: "center",
+    });
+
+    // Datos derecha
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.7);
+    doc.text(
+      `Código: ${
+        orden.codigo_orden_venta ||
+        `OV-${String(orden.id_orden_venta).padStart(4, "0")}`
+      }`,
+      rightX,
+      11.5,
+      { align: "right" }
+    );
+    doc.text(`Fecha: ${formatPdfDate(orden.fecha_creacion)}`, rightX, 17.8, {
+      align: "right",
+    });
+    doc.text(
+      `Vencimiento: ${formatPdfDate(orden.fecha_vencimiento)}`,
+      rightX,
+      24.1,
+      { align: "right" }
+    );
+
+    // Tarjeta información general
+    doc.setFillColor(...COLORS.card);
+    doc.roundedRect(marginX, 42, pageWidth - marginX * 2, 36, 3, 3, "F");
+
+    doc.setTextColor(...COLORS.text);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.5);
+    doc.text("Información general", marginX + 4, 49);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.2);
+
+    const clienteNombre = getClienteNombre(orden.cliente);
+    const clienteLines = doc.splitTextToSize(clienteNombre, 68);
+
+    const numeroDocumento =
+      orden.cliente?.num_documento ||
+      orden.cliente?.email ||
+      orden.cliente?.telefono ||
+      "-";
+
+    doc.text("Cliente:", marginX + 4, 56);
+    doc.text(clienteLines, marginX + 22, 56);
+
+    doc.text("Documento / Ref.:", marginX + 4, 66);
+    doc.text(String(numeroDocumento), marginX + 32, 66);
+
+    doc.text("Bodega:", 112, 56);
+    doc.text(getBodegaNombre(orden.bodega), 128, 56);
+
+    doc.text("Término pago:", 112, 66);
+    doc.text(getTerminoNombre(orden.termino_pago), 138, 66);
+
+    const estadoStyle = getEstadoStyle(estadoNombre);
+    doc.setFillColor(estadoStyle.bg[0], estadoStyle.bg[1], estadoStyle.bg[2]);
+    doc.roundedRect(112, 70, 44, 9.5, 3, 3, "F");
+
+    doc.setTextColor(estadoStyle.text[0], estadoStyle.text[1], estadoStyle.text[2]);
+    doc.setFont("helvetica", "bold");
+    doc.text(`Estado: ${estadoStyle.label}`, 134, 76.4, {
+      align: "center",
+    });
+
+    doc.setDrawColor(...COLORS.primaryLine);
+    doc.setLineWidth(0.6);
+    doc.line(marginX, 84, rightX, 84);
+
+    autoTable(doc, {
+      startY: 90,
+      margin: { left: marginX, right: marginX },
+      head: [["Producto", "Cantidad", "IVA", "Precio Unit.", "Subtotal"]],
+      body: detalle.length
+        ? detalle.map((item) => [
+            item.producto,
+            String(item.cantidad),
+            `${item.ivaPorcentaje.toFixed(2)}%`,
+            formatPdfMoney(item.precio),
+            formatPdfMoney(item.subtotal),
+          ])
+        : [["Sin productos", "-", "-", "-", "-"]],
+      theme: "grid",
+      headStyles: {
+        fillColor: [...COLORS.primary],
+        textColor: [255, 255, 255],
+        fontStyle: "bold",
+        fontSize: 9,
+        halign: "center",
+        valign: "middle",
+        lineColor: [...COLORS.primary],
+        lineWidth: 0.1,
+      },
+      bodyStyles: {
+        fontSize: 8.5,
+        textColor: [...COLORS.text],
+        lineColor: [...COLORS.border],
+        lineWidth: 0.1,
+        valign: "middle",
+      },
+      alternateRowStyles: {
+        fillColor: [...COLORS.primarySoft],
+      },
+      styles: {
+        cellPadding: 3.2,
+        overflow: "linebreak",
+      },
+      columnStyles: {
+        0: { cellWidth: 74 },
+        1: { cellWidth: 22, halign: "center" },
+        2: { cellWidth: 26, halign: "center" },
+        3: { cellWidth: 30, halign: "right" },
+        4: { cellWidth: 30, halign: "right" },
+      },
+    });
+
+    let currentY = ((doc as any).lastAutoTable?.finalY || 90) + 8;
+
+    const observacionesLines = orden.descripcion
+      ? doc.splitTextToSize(orden.descripcion, 95)
+      : [];
+
+    const observacionesHeight = orden.descripcion
+      ? Math.max(24, 12 + observacionesLines.length * 4.5)
+      : 0;
+
+    const totalsHeight = 31;
+    const blockHeight = Math.max(observacionesHeight, totalsHeight);
+
+    if (currentY + blockHeight > pageHeight - 24) {
+      doc.addPage();
+      currentY = 20;
+    }
+
+    if (orden.descripcion) {
+      doc.setFillColor(255, 251, 235);
+      doc.roundedRect(marginX, currentY, 108, observacionesHeight, 3, 3, "F");
+
+      doc.setTextColor(146, 64, 14);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text("Observaciones", marginX + 4, currentY + 7);
+
+      doc.setTextColor(87, 83, 78);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.7);
+      doc.text(observacionesLines, marginX + 4, currentY + 13);
+    }
+
+    const totalsX = orden.descripcion ? 128 : 124;
+    const totalsWidth = orden.descripcion ? 68 : 72;
+
+    doc.setFillColor(...COLORS.card);
+    doc.roundedRect(totalsX, currentY, totalsWidth, totalsHeight, 3, 3, "F");
+
+    doc.setTextColor(...COLORS.text);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.5);
+
+    doc.text("Subtotal:", totalsX + 4, currentY + 8);
+    doc.text(
+      formatPdfMoney(subtotalGeneral),
+      totalsX + totalsWidth - 4,
+      currentY + 8,
+      { align: "right" }
+    );
+
+    doc.text("IVA:", totalsX + 4, currentY + 15);
+    doc.text(
+      formatPdfMoney(ivaGeneral),
+      totalsX + totalsWidth - 4,
+      currentY + 15,
+      { align: "right" }
+    );
+
+    doc.setFillColor(...COLORS.primary);
+    doc.roundedRect(
+      totalsX + 2,
+      currentY + 20,
+      totalsWidth - 4,
+      9,
+      2,
+      2,
+      "F"
+    );
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.5);
+    doc.text("TOTAL", totalsX + 5, currentY + 26);
+    doc.text(
+      formatPdfMoney(totalGeneral),
+      totalsX + totalsWidth - 4,
+      currentY + 26,
+      { align: "right" }
+    );
+
+    const generatedAt = new Date().toLocaleString("es-CO");
+    const totalPages = doc.getNumberOfPages();
+
+    for (let page = 1; page <= totalPages; page++) {
+      doc.setPage(page);
+
+      doc.setDrawColor(...COLORS.border);
+      doc.setLineWidth(0.3);
+      doc.line(marginX, pageHeight - 14, rightX, pageHeight - 14);
+
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(8);
+      doc.setTextColor(...COLORS.muted);
+      doc.text(`Generado el ${generatedAt} • VManage`, marginX, pageHeight - 8);
+      doc.text(`Página ${page} de ${totalPages}`, rightX, pageHeight - 8, {
+        align: "right",
+      });
+    }
+
+    doc.save(
+      `Orden_Venta_${
+        orden.codigo_orden_venta ||
+        `OV-${String(orden.id_orden_venta).padStart(4, "0")}`
+      }.pdf`
+    );
+  };
+
+  const handleDownloadPDF = async (orden: OrdenVentaApi) => {
+    try {
+      const detalle = await ordenesVentaService.getOne(orden.id_orden_venta);
+      await generateOrdenVentaPDF(detalle);
+      toast.success("PDF descargado exitosamente");
+    } catch (error: any) {
+      console.error("Error generando PDF:", error);
+      toast.error(error?.message || "No se pudo generar el PDF de la orden");
+    }
+  };
+
   const handleCreate = handleOpenCreate;
   const handleView = handleOpenView;
   const handleEdit = handleOpenEdit;
@@ -824,10 +1282,7 @@ export default function OrdenesVenta() {
           />
         </div>
 
-        <Button
-          onClick={handleCreate}
-          className="bg-blue-600 hover:bg-blue-700"
-        >
+        <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
           <Plus size={18} className="mr-2" />
           Nueva Orden
         </Button>
@@ -885,13 +1340,9 @@ export default function OrdenesVenta() {
 
                       <TableCell>{getClienteNombre(orden.cliente)}</TableCell>
 
-                      <TableCell>
-                        {formatDateDisplay(orden.fecha_creacion)}
-                      </TableCell>
+                      <TableCell>{formatDateDisplay(orden.fecha_creacion)}</TableCell>
 
-                      <TableCell>
-                        {formatDateDisplay(orden.fecha_vencimiento)}
-                      </TableCell>
+                      <TableCell>{formatDateDisplay(orden.fecha_vencimiento)}</TableCell>
 
                       <TableCell>{getItemsOrden(orden)}</TableCell>
 
@@ -901,19 +1352,20 @@ export default function OrdenesVenta() {
                           size="sm"
                           onClick={() => handleToggleEstado(orden)}
                           disabled={isCancelada}
-                          className={`h-7 ${estadoKey.includes("pendiente")
-                            ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                            : estadoKey.includes("procesando") ||
-                              estadoKey.includes("aprobada") ||
-                              estadoKey.includes("aprobado")
-                              ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
-                              : estadoKey.includes("enviada")
-                                ? "bg-purple-100 text-purple-800 hover:bg-purple-200"
-                                : estadoKey.includes("entregada") ||
-                                  estadoKey.includes("aplicada")
-                                  ? "bg-green-100 text-green-800 hover:bg-green-200"
-                                  : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
-                            }`}
+                          className={`h-7 ${
+                            estadoKey.includes("pendiente")
+                              ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                              : estadoKey.includes("procesando") ||
+                                  estadoKey.includes("aprobada") ||
+                                  estadoKey.includes("aprobado")
+                                ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
+                                : estadoKey.includes("enviada")
+                                  ? "bg-purple-100 text-purple-800 hover:bg-purple-200"
+                                  : estadoKey.includes("entregada") ||
+                                      estadoKey.includes("aplicada")
+                                    ? "bg-green-100 text-green-800 hover:bg-green-200"
+                                    : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
+                          }`}
                         >
                           {estadoNombre}
                         </Button>
@@ -929,6 +1381,16 @@ export default function OrdenesVenta() {
                             title="Ver detalles"
                           >
                             <Eye size={16} className="text-blue-600" />
+                          </Button>
+
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => void handleDownloadPDF(orden)}
+                            className="hover:bg-green-50"
+                            title="Descargar PDF"
+                          >
+                            <Download size={16} className="text-green-600" />
                           </Button>
 
                           <Button
@@ -985,17 +1447,19 @@ export default function OrdenesVenta() {
               </Button>
 
               <div className="flex items-center gap-1">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                  <Button
-                    key={page}
-                    variant={currentPage === page ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => handlePageChange(page)}
-                    className="h-8 w-8 p-0"
-                  >
-                    {page}
-                  </Button>
-                ))}
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                  (page) => (
+                    <Button
+                      key={page}
+                      variant={currentPage === page ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => handlePageChange(page)}
+                      className="h-8 w-8 p-0"
+                    >
+                      {page}
+                    </Button>
+                  )
+                )}
               </div>
 
               <Button
@@ -1017,7 +1481,9 @@ export default function OrdenesVenta() {
         <DialogContent className="max-w-6xl max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {formMode === "create" ? "Nueva orden de venta" : "Editar orden de venta"}
+              {formMode === "create"
+                ? "Nueva orden de venta"
+                : "Editar orden de venta"}
             </DialogTitle>
             <DialogDescription>
               Completa la información de la orden
@@ -1032,7 +1498,10 @@ export default function OrdenesVenta() {
                   type="date"
                   value={formData.fecha_creacion}
                   onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, fecha_creacion: e.target.value }))
+                    setFormData((prev) => ({
+                      ...prev,
+                      fecha_creacion: e.target.value,
+                    }))
                   }
                 />
               </div>
@@ -1075,7 +1544,11 @@ export default function OrdenesVenta() {
               <div>
                 <Label>Bodega *</Label>
                 {selectedBodegaId && selectedBodegaId > 0 ? (
-                  <Input value={selectedBodegaNombre} disabled className="bg-gray-100" />
+                  <Input
+                    value={selectedBodegaNombre}
+                    disabled
+                    className="bg-gray-100"
+                  />
                 ) : (
                   <Select
                     value={formData.id_bodega}
@@ -1103,17 +1576,18 @@ export default function OrdenesVenta() {
                   value={
                     formMode === "create"
                       ? getEstadoNombre(
-                        estados.find(
-                          (estado) => estado.id_estado_orden_venta === estadoPendienteId
+                          estados.find(
+                            (estado) =>
+                              estado.id_estado_orden_venta === estadoPendienteId
+                          )
                         )
-                      )
                       : getEstadoNombre(
-                        estados.find(
-                          (estado) =>
-                            String(estado.id_estado_orden_venta) ===
-                            String(formData.id_estado_orden_venta)
+                          estados.find(
+                            (estado) =>
+                              String(estado.id_estado_orden_venta) ===
+                              String(formData.id_estado_orden_venta)
+                          )
                         )
-                      )
                   }
                   readOnly
                   disabled
@@ -1150,7 +1624,10 @@ export default function OrdenesVenta() {
               <Label className="mb-2 block text-blue-900">
                 Cargar productos desde cotización
               </Label>
-              <Select value={selectedCotizacionId} onValueChange={handleCargarCotizacion}>
+              <Select
+                value={selectedCotizacionId}
+                onValueChange={handleCargarCotizacion}
+              >
                 <SelectTrigger className="bg-white">
                   <SelectValue placeholder="Selecciona una cotización" />
                 </SelectTrigger>
@@ -1175,13 +1652,18 @@ export default function OrdenesVenta() {
             <div className="rounded-lg border p-4">
               <div className="mb-4 flex items-center gap-2">
                 <Package size={18} />
-                <h3 className="font-semibold text-gray-900">Productos de la orden</h3>
+                <h3 className="font-semibold text-gray-900">
+                  Productos de la orden
+                </h3>
               </div>
 
               <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
                 <div className="md:col-span-5">
                   <Label>Producto</Label>
-                  <Select value={selectedProductoId} onValueChange={setSelectedProductoId}>
+                  <Select
+                    value={selectedProductoId}
+                    onValueChange={setSelectedProductoId}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecciona un producto" />
                     </SelectTrigger>
@@ -1247,7 +1729,10 @@ export default function OrdenesVenta() {
                   <TableBody>
                     {productosOrden.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="py-8 text-center text-gray-500">
+                        <TableCell
+                          colSpan={5}
+                          className="py-8 text-center text-gray-500"
+                        >
                           No hay productos agregados
                         </TableCell>
                       </TableRow>
@@ -1262,7 +1747,9 @@ export default function OrdenesVenta() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleEliminarProducto(item.id_producto)}
+                              onClick={() =>
+                                handleEliminarProducto(item.id_producto)
+                              }
                             >
                               Quitar
                             </Button>
@@ -1291,7 +1778,10 @@ export default function OrdenesVenta() {
               <Textarea
                 value={formData.descripcion}
                 onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, descripcion: e.target.value }))
+                  setFormData((prev) => ({
+                    ...prev,
+                    descripcion: e.target.value,
+                  }))
                 }
                 placeholder="Escribe observaciones de la orden"
               />
@@ -1324,40 +1814,49 @@ export default function OrdenesVenta() {
                 <div className="rounded-lg border p-4">
                   <p className="text-sm text-gray-500">Código</p>
                   <p className="font-semibold">
-                    {selectedOrden.codigo_orden_venta || `OV-${selectedOrden.id_orden_venta}`}
+                    {selectedOrden.codigo_orden_venta ||
+                      `OV-${selectedOrden.id_orden_venta}`}
                   </p>
                 </div>
 
                 <div className="rounded-lg border p-4">
                   <p className="text-sm text-gray-500">Estado</p>
-                  <Badge>
-                    {getEstadoNombre(selectedOrden.estado_orden_venta)}
-                  </Badge>
+                  <Badge>{getEstadoNombre(selectedOrden.estado_orden_venta)}</Badge>
                 </div>
 
                 <div className="rounded-lg border p-4">
                   <p className="text-sm text-gray-500">Cliente</p>
-                  <p className="font-semibold">{getClienteNombre(selectedOrden.cliente)}</p>
+                  <p className="font-semibold">
+                    {getClienteNombre(selectedOrden.cliente)}
+                  </p>
                 </div>
 
                 <div className="rounded-lg border p-4">
                   <p className="text-sm text-gray-500">Bodega</p>
-                  <p className="font-semibold">{getBodegaNombre(selectedOrden.bodega)}</p>
+                  <p className="font-semibold">
+                    {getBodegaNombre(selectedOrden.bodega)}
+                  </p>
                 </div>
 
                 <div className="rounded-lg border p-4">
                   <p className="text-sm text-gray-500">Fecha</p>
-                  <p className="font-semibold">{formatDateDisplay(selectedOrden.fecha_creacion)}</p>
+                  <p className="font-semibold">
+                    {formatDateDisplay(selectedOrden.fecha_creacion)}
+                  </p>
                 </div>
 
                 <div className="rounded-lg border p-4">
                   <p className="text-sm text-gray-500">Fecha vencimiento</p>
-                  <p className="font-semibold">{formatDateDisplay(selectedOrden.fecha_vencimiento)}</p>
+                  <p className="font-semibold">
+                    {formatDateDisplay(selectedOrden.fecha_vencimiento)}
+                  </p>
                 </div>
 
                 <div className="rounded-lg border p-4 md:col-span-2">
                   <p className="text-sm text-gray-500">Término de pago</p>
-                  <p className="font-semibold">{getTerminoNombre(selectedOrden.termino_pago)}</p>
+                  <p className="font-semibold">
+                    {getTerminoNombre(selectedOrden.termino_pago)}
+                  </p>
                 </div>
               </div>
 
@@ -1373,19 +1872,23 @@ export default function OrdenesVenta() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {(selectedOrden.detalle_orden_venta || []).map((item, index) => {
-                      const cantidad = Number(item.cantidad || 0);
-                      const precio = Number(item.precio_unitario || 0);
+                    {(selectedOrden.detalle_orden_venta || []).map(
+                      (item, index) => {
+                        const cantidad = Number(item.cantidad || 0);
+                        const precio = Number(item.precio_unitario || 0);
 
-                      return (
-                        <TableRow key={item.id_detalle_orden_venta || index}>
-                          <TableCell>{getProductoNombre(item.producto)}</TableCell>
-                          <TableCell>{cantidad}</TableCell>
-                          <TableCell>{formatMoney(precio)}</TableCell>
-                          <TableCell>{formatMoney(cantidad * precio)}</TableCell>
-                        </TableRow>
-                      );
-                    })}
+                        return (
+                          <TableRow
+                            key={item.id_detalle_orden_venta || index}
+                          >
+                            <TableCell>{getProductoNombre(item.producto)}</TableCell>
+                            <TableCell>{cantidad}</TableCell>
+                            <TableCell>{formatMoney(precio)}</TableCell>
+                            <TableCell>{formatMoney(cantidad * precio)}</TableCell>
+                          </TableRow>
+                        );
+                      }
+                    )}
                   </TableBody>
                 </Table>
 
@@ -1404,6 +1907,21 @@ export default function OrdenesVenta() {
               </div>
             </div>
           )}
+
+          <DialogFooter>
+            {selectedOrden && (
+              <Button
+                onClick={() => void handleDownloadPDF(selectedOrden)}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Download size={16} className="mr-2" />
+                Descargar PDF
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setIsViewModalOpen(false)}>
+              Cerrar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1418,8 +1936,10 @@ export default function OrdenesVenta() {
 
           <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             {selectedOrden
-              ? `Vas a anular la orden ${selectedOrden.codigo_orden_venta || `OV-${selectedOrden.id_orden_venta}`
-              }.`
+              ? `Vas a anular la orden ${
+                  selectedOrden.codigo_orden_venta ||
+                  `OV-${selectedOrden.id_orden_venta}`
+                }.`
               : "No hay orden seleccionada."}
           </div>
 
@@ -1469,7 +1989,9 @@ export default function OrdenesVenta() {
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Estado Actual:</span>
                 <span className="font-medium">
-                  {getEstadoNombre(estadoCambioPendiente.orden.estado_orden_venta)}
+                  {getEstadoNombre(
+                    estadoCambioPendiente.orden.estado_orden_venta
+                  )}
                 </span>
               </div>
 

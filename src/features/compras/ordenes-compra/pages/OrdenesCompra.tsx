@@ -64,6 +64,8 @@ import {
   getFechaActual,
 } from "../services/ordenes-compra.mapper";
 
+import logoVmanage from "../../../../assets/images/VLogo.png"
+
 import {
   comprasService,
   type BasicOption,
@@ -667,147 +669,364 @@ export default function Compras() {
     }
   };
 
-  const generateCompraPDF = (compra: Compra) => {
-    const doc = new jsPDF();
+type PdfImageInfo = {
+  dataUrl: string;
+  width: number;
+  height: number;
+};
 
-    doc.setFontSize(20);
-    doc.setFont("helvetica", "bold");
-    doc.text("ORDEN DE COMPRA", 105, 20, { align: "center" });
+const loadImageInfoAsDataUrl = (src: string): Promise<PdfImageInfo> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
 
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
 
-    doc.text(`N° Orden: ${compra.numeroOrden}`, 20, 40);
-    doc.text(`Proveedor: ${compra.proveedor}`, 20, 46);
-    doc.text(`Término de pago: ${compra.terminoPago || "-"}`, 20, 52);
-    doc.text(`Bodega: ${compra.bodega || "-"}`, 20, 58);
-
-    doc.text(
-      `Fecha: ${
-        compra.fecha
-          ? new Date(compra.fecha).toLocaleDateString("es-CO")
-          : "-"
-      }`,
-      120,
-      40
-    );
-    doc.text(
-      `Fecha Entrega: ${
-        compra.fechaEntrega
-          ? new Date(compra.fechaEntrega).toLocaleDateString("es-CO")
-          : "-"
-      }`,
-      120,
-      46
-    );
-    doc.text(`Estado: ${compra.estado}`, 120, 52);
-
-    doc.setLineWidth(0.5);
-    doc.line(20, 64, 190, 64);
-
-    if (compra.productos && compra.productos.length > 0) {
-      const tableData = compra.productos.map((item) => [
-        item.producto.nombre,
-        String(item.cantidad),
-        `${item.ivaNombre} (${item.ivaPorcentaje.toFixed(2)}%)`,
-        `$${item.precio.toLocaleString("es-CO", {
-          minimumFractionDigits: 2,
-        })}`,
-        `$${item.subtotal.toLocaleString("es-CO", {
-          minimumFractionDigits: 2,
-        })}`,
-      ]);
-
-      autoTable(doc, {
-        startY: 70,
-        head: [["Producto", "Cantidad", "IVA", "Precio Unit.", "Subtotal"]],
-        body: tableData,
-        theme: "grid",
-        styles: { fontSize: 8, cellPadding: 3 },
-        columnStyles: {
-          0: { cellWidth: 58 },
-          1: { cellWidth: 22, halign: "center" },
-          2: { cellWidth: 32, halign: "center" },
-          3: { cellWidth: 38, halign: "right" },
-          4: { cellWidth: 40, halign: "right" },
-        },
-      });
-    }
-
-    const finalY = (doc as any).lastAutoTable?.finalY || 70;
-    const totalesY = finalY + 10;
-
-    doc.text("Subtotal:", 130, totalesY);
-    doc.text(
-      `$${compra.subtotal.toLocaleString("es-CO", {
-        minimumFractionDigits: 2,
-      })}`,
-      190,
-      totalesY,
-      { align: "right" }
-    );
-
-    doc.text("IVA:", 130, totalesY + 6);
-    doc.text(
-      `$${compra.impuestos.toLocaleString("es-CO", {
-        minimumFractionDigits: 2,
-      })}`,
-      190,
-      totalesY + 6,
-      { align: "right" }
-    );
-
-    doc.setLineWidth(0.3);
-    doc.line(130, totalesY + 10, 190, totalesY + 10);
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
-    doc.text("Total:", 130, totalesY + 16);
-    doc.text(
-      `$${compra.total.toLocaleString("es-CO", {
-        minimumFractionDigits: 2,
-      })}`,
-      190,
-      totalesY + 16,
-      { align: "right" }
-    );
-
-    if (compra.observaciones) {
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      doc.text("Observaciones:", 20, totalesY + 30);
-      const splitObs = doc.splitTextToSize(compra.observaciones, 170);
-      doc.text(splitObs, 20, totalesY + 36);
-    }
-
-    const pageHeight = doc.internal.pageSize.height;
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "italic");
-    doc.text(
-      `Generado el ${new Date().toLocaleString("es-CO")}`,
-      105,
-      pageHeight - 10,
-      { align: "center" }
-    );
-
-    doc.save(`Orden_Compra_${compra.numeroOrden}.pdf`);
-    toast.success("PDF descargado exitosamente");
-  };
-
-  const handleDownloadPDF = async (compra: Compra) => {
-    try {
-      if (compra.productos?.length) {
-        generateCompraPDF(compra);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        reject(new Error("No se pudo obtener el contexto del canvas"));
         return;
       }
 
-      const compraFull = await comprasService.getById(compra.id);
-      generateCompraPDF(compraFull);
-    } catch (error) {
-      console.error("Error generando PDF:", error);
-      toast.error("No se pudo generar el PDF de la compra");
-    }
+      ctx.drawImage(img, 0, 0);
+
+      resolve({
+        dataUrl: canvas.toDataURL("image/png"),
+        width: img.naturalWidth,
+        height: img.naturalHeight,
+      });
+    };
+
+    img.onerror = () => reject(new Error("No se pudo cargar el logo"));
+    img.src = src;
+  });
+};
+
+const generateCompraPDF = async (compra: Compra) => {
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const marginX = 14;
+  const rightX = pageWidth - marginX;
+
+  const COLORS = {
+    primary: [14, 116, 217] as const,
+    primarySoft: [239, 246, 255] as const,
+    primaryLine: [191, 219, 254] as const,
+    text: [51, 65, 85] as const,
+    muted: [100, 116, 139] as const,
+    card: [248, 250, 252] as const,
+    successBg: [220, 252, 231] as const,
+    successText: [22, 101, 52] as const,
+    dangerBg: [254, 226, 226] as const,
+    dangerText: [153, 27, 27] as const,
+    warningBg: [255, 247, 237] as const,
+    warningText: [180, 83, 9] as const,
+    border: [226, 232, 240] as const,
   };
+
+  const formatMoney = (value: number) =>
+    `$${Number(value || 0).toLocaleString("es-CO", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+
+  const formatDate = (value?: string | null) =>
+    value ? new Date(value).toLocaleDateString("es-CO") : "-";
+
+  const getEstadoStyle = (estado: string) => {
+    const normalized = (estado || "").toLowerCase();
+
+    if (normalized.includes("aprob")) {
+      return {
+        bg: COLORS.successBg,
+        text: COLORS.successText,
+        label: estado,
+      };
+    }
+
+    if (normalized.includes("anulad")) {
+      return {
+        bg: COLORS.dangerBg,
+        text: COLORS.dangerText,
+        label: estado,
+      };
+    }
+
+    return {
+      bg: COLORS.warningBg,
+      text: COLORS.warningText,
+      label: estado || "Pendiente",
+    };
+  };
+
+  let logo: PdfImageInfo | null = null;
+  try {
+    logo = await loadImageInfoAsDataUrl(logoVmanage);
+  } catch (error) {
+    console.warn("No se pudo cargar el logo para el PDF:", error);
+  }
+
+  // Header
+  doc.setFillColor(...COLORS.primary);
+  doc.rect(0, 0, pageWidth, 34, "F");
+
+  // Línea inferior decorativa del header
+  doc.setFillColor(9, 92, 181);
+  doc.rect(0, 34, pageWidth, 1.2, "F");
+
+  // Logo sin fondo blanco
+  if (logo) {
+    const maxLogoWidth = 22;
+    const maxLogoHeight = 14;
+    const scale = Math.min(
+      maxLogoWidth / logo.width,
+      maxLogoHeight / logo.height
+    );
+
+    const drawWidth = logo.width * scale;
+    const drawHeight = logo.height * scale;
+    const logoX = marginX;
+    const logoY = (34 - drawHeight) / 2;
+
+    doc.addImage(logo.dataUrl, "PNG", logoX, logoY, drawWidth, drawHeight);
+  }
+
+  // Título
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.text("ORDEN DE COMPRA", pageWidth / 2, 14.8, { align: "center" });
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.text("VManage • Gestión empresarial", pageWidth / 2, 21.8, {
+    align: "center",
+  });
+
+  // Datos a la derecha
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.7);
+  doc.text(`Código: ${compra.numeroOrden || "-"}`, rightX, 11.5, {
+    align: "right",
+  });
+  doc.text(`Fecha: ${formatDate(compra.fecha)}`, rightX, 17.8, {
+    align: "right",
+  });
+  doc.text(`Entrega: ${formatDate(compra.fechaEntrega)}`, rightX, 24.1, {
+    align: "right",
+  });
+
+  // Tarjeta información general
+  doc.setFillColor(...COLORS.card);
+  doc.roundedRect(marginX, 42, pageWidth - marginX * 2, 34, 3, 3, "F");
+
+  doc.setTextColor(...COLORS.text);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10.5);
+  doc.text("Información general", marginX + 4, 49);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9.2);
+
+  const proveedorLines = doc.splitTextToSize(compra.proveedor || "-", 70);
+
+  doc.text("Proveedor:", marginX + 4, 56);
+  doc.text(proveedorLines, marginX + 28, 56);
+
+  doc.text("Término pago:", marginX + 4, 65);
+  doc.text(compra.terminoPago || "-", marginX + 28, 65);
+
+  doc.text("Bodega:", 112, 56);
+  doc.text(compra.bodega || "-", 128, 56);
+
+  const estadoStyle = getEstadoStyle(compra.estado);
+  doc.setFillColor(estadoStyle.bg[0], estadoStyle.bg[1], estadoStyle.bg[2]);
+  doc.roundedRect(112, 60, 44, 9.5, 3, 3, "F");
+
+  doc.setTextColor(estadoStyle.text[0], estadoStyle.text[1], estadoStyle.text[2]);
+  doc.setFont("helvetica", "bold");
+  doc.text(`Estado: ${estadoStyle.label}`, 134, 66.4, { align: "center" });
+
+  // Línea separadora
+  doc.setDrawColor(...COLORS.primaryLine);
+  doc.setLineWidth(0.6);
+  doc.line(marginX, 82, rightX, 82);
+
+  // Tabla de productos
+  const tableData =
+    compra.productos?.map((item) => [
+      item.producto?.nombre || "-",
+      String(item.cantidad ?? 0),
+      `${item.ivaNombre || "IVA"} (${Number(item.ivaPorcentaje || 0).toFixed(
+        2
+      )}%)`,
+      formatMoney(item.precio || 0),
+      formatMoney(item.subtotal || 0),
+    ]) || [];
+
+  autoTable(doc, {
+    startY: 88,
+    margin: { left: marginX, right: marginX },
+    head: [["Producto", "Cantidad", "IVA", "Precio Unit.", "Subtotal"]],
+    body: tableData.length
+      ? tableData
+      : [["Sin productos", "-", "-", "-", "-"]],
+    theme: "grid",
+    headStyles: {
+      fillColor: [...COLORS.primary],
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+      fontSize: 9,
+      halign: "center",
+      valign: "middle",
+      lineColor: [...COLORS.primary],
+      lineWidth: 0.1,
+    },
+    bodyStyles: {
+      fontSize: 8.5,
+      textColor: [...COLORS.text],
+      lineColor: [...COLORS.border],
+      lineWidth: 0.1,
+      valign: "middle",
+    },
+    alternateRowStyles: {
+      fillColor: [...COLORS.primarySoft],
+    },
+    styles: {
+      cellPadding: 3.2,
+      overflow: "linebreak",
+    },
+    columnStyles: {
+      0: { cellWidth: 74 },
+      1: { cellWidth: 22, halign: "center" },
+      2: { cellWidth: 34, halign: "center" },
+      3: { cellWidth: 28, halign: "right" },
+      4: { cellWidth: 28, halign: "right" },
+    },
+  });
+
+  let currentY = ((doc as any).lastAutoTable?.finalY || 88) + 8;
+
+  const observacionesLines = compra.observaciones
+    ? doc.splitTextToSize(compra.observaciones, 95)
+    : [];
+
+  const observacionesHeight = compra.observaciones
+    ? Math.max(24, 12 + observacionesLines.length * 4.5)
+    : 0;
+
+  const totalsHeight = 31;
+  const blockHeight = Math.max(observacionesHeight, totalsHeight);
+
+  if (currentY + blockHeight > pageHeight - 24) {
+    doc.addPage();
+    currentY = 20;
+  }
+
+  // Observaciones
+  if (compra.observaciones) {
+    doc.setFillColor(255, 251, 235);
+    doc.roundedRect(marginX, currentY, 108, observacionesHeight, 3, 3, "F");
+
+    doc.setTextColor(146, 64, 14);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text("Observaciones", marginX + 4, currentY + 7);
+
+    doc.setTextColor(87, 83, 78);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.7);
+    doc.text(observacionesLines, marginX + 4, currentY + 13);
+  }
+
+  // Totales
+  const totalsX = compra.observaciones ? 128 : 124;
+  const totalsWidth = compra.observaciones ? 68 : 72;
+
+  doc.setFillColor(...COLORS.card);
+  doc.roundedRect(totalsX, currentY, totalsWidth, totalsHeight, 3, 3, "F");
+
+  doc.setTextColor(...COLORS.text);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9.5);
+
+  doc.text("Subtotal:", totalsX + 4, currentY + 8);
+  doc.text(
+    formatMoney(compra.subtotal || 0),
+    totalsX + totalsWidth - 4,
+    currentY + 8,
+    { align: "right" }
+  );
+
+  doc.text("IVA:", totalsX + 4, currentY + 15);
+  doc.text(
+    formatMoney(compra.impuestos || 0),
+    totalsX + totalsWidth - 4,
+    currentY + 15,
+    { align: "right" }
+  );
+
+  doc.setFillColor(...COLORS.primary);
+  doc.roundedRect(totalsX + 2, currentY + 20, totalsWidth - 4, 9, 2, 2, "F");
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10.5);
+  doc.text("TOTAL", totalsX + 5, currentY + 26);
+  doc.text(
+    formatMoney(compra.total || 0),
+    totalsX + totalsWidth - 4,
+    currentY + 26,
+    { align: "right" }
+  );
+
+  // Footer
+  const generatedAt = new Date().toLocaleString("es-CO");
+  const totalPages = doc.getNumberOfPages();
+
+  for (let page = 1; page <= totalPages; page++) {
+    doc.setPage(page);
+
+    doc.setDrawColor(...COLORS.border);
+    doc.setLineWidth(0.3);
+    doc.line(marginX, pageHeight - 14, rightX, pageHeight - 14);
+
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(8);
+    doc.setTextColor(...COLORS.muted);
+    doc.text(`Generado el ${generatedAt} • VManage`, marginX, pageHeight - 8);
+    doc.text(`Página ${page} de ${totalPages}`, rightX, pageHeight - 8, {
+      align: "right",
+    });
+  }
+
+  doc.save(`Orden_Compra_${compra.numeroOrden}.pdf`);
+  toast.success("PDF descargado exitosamente");
+};
+
+const handleDownloadPDF = async (compra: Compra) => {
+  try {
+    if (compra.productos?.length) {
+      await generateCompraPDF(compra);
+      return;
+    }
+
+    const compraFull = await comprasService.getById(compra.id);
+    await generateCompraPDF(compraFull);
+  } catch (error) {
+    console.error("Error generando PDF:", error);
+    toast.error("No se pudo generar el PDF de la compra");
+  }
+};
 
   const resetCompraForm = () => {
     setFormData({
