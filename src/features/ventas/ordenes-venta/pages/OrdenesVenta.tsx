@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Building2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -747,7 +748,7 @@ export default function OrdenesVenta() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[300px] items-center justify-center text-gray-500">
+      <div className="flex min-h-75 items-center justify-center text-gray-500">
         Cargando órdenes de venta...
       </div>
     );
@@ -756,10 +757,19 @@ export default function OrdenesVenta() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-gray-900">Órdenes de Venta</h2>
-        <p className="text-gray-600 mt-1">
-          Gestiona las órdenes de venta de productos
-        </p>
+        <h2 className="text-xl font-semibold text-gray-900">Órdenes de Venta</h2>
+        <div className="flex items-center gap-2 mt-1">
+          <p className="text-gray-600">
+            Gestiona las órdenes de venta de productos en
+          </p>
+          <Badge
+            variant="outline"
+            className="bg-purple-50 text-purple-700 border-purple-200"
+          >
+            <Building2 size={14} className="mr-1" />
+            {selectedBodegaNombre}
+          </Badge>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -891,20 +901,19 @@ export default function OrdenesVenta() {
                           size="sm"
                           onClick={() => handleToggleEstado(orden)}
                           disabled={isCancelada}
-                          className={`h-7 ${
-                            estadoKey.includes("pendiente")
-                              ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                              : estadoKey.includes("procesando") ||
-                                estadoKey.includes("aprobada") ||
-                                estadoKey.includes("aprobado")
+                          className={`h-7 ${estadoKey.includes("pendiente")
+                            ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                            : estadoKey.includes("procesando") ||
+                              estadoKey.includes("aprobada") ||
+                              estadoKey.includes("aprobado")
                               ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
                               : estadoKey.includes("enviada")
-                              ? "bg-purple-100 text-purple-800 hover:bg-purple-200"
-                              : estadoKey.includes("entregada") ||
-                                estadoKey.includes("aplicada")
-                              ? "bg-green-100 text-green-800 hover:bg-green-200"
-                              : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
-                          }`}
+                                ? "bg-purple-100 text-purple-800 hover:bg-purple-200"
+                                : estadoKey.includes("entregada") ||
+                                  estadoKey.includes("aplicada")
+                                  ? "bg-green-100 text-green-800 hover:bg-green-200"
+                                  : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
+                            }`}
                         >
                           {estadoNombre}
                         </Button>
@@ -952,7 +961,9 @@ export default function OrdenesVenta() {
             </TableBody>
           </Table>
         </div>
+      </div>
 
+      <div>
         {filteredOrdenes.length > 0 && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
             <div className="text-sm text-gray-600">
@@ -1092,17 +1103,17 @@ export default function OrdenesVenta() {
                   value={
                     formMode === "create"
                       ? getEstadoNombre(
-                          estados.find(
-                            (estado) => estado.id_estado_orden_venta === estadoPendienteId
-                          )
+                        estados.find(
+                          (estado) => estado.id_estado_orden_venta === estadoPendienteId
                         )
+                      )
                       : getEstadoNombre(
-                          estados.find(
-                            (estado) =>
-                              String(estado.id_estado_orden_venta) ===
-                              String(formData.id_estado_orden_venta)
-                          )
+                        estados.find(
+                          (estado) =>
+                            String(estado.id_estado_orden_venta) ===
+                            String(formData.id_estado_orden_venta)
                         )
+                      )
                   }
                   readOnly
                   disabled
@@ -1407,9 +1418,8 @@ export default function OrdenesVenta() {
 
           <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             {selectedOrden
-              ? `Vas a anular la orden ${
-                  selectedOrden.codigo_orden_venta || `OV-${selectedOrden.id_orden_venta}`
-                }.`
+              ? `Vas a anular la orden ${selectedOrden.codigo_orden_venta || `OV-${selectedOrden.id_orden_venta}`
+              }.`
               : "No hay orden seleccionada."}
           </div>
 

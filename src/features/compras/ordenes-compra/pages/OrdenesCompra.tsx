@@ -21,6 +21,7 @@ import {
   Download,
   ChevronLeft,
   ChevronRight,
+  Building2,
 } from "lucide-react";
 
 import jsPDF from "jspdf";
@@ -28,6 +29,7 @@ import autoTable from "jspdf-autotable";
 
 import { Button } from "../../../../shared/components/ui/button";
 import { Input } from "../../../../shared/components/ui/input";
+import { Badge } from "../../../../shared/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -73,6 +75,188 @@ import {
   type ProveedorOption,
 } from "../services/ordenes-compra.services";
 
+const normalizeText = (value: unknown) =>
+  String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+
+const safeJsonParse = (value: string) => {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+};
+
+const extractNumberFromUnknown = (value: unknown): number | undefined => {
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
+};
+
+const extractStringFromUnknown = (value: unknown): string | undefined => {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  return undefined;
+};
+
+const extractBodegaIdFromUnknown = (
+  value: unknown,
+  depth = 0
+): number | undefined => {
+  if (depth > 5 || value === null || value === undefined) return undefined;
+
+  const direct = extractNumberFromUnknown(value);
+  if (direct) return direct;
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = extractBodegaIdFromUnknown(item, depth + 1);
+      if (found) return found;
+    }
+    return undefined;
+  }
+
+  if (typeof value !== "object") return undefined;
+
+  const obj = value as Record<string, unknown>;
+
+  const directCandidates: unknown[] = [
+    obj.selectedBodegaId,
+    obj.idBodega,
+    obj.id_bodega,
+    obj.idBodegaActiva,
+    obj.id_bodega_activa,
+    (obj.selectedBodega as any)?.id,
+    (obj.selectedBodega as any)?.idBodega,
+    (obj.selectedBodega as any)?.id_bodega,
+    (obj.bodega as any)?.id,
+    (obj.bodega as any)?.idBodega,
+    (obj.bodega as any)?.id_bodega,
+    (obj.activeBodega as any)?.id,
+    (obj.activeBodega as any)?.idBodega,
+    (obj.activeBodega as any)?.id_bodega,
+  ];
+
+  for (const candidate of directCandidates) {
+    const found = extractNumberFromUnknown(candidate);
+    if (found) return found;
+  }
+
+  for (const candidate of Object.values(obj)) {
+    const found = extractBodegaIdFromUnknown(candidate, depth + 1);
+    if (found) return found;
+  }
+
+  return undefined;
+};
+
+const extractBodegaNombreFromUnknown = (
+  value: unknown,
+  depth = 0
+): string | undefined => {
+  if (depth > 5 || value === null || value === undefined) return undefined;
+
+  const directString = extractStringFromUnknown(value);
+  if (directString) return directString;
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = extractBodegaNombreFromUnknown(item, depth + 1);
+      if (found) return found;
+    }
+    return undefined;
+  }
+
+  if (typeof value !== "object") return undefined;
+
+  const obj = value as Record<string, unknown>;
+
+  const directCandidates: unknown[] = [
+    obj.selectedBodegaNombre,
+    obj.selectedBodegaName,
+    obj.bodegaNombreActiva,
+    obj.nombre_bodega,
+    obj.nombreBodega,
+    (obj.selectedBodega as any)?.nombre_bodega,
+    (obj.selectedBodega as any)?.nombreBodega,
+    (obj.selectedBodega as any)?.nombre,
+    (obj.bodega as any)?.nombre_bodega,
+    (obj.bodega as any)?.nombreBodega,
+    (obj.bodega as any)?.nombre,
+    (obj.activeBodega as any)?.nombre_bodega,
+    (obj.activeBodega as any)?.nombreBodega,
+    (obj.activeBodega as any)?.nombre,
+  ];
+
+  for (const candidate of directCandidates) {
+    const found = extractStringFromUnknown(candidate);
+    if (found) return found;
+  }
+
+  for (const candidate of Object.values(obj)) {
+    const found = extractBodegaNombreFromUnknown(candidate, depth + 1);
+    if (found) return found;
+  }
+
+  return undefined;
+};
+
+const getStoredBodegaState = () => {
+  if (typeof window === "undefined") {
+    return {
+      id: undefined as number | undefined,
+      nombre: "",
+    };
+  }
+
+  const storages = [window.localStorage, window.sessionStorage];
+
+  let foundId: number | undefined;
+  let foundNombre = "";
+
+  for (const storage of storages) {
+    const rawSelectedBodega = storage.getItem("selectedBodega");
+    const rawSelectedBodegaId =
+      storage.getItem("selectedBodegaId") ||
+      storage.getItem("idBodegaActiva") ||
+      storage.getItem("id_bodega_activa");
+
+    const rawSelectedBodegaNombre =
+      storage.getItem("selectedBodegaNombre") ||
+      storage.getItem("selectedBodegaName");
+
+    if (!foundId && rawSelectedBodegaId) {
+      foundId = extractNumberFromUnknown(rawSelectedBodegaId);
+    }
+
+    if (!foundNombre && rawSelectedBodegaNombre) {
+      foundNombre = extractStringFromUnknown(rawSelectedBodegaNombre) ?? "";
+    }
+
+    if (rawSelectedBodega) {
+      const parsed = safeJsonParse(rawSelectedBodega);
+
+      if (parsed !== undefined) {
+        if (!foundId) {
+          foundId = extractBodegaIdFromUnknown(parsed);
+        }
+
+        if (!foundNombre) {
+          foundNombre = extractBodegaNombreFromUnknown(parsed) ?? "";
+        }
+      }
+    }
+
+    if (foundId || foundNombre) break;
+  }
+
+  return {
+    id: foundId,
+    nombre: foundNombre,
+  };
+};
+
 export default function Compras() {
   const [searchTerm, setSearchTerm] = useState("");
   const [compras, setCompras] = useState<Compra[]>([]);
@@ -97,26 +281,93 @@ export default function Compras() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
+  const [storedBodega, setStoredBodega] = useState<{
+    id?: number;
+    nombre: string;
+  }>({
+    id: undefined,
+    nombre: "",
+  });
+
+  const [bodegaReady, setBodegaReady] = useState(false);
+
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams<{ id: string }>();
 
-  const outlet = useOutletContext<
+  const {
+    selectedBodegaId: outletSelectedBodegaId,
+    selectedBodegaNombre: outletSelectedBodegaNombre,
+  } = useOutletContext<
     AppOutletContext & {
       selectedBodegaId?: number;
       selectedBodegaNombre?: string;
     }
   >();
 
-  const selectedBodega = (outlet as any)?.selectedBodegaNombre ?? "";
-  const selectedBodegaId = (outlet as any)?.selectedBodegaId;
+  useEffect(() => {
+    const contextIsTodas =
+      normalizeText(outletSelectedBodegaNombre) ===
+        normalizeText("Todas las bodegas") ||
+      normalizeText(outletSelectedBodegaNombre) === normalizeText("Todas");
+
+    const contextId = extractNumberFromUnknown(outletSelectedBodegaId);
+
+    if (contextIsTodas || contextId) {
+      setStoredBodega({
+        id: contextId,
+        nombre:
+          outletSelectedBodegaNombre ||
+          (contextIsTodas ? "Todas las bodegas" : ""),
+      });
+      setBodegaReady(true);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      const stored = getStoredBodegaState();
+      setStoredBodega(stored);
+      setBodegaReady(true);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [outletSelectedBodegaId, outletSelectedBodegaNombre]);
+
+  const effectiveSelectedBodegaNombre = (
+    outletSelectedBodegaNombre ||
+    storedBodega.nombre ||
+    "Todas las bodegas"
+  ).trim();
+
+  const isTodasLasBodegas =
+    normalizeText(effectiveSelectedBodegaNombre) ===
+      normalizeText("Todas las bodegas") ||
+    normalizeText(effectiveSelectedBodegaNombre) === normalizeText("Todas");
+
+  const effectiveSelectedBodegaId = isTodasLasBodegas
+    ? undefined
+    : extractNumberFromUnknown(outletSelectedBodegaId) ?? storedBodega.id;
+
+  const hasResolvedBodega =
+    bodegaReady &&
+    (isTodasLasBodegas ||
+      Number.isInteger(Number(effectiveSelectedBodegaId)));
+
+  const badgeBodegaLabel =
+    !effectiveSelectedBodegaNombre ||
+    normalizeText(effectiveSelectedBodegaNombre) === normalizeText("Todas")
+      ? "Todas las bodegas"
+      : effectiveSelectedBodegaNombre;
 
   const isCrear = location.pathname.endsWith("/ordenes-compra/crear");
   const isVer = location.pathname.endsWith("/ver");
   const isEditar = location.pathname.endsWith("/editar");
   const isAnular = location.pathname.endsWith("/anular");
 
-  const closeToList = useCallback(() => navigate("/app/ordenes-compra"), [navigate]);
+  const closeToList = useCallback(
+    () => navigate("/app/ordenes-compra"),
+    [navigate]
+  );
 
   const handleView = (c: Compra) => {
     navigate(`/app/ordenes-compra/${c.id}/ver`);
@@ -273,7 +524,7 @@ export default function Compras() {
   const loadCompras = useCallback(async () => {
     try {
       setIsLoading(true);
-      const rows = await comprasService.getAll(selectedBodegaId);
+      const rows = await comprasService.getAll(effectiveSelectedBodegaId);
       setCompras(rows);
     } catch (error) {
       console.error("Error cargando compras:", error);
@@ -281,7 +532,7 @@ export default function Compras() {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedBodegaId]);
+  }, [effectiveSelectedBodegaId]);
 
   const loadCompraDetalle = useCallback(
     async (id: number) => {
@@ -336,7 +587,7 @@ export default function Compras() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedBodegaId, selectedBodega]);
+  }, [searchTerm, effectiveSelectedBodegaId, effectiveSelectedBodegaNombre]);
 
   const totalPages = Math.ceil(filteredCompras.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -433,7 +684,9 @@ export default function Compras() {
 
     doc.text(
       `Fecha: ${
-        compra.fecha ? new Date(compra.fecha).toLocaleDateString("es-CO") : "-"
+        compra.fecha
+          ? new Date(compra.fecha).toLocaleDateString("es-CO")
+          : "-"
       }`,
       120,
       40
@@ -568,10 +821,12 @@ export default function Compras() {
       estado: "Pendiente",
       observaciones: "",
       bodega:
-        selectedBodega && selectedBodega !== "Todas las bodegas"
-          ? selectedBodega
+        !isTodasLasBodegas && effectiveSelectedBodegaNombre
+          ? effectiveSelectedBodegaNombre
           : "",
-      bodegaId: selectedBodegaId ? String(selectedBodegaId) : "",
+      bodegaId: effectiveSelectedBodegaId
+        ? String(effectiveSelectedBodegaId)
+        : "",
     });
 
     setSelectedProductoId("");
@@ -583,9 +838,15 @@ export default function Compras() {
   };
 
   useEffect(() => {
-    if (!isCrear) return;
+    if (!isCrear || !hasResolvedBodega) return;
     resetCompraForm();
-  }, [isCrear, selectedBodega, selectedBodegaId]);
+  }, [
+    isCrear,
+    hasResolvedBodega,
+    effectiveSelectedBodegaNombre,
+    effectiveSelectedBodegaId,
+    isTodasLasBodegas,
+  ]);
 
   useEffect(() => {
     if (!isEditar) return;
@@ -614,8 +875,9 @@ export default function Compras() {
   }, [isEditar, compraDetalle]);
 
   useEffect(() => {
+    if (!hasResolvedBodega) return;
     loadCompras();
-  }, [loadCompras]);
+  }, [hasResolvedBodega, loadCompras]);
 
   useEffect(() => {
     loadCatalogos();
@@ -886,10 +1148,19 @@ export default function Compras() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-gray-900">Órdenes de Compra</h2>
-        <p className="text-gray-600 mt-1">
-          Administra la información de tus órdenes de compra  
-        </p>
+        <h2 className="text-xl font-semibold text-gray-900">Órdenes de Compra</h2>
+        <div className="flex items-center gap-2 mt-1">
+          <p className="text-gray-600">
+            Gestiona las órdenes de compra en
+          </p>
+          <Badge
+            variant="outline"
+            className="bg-purple-50 text-purple-700 border-purple-200"
+          >
+            <Building2 size={14} className="mr-1" />
+            {badgeBodegaLabel}
+          </Badge>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -979,7 +1250,7 @@ export default function Compras() {
             </TableHeader>
 
             <TableBody>
-              {isLoading ? (
+              {isLoading || !hasResolvedBodega ? (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-8 text-gray-500">
                     Cargando órdenes de compra...
@@ -1106,7 +1377,9 @@ export default function Compras() {
             </TableBody>
           </Table>
         </div>
+      </div>
 
+      <div>
         {filteredCompras.length > 0 && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
             <div className="text-sm text-gray-600">
@@ -1447,7 +1720,7 @@ export default function Compras() {
 
               {productosOrden.length > 0 ? (
                 <div className="border rounded-lg overflow-hidden">
-                  <div className="max-h-[260px] overflow-y-auto">
+                  <div className="max-h-65 overflow-y-auto">
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-gray-50">
@@ -1685,9 +1958,9 @@ export default function Compras() {
                   <Label className="text-gray-600">Fecha de Entrega</Label>
                   <p className="font-medium">
                     {compraSeleccionada.fechaEntrega
-                      ? new Date(compraSeleccionada.fechaEntrega).toLocaleDateString(
-                          "es-CO"
-                        )
+                      ? new Date(
+                          compraSeleccionada.fechaEntrega
+                        ).toLocaleDateString("es-CO")
                       : "-"}
                   </p>
                 </div>

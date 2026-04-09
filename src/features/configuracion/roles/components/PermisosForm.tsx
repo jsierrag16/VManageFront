@@ -1,6 +1,6 @@
 import { Checkbox } from "../../../../shared/components/ui/checkbox";
 import { Label } from "../../../../shared/components/ui/label";
-import { Permisos } from "../../../../data/roles";
+import { Permisos } from "../types/roles.types";
 
 interface PermisosFormProps {
   formPermisos: Permisos;
@@ -50,7 +50,7 @@ export function PermisosForm({
   return (
     <div className="grid grid-cols-1 gap-4">
       {/* Dashboard */}
-      <div className="border border-blue-200 rounded-lg p-4 bg-gradient-to-br from-blue-50 to-white shadow-sm">
+      <div className="border border-blue-200 rounded-lg p-4 bg-linear-to-r from-blue-50 to-white shadow-sm">
         <div className="flex items-center justify-between mb-3 pb-2 border-b border-blue-100">
           <p className="font-semibold text-gray-900 flex items-center gap-2">
             <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
@@ -67,7 +67,7 @@ export function PermisosForm({
       </div>
 
       {/* Existencias */}
-      <div className="border border-orange-200 rounded-lg p-4 bg-gradient-to-br from-orange-50 to-white shadow-sm">
+      <div className="border border-orange-200 rounded-lg p-4 bg-linear-to-r from-orange-50 to-white shadow-sm">
         <div className="flex items-center justify-between mb-3 pb-2 border-b border-orange-100">
           <p className="font-semibold text-gray-900 flex items-center gap-2">
             <span className="w-2 h-2 bg-orange-500 rounded-full"></span>
@@ -174,7 +174,7 @@ export function PermisosForm({
       </div>
 
       {/* Compras */}
-      <div className="border border-green-200 rounded-lg p-4 bg-gradient-to-br from-green-50 to-white shadow-sm">
+      <div className="border border-green-200 rounded-lg p-4 bg-linear-to-r from-green-50 to-white shadow-sm">
         <div className="flex items-center justify-between mb-3 pb-2 border-b border-green-100">
           <p className="font-semibold text-gray-900 flex items-center gap-2">
             <span className="w-2 h-2 bg-green-500 rounded-full"></span>
@@ -296,7 +296,7 @@ export function PermisosForm({
       </div>
 
       {/* Ventas */}
-      <div className="border border-purple-200 rounded-lg p-4 bg-gradient-to-br from-purple-50 to-white shadow-sm">
+      <div className="border border-purple-200 rounded-lg p-4 bg-linear-to-r from-purple-50 to-white shadow-sm">
         <div className="flex items-center justify-between mb-3 pb-2 border-b border-purple-100">
           <p className="font-semibold text-gray-900 flex items-center gap-2">
             <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
@@ -480,7 +480,7 @@ export function PermisosForm({
       </div>
 
       {/* Administración */}
-      <div className="border border-pink-200 rounded-lg p-4 bg-gradient-to-br from-pink-50 to-white shadow-sm">
+      <div className="border border-pink-200 rounded-lg p-4 bg-linear-to-r from-pink-50 to-white shadow-sm">
         <div className="flex items-center justify-between mb-3 pb-2 border-b border-pink-100">
           <p className="font-semibold text-gray-900 flex items-center gap-2">
             <span className="w-2 h-2 bg-pink-500 rounded-full"></span>

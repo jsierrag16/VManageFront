@@ -33,7 +33,7 @@ import { Label } from "../../../../shared/components/ui/label";
 import { Badge } from "../../../../shared/components/ui/badge";
 import { Textarea } from "../../../../shared/components/ui/textarea";
 import { toast } from "sonner";
-import { Rol, Permisos, createEmptyPermisos } from "../../../../data/roles";
+import { Rol, Permisos, createEmptyPermisos } from "../types/roles.types";
 import {
   getRoles,
   createRol,
@@ -782,9 +782,9 @@ export default function Roles() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-gray-900">Gestión de Roles</h2>
+        <h2 className="text-xl font-semibold text-gray-900">Roles</h2>
         <p className="text-gray-600 mt-1">
-          Administra los roles y permisos del sistema
+          Gestiona los roles y permisos del sistema
         </p>
       </div>
 

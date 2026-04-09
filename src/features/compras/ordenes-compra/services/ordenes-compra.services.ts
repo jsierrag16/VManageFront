@@ -100,14 +100,9 @@ const extractList = <T = any>(raw: any): T[] => {
   return [];
 };
 
-const buildBodegaParamsVariants = (selectedBodegaId?: number) => {
-  if (!selectedBodegaId) return [{}];
-
-  return [
-    { idBodega: selectedBodegaId },
-    { id_bodega: selectedBodegaId },
-    {},
-  ];
+const buildBodegaParams = (selectedBodegaId?: number) => {
+  if (!selectedBodegaId) return {};
+  return { id_bodega: selectedBodegaId };
 };
 
 async function getRequestFirstSuccess(
@@ -304,17 +299,17 @@ type CatalogosResponse = {
 
 export const comprasService = {
   async getAll(selectedBodegaId?: number): Promise<Compra[]> {
-    const paramsVariants = buildBodegaParamsVariants(selectedBodegaId);
+    const params = buildBodegaParams(selectedBodegaId);
 
     const raw = await getRequestFirstSuccess([
-      ...paramsVariants.map((params) => ({
+      {
         url: "/compras",
         params,
-      })),
-      ...paramsVariants.map((params) => ({
+      },
+      {
         url: "/compra",
         params,
-      })),
+      },
     ]);
 
     return extractList(raw).map(mapCompra);

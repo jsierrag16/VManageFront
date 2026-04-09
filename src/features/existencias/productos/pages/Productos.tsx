@@ -804,10 +804,10 @@ export default function Productos({
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-gray-900">Gestión de Existencias</h2>
+        <h2 className="text-xl font-semibold text-gray-900">Existencias</h2>
         <div className="flex items-center gap-2 mt-1">
           <p className="text-gray-600">
-            Administra el inventario y las existencias de productos
+            Gestiona el inventario y las existencias de productos en
           </p>
           <Badge
             variant="outline"

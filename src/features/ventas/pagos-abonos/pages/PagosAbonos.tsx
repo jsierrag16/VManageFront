@@ -14,7 +14,9 @@ import {
   Plus,
   Search,
   TrendingUp,
+  Building2,
 } from "lucide-react";
+import { Badge } from "@/shared/components/ui/badge";
 import { toast } from "sonner";
 
 import { Button } from "@/shared/components/ui/button";
@@ -505,13 +507,23 @@ export default function PagosAbonos() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-gray-900">Pagos y abonos</h2>
-        <p className="text-gray-600 mt-1">
-          Gestiona los pagos y abonos
-        </p>
+        <h2 className="text-xl font-semibold text-gray-900">Pagos y abonos</h2>
+        <div className="flex items-center gap-2 mt-1">
+          <p className="text-gray-600">
+            Gestiona los pagos y abonos en
+          </p>
+          <Badge
+            variant="outline"
+            className="bg-purple-50 text-purple-700 border-purple-200"
+          >
+            <Building2 size={14} className="mr-1" />
+            {selectedBodegaNombre}
+          </Badge>
+        </div>
       </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl shadow-lg p-6">
+        <div className="bg-linear-to-br from-yellow-500 to-yellow-600 rounded-xl shadow-lg p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-yellow-100 text-sm">Total facturado</p>
@@ -523,7 +535,7 @@ export default function PagosAbonos() {
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-6">
+        <div className="bg-linear-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-green-100 text-sm">Total abonado</p>
@@ -535,7 +547,7 @@ export default function PagosAbonos() {
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-6">
+        <div className="bg-linear-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-blue-100 text-sm">Saldo pendiente</p>
@@ -664,7 +676,9 @@ export default function PagosAbonos() {
             </TableBody>
           </Table>
         </div>
+      </div>
 
+      <div>
         {facturasFiltradas.length > 0 && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
             <div className="text-sm text-gray-600">

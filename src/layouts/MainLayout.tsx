@@ -4,8 +4,6 @@ import { Sidebar } from "./components/Sidebar";
 import { Navbar } from "./components/Navbar";
 import { Toaster } from "../shared/components/ui/sonner";
 import { useAuth } from "../shared/context/AuthContext";
-import { Traslado } from "../data/traslados";
-import { Producto } from "../data/productos";
 import { NotificationItem } from "../shared/notificaciones/types/notification.types";
 
 export type AppOutletContext = {
@@ -16,8 +14,6 @@ export type AppOutletContext = {
   vManageLogo?: string;
   vManageLogoSmall?: string;
   gvmLogo?: string;
-  traslados?: Traslado[];
-  productos?: Producto[];
   selectedBodegaId: number | null;
   selectedBodegaNombre: string;
   bodegasDisponibles: { id: number; nombre: string }[];
@@ -32,8 +28,6 @@ type MainLayoutProps = {
   vManageLogo?: string;
   vManageLogoSmall?: string;
   gvmLogo?: string;
-  traslados?: Traslado[];
-  productos?: Producto[];
 };
 
 export default function MainLayout({
@@ -44,14 +38,11 @@ export default function MainLayout({
   vManageLogo,
   vManageLogoSmall,
   gvmLogo,
-  traslados = [],
-  productos = [],
 }: MainLayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const navigate = useNavigate();
-
   const { bodegasDisponibles, selectedBodegaId, isBodegaFijada } = useAuth();
 
   const tieneVariasBodegas = bodegasDisponibles.length >= 2;
@@ -60,8 +51,8 @@ export default function MainLayout({
     selectedBodegaId === 0 && tieneVariasBodegas
       ? "Todas las bodegas"
       : bodegasDisponibles.find((b) => b.id === selectedBodegaId)?.nombre ||
-      bodegasDisponibles[0]?.nombre ||
-      "Sin bodega";
+        bodegasDisponibles[0]?.nombre ||
+        "Sin bodega";
 
   const handleNavigateToTraslados = (notification?: NotificationItem) => {
     const trasladoId = notification?.action?.entityId;
@@ -108,10 +99,9 @@ export default function MainLayout({
             currentUser={currentUser}
             onLogout={onLogout}
             onOpenProfile={() => navigate("/app/perfil")}
-            traslados={traslados}
-            productos={productos}
             onNavigateToTraslados={handleNavigateToTraslados}
             onNavigateToExistencias={handleNavigateToExistencias}
+            isOpen={isSidebarOpen}
           />
 
           <main className="flex-1 p-4 lg:p-8">
@@ -124,9 +114,8 @@ export default function MainLayout({
                 vManageLogo,
                 vManageLogoSmall,
                 gvmLogo,
-                traslados,
-                productos,
-                selectedBodegaId: selectedBodegaId === 0 ? null : selectedBodegaId,
+                selectedBodegaId:
+                  selectedBodegaId === 0 ? null : selectedBodegaId,
                 selectedBodegaNombre,
                 bodegasDisponibles,
                 isBodegaFijada,

@@ -347,15 +347,8 @@ export default function Clientes() {
 
   useEffect(() => {
     loadMeta();
-  }, [loadMeta]);
-
-  useEffect(() => {
-    const delay = setTimeout(() => {
-      loadClientes();
-    }, 300);
-
-    return () => clearTimeout(delay);
-  }, [loadClientes]);
+    loadClientes();
+  }, [loadMeta, loadClientes]);
 
   // -------------------------
   // Filtrar clientes
@@ -550,7 +543,7 @@ export default function Clientes() {
       console.error(error);
       toast.error(
         error?.response?.data?.message ||
-          "No se pudo crear el cliente"
+        "No se pudo crear el cliente"
       );
     }
   };
@@ -580,7 +573,7 @@ export default function Clientes() {
       console.error(error);
       toast.error(
         error?.response?.data?.message ||
-          "No se pudo actualizar el cliente"
+        "No se pudo actualizar el cliente"
       );
     }
   };
@@ -598,7 +591,7 @@ export default function Clientes() {
       console.error(error);
       toast.error(
         error?.response?.data?.message ||
-          "No se pudo eliminar el cliente"
+        "No se pudo eliminar el cliente"
       );
     }
   };
@@ -623,7 +616,7 @@ export default function Clientes() {
       console.error(error);
       toast.error(
         error?.response?.data?.message ||
-          "No se pudo cambiar el estado"
+        "No se pudo cambiar el estado"
       );
     }
   };
@@ -639,9 +632,9 @@ export default function Clientes() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-gray-900">Gestión de Clientes</h2>
+        <h2 className="text-xl font-semibold text-gray-900">Clientes</h2>
         <p className="text-gray-600 mt-1">
-          Administra la información de tus clientes
+          Gestiona la información de tus clientes
         </p>
       </div>
 
@@ -665,11 +658,10 @@ export default function Clientes() {
             size="sm"
             variant={estadoFilter === "todos" ? "default" : "ghost"}
             onClick={() => setEstadoFilter("todos")}
-            className={`h-8 ${
-              estadoFilter === "todos"
-                ? "bg-blue-600 text-white hover:bg-blue-700"
-                : "hover:bg-gray-200"
-            }`}
+            className={`h-8 ${estadoFilter === "todos"
+              ? "bg-blue-600 text-white hover:bg-blue-700"
+              : "hover:bg-gray-200"
+              }`}
           >
             Todos
           </Button>
@@ -677,11 +669,10 @@ export default function Clientes() {
             size="sm"
             variant={estadoFilter === "activo" ? "default" : "ghost"}
             onClick={() => setEstadoFilter("activo")}
-            className={`h-8 ${
-              estadoFilter === "activo"
-                ? "bg-green-600 text-white hover:bg-green-700"
-                : "hover:bg-gray-200"
-            }`}
+            className={`h-8 ${estadoFilter === "activo"
+              ? "bg-green-600 text-white hover:bg-green-700"
+              : "hover:bg-gray-200"
+              }`}
           >
             Activos
           </Button>
@@ -689,11 +680,10 @@ export default function Clientes() {
             size="sm"
             variant={estadoFilter === "inactivo" ? "default" : "ghost"}
             onClick={() => setEstadoFilter("inactivo")}
-            className={`h-8 ${
-              estadoFilter === "inactivo"
-                ? "bg-red-600 text-white hover:bg-red-700"
-                : "hover:bg-gray-200"
-            }`}
+            className={`h-8 ${estadoFilter === "inactivo"
+              ? "bg-red-600 text-white hover:bg-red-700"
+              : "hover:bg-gray-200"
+              }`}
           >
             Inactivos
           </Button>
@@ -777,11 +767,10 @@ export default function Clientes() {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleConfirmEstado(cliente)}
-                        className={`h-7 ${
-                          cliente.estado === "Activo"
-                            ? "bg-green-100 text-green-800 hover:bg-green-200"
-                            : "bg-red-100 text-red-800 hover:bg-red-200"
-                        }`}
+                        className={`h-7 ${cliente.estado === "Activo"
+                          ? "bg-green-100 text-green-800 hover:bg-green-200"
+                          : "bg-red-100 text-red-800 hover:bg-red-200"
+                          }`}
                       >
                         {cliente.estado}
                       </Button>
@@ -823,7 +812,10 @@ export default function Clientes() {
             </TableBody>
           </Table>
         </div>
+      </div>
 
+
+      <div>
         {filteredClientes.length > 0 && !loading && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
             <div className="text-sm text-gray-600">
@@ -898,7 +890,7 @@ export default function Clientes() {
 
           {clienteSeleccionado && (
             <div className="space-y-4">
-              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-100">
+              <div className="bg-linear-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-100">
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">
                   {clienteSeleccionado.nombre}
                 </h3>
@@ -911,11 +903,10 @@ export default function Clientes() {
                     {clienteSeleccionado.tipoCliente}
                   </Badge>
                   <Badge
-                    className={`text-xs hover:bg-current ${
-                      clienteSeleccionado.estado === "Activo"
-                        ? "bg-green-100 text-green-800"
-                        : "bg-red-100 text-red-800"
-                    }`}
+                    className={`text-xs hover:bg-current ${clienteSeleccionado.estado === "Activo"
+                      ? "bg-green-100 text-green-800"
+                      : "bg-red-100 text-red-800"
+                      }`}
                   >
                     {clienteSeleccionado.estado}
                   </Badge>

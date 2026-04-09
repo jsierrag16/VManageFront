@@ -26,7 +26,7 @@ export function DashboardCharts({ salesData, inventoryData, revenueData }: Dashb
       {/* Gráfica 1: Ventas vs Compras */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
         <h3 className="mb-4 font-semibold text-gray-700">Ventas vs Compras</h3>
-        <div className="h-[300px] w-full">
+        <div className="h-75 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={salesData}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
@@ -72,7 +72,7 @@ export function DashboardCharts({ salesData, inventoryData, revenueData }: Dashb
       {/* Gráfica 2: Stock de Inventario */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
         <h3 className="mb-4 font-semibold text-gray-700">Stock de Inventario</h3>
-        <div className="h-[300px] w-full">
+        <div className="h-75 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={inventoryData}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
@@ -107,7 +107,7 @@ export function DashboardCharts({ salesData, inventoryData, revenueData }: Dashb
       {/* Gráfica 3: Ingresos Mensuales (Area Chart) */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 lg:col-span-2 xl:col-span-1">
         <h3 className="mb-4 font-semibold text-gray-700">Ingresos Mensuales Estimados</h3>
-        <div className="h-[300px] w-full">
+        <div className="h-75 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={revenueData}>
               <defs>

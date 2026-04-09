@@ -1,5 +1,12 @@
-import { useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import { useLocation, Link } from "react-router-dom";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Home,
@@ -13,6 +20,11 @@ import {
   Warehouse,
   ArrowRightLeft,
   Shield,
+  Boxes,
+  Receipt,
+  ReceiptText,
+  BadgeDollarSign,
+  type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "../../shared/context/AuthContext";
 
@@ -27,6 +39,21 @@ interface SidebarProps {
   gvmLogo?: string;
 }
 
+type ParentMenu = "inventario" | "compras" | "ventas" | "configuracion";
+
+interface CompactPopupPosition {
+  top: number;
+  left: number;
+}
+
+interface SubItem {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  path: string;
+  visible?: boolean;
+}
+
 export function Sidebar({
   isOpen,
   isMobileOpen,
@@ -39,14 +66,27 @@ export function Sidebar({
   const { pathname } = useLocation();
   const { tienePermiso } = useAuth();
 
-  const [expanded, setExpanded] = useState({
+  const sidebarRef = useRef<HTMLDivElement | null>(null);
+  const compactPopupRef = useRef<HTMLDivElement | null>(null);
+
+  const [expanded, setExpanded] = useState<Record<ParentMenu, boolean>>({
     inventario: false,
     compras: false,
     ventas: false,
     configuracion: false,
   });
 
-  const toggleSubmenu = (key: keyof typeof expanded) => {
+  const [compactMenuOpen, setCompactMenuOpen] = useState<ParentMenu | null>(
+    null
+  );
+
+  const [compactPopupPosition, setCompactPopupPosition] =
+    useState<CompactPopupPosition>({
+      top: 0,
+      left: 0,
+    });
+
+  const toggleSubmenu = (key: ParentMenu) => {
     setExpanded((prev) => {
       const newState = {
         inventario: false,
@@ -59,56 +99,13 @@ export function Sidebar({
     });
   };
 
-  const getFirstSubmenuPath = (itemId: string) => {
-    if (itemId === "inventario") return inventarioSubItems[0]?.path;
-    if (itemId === "compras") return comprasSubItems[0]?.path;
-    if (itemId === "ventas") return ventasSubItems[0]?.path;
-    if (itemId === "configuracion") return configuracionSubItems[0]?.path;
-    return null;
-  };
-
-  const handleMenuClick = (itemId: string) => {
-    const isParentModule =
+  const isParentModule = (itemId: string): itemId is ParentMenu => {
+    return (
       itemId === "inventario" ||
       itemId === "compras" ||
       itemId === "ventas" ||
-      itemId === "configuracion";
-
-    if (isParentModule) {
-      if (!isOpen) {
-        const firstPath = getFirstSubmenuPath(itemId);
-        if (firstPath) {
-          onNavigate(firstPath);
-          onCloseMobile();
-        }
-        return;
-      }
-
-      if (itemId === "inventario") toggleSubmenu("inventario");
-      else if (itemId === "compras") toggleSubmenu("compras");
-      else if (itemId === "ventas") toggleSubmenu("ventas");
-      else if (itemId === "configuracion") toggleSubmenu("configuracion");
-
-      return;
-    }
-
-    setExpanded({
-      inventario: false,
-      compras: false,
-      ventas: false,
-      configuracion: false,
-    });
-
-    if (itemId === "dashboard") onNavigate("/app");
-    else if (itemId === "usuarios") onNavigate("/app/usuarios");
-    else onNavigate("/app");
-
-    onCloseMobile();
-  };
-
-  const handleSubItemClick = (path: string) => {
-    onNavigate(path);
-    onCloseMobile();
+      itemId === "configuracion"
+    );
   };
 
   const isActive = (path: string) => {
@@ -116,7 +113,7 @@ export function Sidebar({
     return pathname.startsWith(path);
   };
 
-  const inventarioSubItems = useMemo(
+  const inventarioSubItems = useMemo<SubItem[]>(
     () =>
       [
         {
@@ -144,7 +141,7 @@ export function Sidebar({
     [tienePermiso]
   );
 
-  const comprasSubItems = useMemo(
+  const comprasSubItems = useMemo<SubItem[]>(
     () =>
       [
         {
@@ -157,14 +154,14 @@ export function Sidebar({
         {
           id: "ordenes-compra",
           label: "Ordenes compra",
-          icon: ShoppingCart,
+          icon: Receipt,
           path: "/app/ordenes-compra",
           visible: tienePermiso("compras", "ordenesCompra"),
         },
         {
           id: "remisiones-compra",
           label: "Remisiones compra",
-          icon: FileText,
+          icon: ReceiptText,
           path: "/app/remisiones-compra",
           visible: tienePermiso("compras", "remisionesCompra"),
         },
@@ -172,7 +169,7 @@ export function Sidebar({
     [tienePermiso]
   );
 
-  const ventasSubItems = useMemo(
+  const ventasSubItems = useMemo<SubItem[]>(
     () =>
       [
         {
@@ -192,21 +189,21 @@ export function Sidebar({
         {
           id: "ordenes-venta",
           label: "Ordenes venta",
-          icon: FileText,
+          icon: Receipt,
           path: "/app/ordenes-venta",
           visible: tienePermiso("ventas", "ordenesVenta"),
         },
         {
           id: "remisiones-venta",
           label: "Remisiones venta",
-          icon: FileText,
+          icon: ReceiptText,
           path: "/app/remisiones-venta",
           visible: tienePermiso("ventas", "remisionesVenta"),
         },
         {
           id: "pagos",
           label: "Pagos abonos",
-          icon: Settings,
+          icon: BadgeDollarSign,
           path: "/app/pagos-abonos",
           visible: tienePermiso("ventas", "pagos"),
         },
@@ -214,7 +211,7 @@ export function Sidebar({
     [tienePermiso]
   );
 
-  const configuracionSubItems = useMemo(
+  const configuracionSubItems = useMemo<SubItem[]>(
     () =>
       [
         {
@@ -229,30 +226,65 @@ export function Sidebar({
   );
 
   const menuItems = useMemo(() => {
-    const items = [];
+    const items: Array<{
+      id: string;
+      name: string;
+      icon: LucideIcon;
+      hasSubmenu: boolean;
+    }> = [];
 
     if (tienePermiso("dashboard")) {
-      items.push({ id: "dashboard", name: "Dashboard", icon: Home, hasSubmenu: false });
+      items.push({
+        id: "dashboard",
+        name: "Dashboard",
+        icon: Home,
+        hasSubmenu: false,
+      });
     }
 
     if (inventarioSubItems.length > 0) {
-      items.push({ id: "inventario", name: "Existencias", icon: Package, hasSubmenu: true });
+      items.push({
+        id: "inventario",
+        name: "Existencias",
+        icon: Boxes,
+        hasSubmenu: true,
+      });
     }
 
     if (comprasSubItems.length > 0) {
-      items.push({ id: "compras", name: "Compras", icon: ShoppingCart, hasSubmenu: true });
+      items.push({
+        id: "compras",
+        name: "Compras",
+        icon: ShoppingCart,
+        hasSubmenu: true,
+      });
     }
 
     if (ventasSubItems.length > 0) {
-      items.push({ id: "ventas", name: "Ventas", icon: FileText, hasSubmenu: true });
+      items.push({
+        id: "ventas",
+        name: "Ventas",
+        icon: ReceiptText,
+        hasSubmenu: true,
+      });
     }
 
     if (configuracionSubItems.length > 0) {
-      items.push({ id: "configuracion", name: "Configuración", icon: Settings, hasSubmenu: true });
+      items.push({
+        id: "configuracion",
+        name: "Configuración",
+        icon: Settings,
+        hasSubmenu: true,
+      });
     }
 
     if (tienePermiso("administracion", "usuarios")) {
-      items.push({ id: "usuarios", name: "Usuarios", icon: Users, hasSubmenu: false });
+      items.push({
+        id: "usuarios",
+        name: "Usuarios",
+        icon: Users,
+        hasSubmenu: false,
+      });
     }
 
     return items;
@@ -264,13 +296,153 @@ export function Sidebar({
     configuracionSubItems,
   ]);
 
+  const getSubmenuItems = (itemId: string): SubItem[] => {
+    if (itemId === "inventario") return inventarioSubItems;
+    if (itemId === "compras") return comprasSubItems;
+    if (itemId === "ventas") return ventasSubItems;
+    if (itemId === "configuracion") return configuracionSubItems;
+    return [];
+  };
+
+  const handleMenuClick = (
+    itemId: string,
+    event?: ReactMouseEvent<HTMLButtonElement>
+  ) => {
+    if (isParentModule(itemId)) {
+      if (!isOpen) {
+        if (event?.currentTarget) {
+          const rect = event.currentTarget.getBoundingClientRect();
+
+          setCompactPopupPosition({
+            top: Math.max(18, rect.top - 6),
+            left: rect.right + 24,
+          });
+        }
+
+        setCompactMenuOpen((prev) => (prev === itemId ? null : itemId));
+        return;
+      }
+
+      setCompactMenuOpen(null);
+      toggleSubmenu(itemId);
+      return;
+    }
+
+    setExpanded({
+      inventario: false,
+      compras: false,
+      ventas: false,
+      configuracion: false,
+    });
+    setCompactMenuOpen(null);
+
+    if (itemId === "dashboard") onNavigate("/app");
+    else if (itemId === "usuarios") onNavigate("/app/usuarios");
+    else onNavigate("/app");
+
+    onCloseMobile();
+  };
+
+  const handleSubItemClick = (path: string) => {
+    setCompactMenuOpen(null);
+    onNavigate(path);
+    onCloseMobile();
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      setCompactMenuOpen(null);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    setCompactMenuOpen(null);
+  }, [pathname]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+
+      const clickedInsideSidebar =
+        sidebarRef.current && sidebarRef.current.contains(target);
+
+      const clickedInsidePopup =
+        compactPopupRef.current && compactPopupRef.current.contains(target);
+
+      if (clickedInsideSidebar || clickedInsidePopup) return;
+
+      setCompactMenuOpen(null);
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const handleViewportChange = () => {
+      if (compactMenuOpen) {
+        setCompactMenuOpen(null);
+      }
+    };
+
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("scroll", handleViewportChange, true);
+
+    return () => {
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("scroll", handleViewportChange, true);
+    };
+  }, [compactMenuOpen]);
+
+  const compactPopup =
+    !isOpen &&
+      compactMenuOpen &&
+      typeof document !== "undefined"
+      ? createPortal(
+        <AnimatePresence>
+          <motion.div
+            ref={compactPopupRef}
+            key={compactMenuOpen}
+            initial={{ opacity: 0, y: 2, scale: 0.985 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 2, scale: 0.985 }}
+            transition={{ duration: 0.14, ease: "easeOut" }}
+            className="fixed z-99999 w-67.5 rounded-2xl border border-gray-200 bg-white p-3 shadow-[0_24px_70px_rgba(15,23,42,0.20)]"
+            style={{
+              top: compactPopupPosition.top,
+              left: compactPopupPosition.left,
+              maxHeight: "calc(100vh - 36px)",
+              overflowY: "auto",
+            }}
+          >
+            <div className="space-y-1">
+              {getSubmenuItems(compactMenuOpen).map((sub) => (
+                <CompactSubMenuItem
+                  key={sub.id}
+                  icon={sub.icon}
+                  label={sub.label}
+                  active={isActive(sub.path)}
+                  onClick={() => handleSubItemClick(sub.path)}
+                />
+              ))}
+            </div>
+          </motion.div>
+        </AnimatePresence>,
+        document.body
+      )
+      : null;
+
   return (
     <>
       <motion.aside
+        ref={sidebarRef}
         initial={{ x: -300 }}
         animate={{ x: 0 }}
-        className={`fixed lg:sticky top-0 left-0 h-screen bg-gradient-to-b from-emerald-50 via-green-50 to-emerald-100 border-r border-emerald-200 text-gray-700 transition-all duration-300 z-40 shadow-sm flex-shrink-0 ${isOpen ? "w-64" : "w-20"
-          } ${isMobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
+        className={`fixed lg:sticky top-0 left-0 h-screen bg-white border-r border-gray-200 transition-all duration-300 z-40 shrink-0 ${isOpen ? "w-64" : "w-20"
+          } ${isMobileOpen
+            ? "translate-x-0"
+            : "-translate-x-full lg:translate-x-0"
+          }`}
       >
         <div className="flex flex-col h-full">
           <Link to="/app" className="block">
@@ -283,10 +455,12 @@ export function Sidebar({
             </div>
           </Link>
 
-          <nav className="flex-1 overflow-y-auto py-4 px-2">
+          <nav className="flex-1 overflow-y-auto py-4 px-3 flex flex-col gap-1">
             {menuItems.map((item) => {
               const Icon = item.icon;
-              const isExpanded = expanded[item.id as keyof typeof expanded];
+              const isExpanded = isParentModule(item.id)
+                ? expanded[item.id]
+                : false;
 
               const mainActive =
                 item.id === "dashboard"
@@ -303,84 +477,72 @@ export function Sidebar({
                             ? isActive("/app/usuarios")
                             : false;
 
+              const submenuItems = getSubmenuItems(item.id);
+
               return (
-                <div key={item.id}>
+                <div key={item.id} className="mb-1">
                   <motion.button
-                    whileHover={{ scale: 1.02 }}
+                    type="button"
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => handleMenuClick(item.id)}
-                    className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg mb-1 transition-all duration-200 ${mainActive
-                      ? "bg-blue-600 text-white shadow-md"
-                      : "text-gray-700 hover:bg-emerald-200 hover:text-gray-900"
+                    onClick={(event) => handleMenuClick(item.id, event)}
+                    className={`w-full flex items-center ${isOpen ? "justify-between px-3" : "justify-center px-0"
+                      } py-2 rounded-lg text-sm transition-all duration-200 ${mainActive
+                        ? isOpen
+                          ? "text-blue-600 font-semibold"
+                          : "bg-gray-100 text-blue-600 font-semibold"
+                        : "text-gray-700 hover:bg-gray-100"
                       }`}
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <Icon size={20} className="flex-shrink-0" />
-                      {isOpen && <span className="text-sm truncate">{item.name}</span>}
+                    <div
+                      className={`flex items-center ${isOpen ? "gap-3" : ""
+                        } min-w-0`}
+                    >
+                      <Icon
+                        size={20}
+                        className={`shrink-0 ${mainActive ? "text-blue-600" : "text-gray-500"
+                          }`}
+                      />
+                      {isOpen && (
+                        <span className="truncate font-semibold">
+                          {item.name}
+                        </span>
+                      )}
                     </div>
 
                     {isOpen && item.hasSubmenu && (
                       <motion.div
                         animate={{ rotate: isExpanded ? 180 : 0 }}
-                        transition={{ duration: 0.2 }}
+                        transition={{ duration: 0.18, ease: "easeOut" }}
                       >
-                        <ChevronDown size={16} />
+                        <ChevronDown
+                          size={16}
+                          className={
+                            mainActive ? "text-blue-600" : "text-gray-400"
+                          }
+                        />
                       </motion.div>
                     )}
                   </motion.button>
 
                   {isOpen && item.hasSubmenu && (
-                    <AnimatePresence>
+                    <AnimatePresence initial={false}>
                       {isExpanded && (
                         <motion.div
                           initial={{ height: 0, opacity: 0 }}
                           animate={{ height: "auto", opacity: 1 }}
                           exit={{ height: 0, opacity: 0 }}
-                          className="overflow-hidden ml-4"
+                          transition={{ duration: 0.18, ease: "easeOut" }}
+                          className="overflow-hidden ml-6 pl-3 border-l border-gray-200 flex flex-col gap-1 mt-1"
                         >
-                          {item.id === "inventario" &&
-                            inventarioSubItems.map((sub) => (
-                              <SubMenuItem
-                                key={sub.id}
-                                icon={sub.icon}
-                                label={sub.label}
-                                onClick={() => handleSubItemClick(sub.path)}
-                                active={isActive(sub.path)}
-                              />
-                            ))}
-
-                          {item.id === "compras" &&
-                            comprasSubItems.map((sub) => (
-                              <SubMenuItem
-                                key={sub.id}
-                                icon={sub.icon}
-                                label={sub.label}
-                                onClick={() => handleSubItemClick(sub.path)}
-                                active={isActive(sub.path)}
-                              />
-                            ))}
-
-                          {item.id === "ventas" &&
-                            ventasSubItems.map((sub) => (
-                              <SubMenuItem
-                                key={sub.id}
-                                icon={sub.icon}
-                                label={sub.label}
-                                onClick={() => handleSubItemClick(sub.path)}
-                                active={isActive(sub.path)}
-                              />
-                            ))}
-
-                          {item.id === "configuracion" &&
-                            configuracionSubItems.map((sub) => (
-                              <SubMenuItem
-                                key={sub.id}
-                                icon={sub.icon}
-                                label={sub.label}
-                                onClick={() => handleSubItemClick(sub.path)}
-                                active={isActive(sub.path)}
-                              />
-                            ))}
+                          {submenuItems.map((sub) => (
+                            <SubMenuItem
+                              key={sub.id}
+                              icon={sub.icon}
+                              label={sub.label}
+                              onClick={() => handleSubItemClick(sub.path)}
+                              active={isActive(sub.path)}
+                            />
+                          ))}
                         </motion.div>
                       )}
                     </AnimatePresence>
@@ -400,12 +562,17 @@ export function Sidebar({
         </div>
       </motion.aside>
 
+      {compactPopup}
+
       {isMobileOpen && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          onClick={onCloseMobile}
+          onClick={() => {
+            setCompactMenuOpen(null);
+            onCloseMobile();
+          }}
           className="fixed inset-0 bg-black/50 z-30 lg:hidden"
         />
       )}
@@ -413,17 +580,66 @@ export function Sidebar({
   );
 }
 
-function SubMenuItem({ icon: Icon, label, onClick, active }: any) {
+interface SubMenuItemProps {
+  icon: LucideIcon;
+  label: string;
+  onClick: () => void;
+  active: boolean;
+}
+
+function SubMenuItem({
+  icon: Icon,
+  label,
+  onClick,
+  active,
+}: SubMenuItemProps) {
   return (
-    <div
+    <button
+      type="button"
       onClick={onClick}
-      className={`px-4 py-2 rounded-lg mb-1 text-sm cursor-pointer flex items-center gap-3 ${active
-        ? "bg-blue-500 text-white"
-        : "text-gray-600 hover:bg-emerald-100 hover:text-gray-900"
+      className={`w-full py-2 px-3 rounded-lg text-sm flex items-center gap-3 transition-colors ${active
+        ? "bg-gray-100 text-gray-900 font-semibold"
+        : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
         }`}
     >
-      <Icon size={16} className="flex-shrink-0" />
-      <span className="truncate">{label}</span>
-    </div>
+      <Icon
+        size={18}
+        className={`shrink-0 ${active ? "text-gray-900" : "text-gray-400"
+          }`}
+      />
+      <span className="truncate font-semibold">{label}</span>
+    </button>
+  );
+}
+
+interface CompactSubMenuItemProps {
+  icon: LucideIcon;
+  label: string;
+  onClick: () => void;
+  active: boolean;
+}
+
+function CompactSubMenuItem({
+  icon: Icon,
+  label,
+  onClick,
+  active,
+}: CompactSubMenuItemProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full rounded-xl px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors ${active
+        ? "bg-gray-100 text-gray-900"
+        : "text-gray-700 hover:bg-gray-50"
+        }`}
+    >
+      <Icon
+        size={18}
+        className={`shrink-0 ${active ? "text-gray-900" : "text-gray-400"
+          }`}
+      />
+      <span className="truncate block font-semibold">{label}</span>
+    </button>
   );
 }

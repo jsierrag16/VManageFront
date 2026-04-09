@@ -108,11 +108,9 @@ export interface Permisos {
       cambiarEstado: boolean;
       restablecerContrasena: boolean;
     };
-
   };
 }
 
-// Tipo de Rol
 export interface Rol {
   id: number;
   nombre: string;
@@ -122,7 +120,6 @@ export interface Rol {
   estado: boolean;
 }
 
-// Función para crear permisos vacíos
 export const createEmptyPermisos = (): Permisos => ({
   dashboard: {
     acceder: false,
@@ -236,7 +233,6 @@ export const createEmptyPermisos = (): Permisos => ({
   },
 });
 
-// Función para crear permisos completos
 export const createFullPermisos = (): Permisos => ({
   dashboard: {
     acceder: true,
@@ -349,233 +345,3 @@ export const createFullPermisos = (): Permisos => ({
     },
   },
 });
-
-// Datos iniciales de roles
-export const rolesData: Rol[] = [
-  {
-    id: 1,
-    nombre: "Administrador",
-    descripcion: "Acceso completo a todas las funcionalidades del sistema",
-    permisos: createFullPermisos(),
-    usuariosAsignados: 2,
-    estado: true,
-  },
-  {
-    id: 4,
-    nombre: "Vendedor",
-    descripcion: "Gestión comercial de clientes, cotizaciones, órdenes, remisiones y pagos",
-    permisos: {
-      ...createEmptyPermisos(),
-      dashboard: { acceder: true },
-      ventas: {
-        clientes: {
-          ver: true,
-          crear: true,
-          editar: true,
-          cambiarEstado: false,
-          eliminar: false,
-        },
-        cotizaciones: {
-          ver: true,
-          crear: true,
-          descargar: true,
-          editar: true,
-          cambiarEstado: true,
-          anular: true,
-        },
-        ordenesVenta: {
-          ver: true,
-          crear: true,
-          descargar: true,
-          editar: true,
-          cambiarEstado: true,
-          anular: true,
-        },
-        remisionesVenta: {
-          ver: true,
-          crear: true,
-          descargar: true,
-          editar: true,
-          cambiarEstado: true,
-          anular: true,
-        },
-        pagos: {
-          ver: true,
-          crear: true,
-          agregarAbonos: true,
-          anular: false,
-        },
-      },
-      existencias: {
-        ...createEmptyPermisos().existencias,
-        productos: {
-          ver: true,
-          crear: false,
-          editar: false,
-          cambiarEstado: false,
-        },
-      },
-    },
-    usuariosAsignados: 8,
-    estado: true,
-  },
-  {
-    id: 8,
-    nombre: "Auxiliar Administrativo",
-    descripcion: "Apoyo administrativo en compras, ventas y pagos",
-    permisos: {
-      ...createEmptyPermisos(),
-      dashboard: { acceder: true },
-      compras: {
-        proveedores: {
-          ver: true,
-          crear: true,
-          editar: true,
-          cambiarEstado: true,
-          eliminar: false,
-        },
-        ordenesCompra: {
-          ver: true,
-          crear: true,
-          descargar: true,
-          editar: true,
-          cambiarEstado: true,
-          anular: false,
-        },
-        remisionesCompra: {
-          ver: true,
-          crear: true,
-          descargar: true,
-          editar: true,
-          cambiarEstado: true,
-          anular: false,
-        },
-      },
-      ventas: {
-        clientes: {
-          ver: true,
-          crear: true,
-          editar: true,
-          cambiarEstado: true,
-          eliminar: false,
-        },
-        cotizaciones: {
-          ver: true,
-          crear: true,
-          descargar: true,
-          editar: true,
-          cambiarEstado: true,
-          anular: false,
-        },
-        ordenesVenta: {
-          ver: true,
-          crear: false,
-          descargar: true,
-          editar: false,
-          cambiarEstado: false,
-          anular: false,
-        },
-        remisionesVenta: {
-          ver: true,
-          crear: false,
-          descargar: true,
-          editar: false,
-          cambiarEstado: false,
-          anular: false,
-        },
-        pagos: {
-          ver: true,
-          crear: true,
-          agregarAbonos: true,
-          anular: false,
-        },
-      },
-    },
-    usuariosAsignados: 3,
-    estado: true,
-  },
-  {
-    id: 5,
-    nombre: "Auxiliar de Bodega",
-    descripcion: "Gestión de productos, existencias y traslados",
-    permisos: {
-      ...createEmptyPermisos(),
-      dashboard: { acceder: true },
-      existencias: {
-        productos: {
-          ver: true,
-          crear: false,
-          editar: false,
-          cambiarEstado: false,
-        },
-        traslados: {
-          ver: true,
-          crear: true,
-          editar: true,
-          cambiarEstado: true,
-          anular: true,
-        },
-        bodegas: {
-          ver: true,
-          crear: false,
-          editar: false,
-          cambiarEstado: false,
-          eliminar: false,
-        },
-      },
-    },
-    usuariosAsignados: 5,
-    estado: true,
-  },
-  {
-    id: 9,
-    nombre: "Conductor",
-    descripcion: "Consulta y apoyo en remisiones y traslados",
-    permisos: {
-      ...createEmptyPermisos(),
-      dashboard: { acceder: true },
-      existencias: {
-        ...createEmptyPermisos().existencias,
-        traslados: {
-          ver: true,
-          crear: false,
-          editar: false,
-          cambiarEstado: true,
-          anular: false,
-        },
-      },
-      compras: {
-        ...createEmptyPermisos().compras,
-        remisionesCompra: {
-          ver: true,
-          crear: false,
-          descargar: true,
-          editar: false,
-          cambiarEstado: true,
-          anular: false,
-        },
-      },
-      ventas: {
-        ...createEmptyPermisos().ventas,
-        remisionesVenta: {
-          ver: true,
-          crear: false,
-          descargar: true,
-          editar: false,
-          cambiarEstado: true,
-          anular: false,
-        },
-      },
-    },
-    usuariosAsignados: 4,
-    estado: true,
-  },
-  {
-    id: 7,
-    nombre: "Rol de Prueba",
-    descripcion: "Rol sin usuarios asignados para pruebas de eliminación",
-    permisos: createEmptyPermisos(),
-    usuariosAsignados: 0,
-    estado: false,
-  },
-];
