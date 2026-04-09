@@ -33,6 +33,7 @@ import { Badge } from "@/shared/components/ui/badge";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { toast } from "sonner";
+import logoVmanage from "../../../../assets/images/VLogo.png"
 
 import type { AppOutletContext } from "../../../../layouts/MainLayout";
 import { Button } from "../../../../shared/components/ui/button";
@@ -201,6 +202,42 @@ function getSiguienteEstadoTexto(estado: EstadoUi) {
   if (estado === "Facturada") return "Ya está facturada";
   return "Ya está anulada";
 }
+
+type PdfImageInfo = {
+  dataUrl: string;
+  width: number;
+  height: number;
+};
+
+const loadImageInfoAsDataUrl = (src: string): Promise<PdfImageInfo> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        reject(new Error("No se pudo obtener el contexto del canvas"));
+        return;
+      }
+
+      ctx.drawImage(img, 0, 0);
+
+      resolve({
+        dataUrl: canvas.toDataURL("image/png"),
+        width: img.naturalWidth,
+        height: img.naturalHeight,
+      });
+    };
+
+    img.onerror = () => reject(new Error("No se pudo cargar el logo"));
+    img.src = src;
+  });
+};
 
 export default function RemisionesVenta() {
   const outlet = useOutletContext<AppOutletContext>() as AppOutletContext & {
@@ -872,62 +909,309 @@ export default function RemisionesVenta() {
     }
   };
 
-  const generarPDF = (remision: RemisionListadoUi) => {
-    const doc = new jsPDF();
+const generarPDF = async (remision: RemisionListadoUi) => {
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+  });
 
-    doc.setFontSize(18);
-    doc.setFont("helvetica", "bold");
-    doc.text("REMISIÓN DE VENTA", 105, 18, { align: "center" });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const marginX = 14;
+  const rightX = pageWidth - marginX;
 
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.text(`N° Remisión: ${remision.numeroRemision}`, 20, 34);
-    doc.text(`Orden de Venta: ${remision.ordenVenta}`, 20, 40);
-    doc.text(`Cliente: ${remision.cliente}`, 20, 46);
-    doc.text(`Fecha: ${remision.fecha}`, 130, 34);
-    doc.text(`Estado: ${remision.estado}`, 130, 40);
-    doc.text(`Bodega: ${remision.bodega}`, 130, 46);
+  const COLORS = {
+    primary: [14, 116, 217] as const,
+    primarySoft: [239, 246, 255] as const,
+    primaryLine: [191, 219, 254] as const,
+    text: [51, 65, 85] as const,
+    muted: [100, 116, 139] as const,
+    card: [248, 250, 252] as const,
+    successBg: [220, 252, 231] as const,
+    successText: [22, 101, 52] as const,
+    dangerBg: [254, 226, 226] as const,
+    dangerText: [153, 27, 27] as const,
+    warningBg: [255, 247, 237] as const,
+    warningText: [180, 83, 9] as const,
+    infoBg: [219, 234, 254] as const,
+    infoText: [30, 64, 175] as const,
+    border: [226, 232, 240] as const,
+  };
 
-    autoTable(doc, {
-      startY: 56,
-      head: [["Producto", "Lote", "Cantidad", "Precio", "Subtotal"]],
-      body: remision.detalle.map((item) => [
-        item.producto,
-        item.lote,
-        String(item.cantidad),
-        `$${item.precio.toLocaleString("es-CO", { minimumFractionDigits: 2 })}`,
-        `$${item.subtotal.toLocaleString("es-CO", {
-          minimumFractionDigits: 2,
-        })}`,
-      ]),
-      theme: "grid",
-      headStyles: {
-        fillColor: [37, 99, 235],
-        textColor: 255,
-      },
-      styles: {
-        fontSize: 9,
-      },
-    });
+  const formatMoneyPdf = (value: number) =>
+    `$${Number(value || 0).toLocaleString("es-CO", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
 
-    const finalY = (doc as any).lastAutoTable?.finalY || 56;
-    doc.setFont("helvetica", "bold");
-    doc.text(
-      `Total: $${remision.total.toLocaleString("es-CO", {
-        minimumFractionDigits: 2,
-      })}`,
-      190,
-      finalY + 12,
-      { align: "right" }
-    );
+  const formatDatePdf = (value?: string | null) =>
+    value ? new Date(value).toLocaleDateString("es-CO") : "-";
 
-    if (remision.observaciones) {
-      doc.setFont("helvetica", "normal");
-      doc.text(`Observaciones: ${remision.observaciones}`, 20, finalY + 24);
+  const getEstadoStyle = (estado: EstadoUi) => {
+    if (estado === "Entregado" || estado === "Facturada") {
+      return {
+        bg: COLORS.successBg,
+        text: COLORS.successText,
+        label: estado,
+      };
     }
 
-    doc.save(`Remision_${remision.numeroRemision}.pdf`);
+    if (estado === "Despachado") {
+      return {
+        bg: COLORS.infoBg,
+        text: COLORS.infoText,
+        label: estado,
+      };
+    }
+
+    if (estado === "Anulada") {
+      return {
+        bg: COLORS.dangerBg,
+        text: COLORS.dangerText,
+        label: estado,
+      };
+    }
+
+    return {
+      bg: COLORS.warningBg,
+      text: COLORS.warningText,
+      label: estado || "Pendiente",
+    };
   };
+
+  let logo: PdfImageInfo | null = null;
+  try {
+    logo = await loadImageInfoAsDataUrl(logoVmanage);
+  } catch (error) {
+    console.warn("No se pudo cargar el logo para el PDF:", error);
+  }
+
+  // Header
+  doc.setFillColor(...COLORS.primary);
+  doc.rect(0, 0, pageWidth, 34, "F");
+
+  doc.setFillColor(9, 92, 181);
+  doc.rect(0, 34, pageWidth, 1.2, "F");
+
+  // Logo
+  if (logo) {
+    const maxLogoWidth = 22;
+    const maxLogoHeight = 14;
+    const scale = Math.min(
+      maxLogoWidth / logo.width,
+      maxLogoHeight / logo.height
+    );
+
+    const drawWidth = logo.width * scale;
+    const drawHeight = logo.height * scale;
+    const logoX = marginX;
+    const logoY = (34 - drawHeight) / 2;
+
+    doc.addImage(logo.dataUrl, "PNG", logoX, logoY, drawWidth, drawHeight);
+  }
+
+  // Título
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.text("REMISIÓN DE VENTA", pageWidth / 2, 14.8, { align: "center" });
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.text("VManage • Gestión empresarial", pageWidth / 2, 21.8, {
+    align: "center",
+  });
+
+  // Datos derecha
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.7);
+  doc.text(`Código: ${remision.numeroRemision || "-"}`, rightX, 11.5, {
+    align: "right",
+  });
+  doc.text(`Fecha: ${formatDatePdf(remision.fecha)}`, rightX, 17.8, {
+    align: "right",
+  });
+  doc.text(`Bodega: ${remision.bodega || "-"}`, rightX, 24.1, {
+    align: "right",
+  });
+
+  // Tarjeta información general
+  doc.setFillColor(...COLORS.card);
+  doc.roundedRect(marginX, 42, pageWidth - marginX * 2, 34, 3, 3, "F");
+
+  doc.setTextColor(...COLORS.text);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10.5);
+  doc.text("Información general", marginX + 4, 49);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9.2);
+
+  const clienteLines = doc.splitTextToSize(remision.cliente || "-", 70);
+
+  doc.text("Cliente:", marginX + 4, 56);
+  doc.text(clienteLines, marginX + 24, 56);
+
+  doc.text("Orden venta:", marginX + 4, 65);
+  doc.text(remision.ordenVenta || "-", marginX + 24, 65);
+
+  doc.text("Items:", 112, 56);
+  doc.text(String(remision.items || 0), 126, 56);
+
+  const estadoStyle = getEstadoStyle(remision.estado);
+  doc.setFillColor(...estadoStyle.bg);
+  doc.roundedRect(112, 60, 44, 9.5, 3, 3, "F");
+
+  doc.setTextColor(...estadoStyle.text);
+  doc.setFont("helvetica", "bold");
+  doc.text(`Estado: ${estadoStyle.label}`, 134, 66.4, { align: "center" });
+
+  // Línea separadora
+  doc.setDrawColor(...COLORS.primaryLine);
+  doc.setLineWidth(0.6);
+  doc.line(marginX, 82, rightX, 82);
+
+  // Tabla
+  autoTable(doc, {
+    startY: 88,
+    margin: { left: marginX, right: marginX },
+    head: [["Producto", "Lote", "Cantidad", "Precio Unit.", "Subtotal"]],
+    body: remision.detalle.length
+      ? remision.detalle.map((item) => [
+          item.producto || "-",
+          item.lote || "-",
+          String(item.cantidad ?? 0),
+          formatMoneyPdf(item.precio || 0),
+          formatMoneyPdf(item.subtotal || 0),
+        ])
+      : [["Sin productos", "-", "-", "-", "-"]],
+    theme: "grid",
+    headStyles: {
+      fillColor: [...COLORS.primary],
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+      fontSize: 9,
+      halign: "center",
+      valign: "middle",
+      lineColor: [...COLORS.primary],
+      lineWidth: 0.1,
+    },
+    bodyStyles: {
+      fontSize: 8.5,
+      textColor: [...COLORS.text],
+      lineColor: [...COLORS.border],
+      lineWidth: 0.1,
+      valign: "middle",
+    },
+    alternateRowStyles: {
+      fillColor: [...COLORS.primarySoft],
+    },
+    styles: {
+      cellPadding: 3.2,
+      overflow: "linebreak",
+    },
+    columnStyles: {
+      0: { cellWidth: 72 },
+      1: { cellWidth: 30, halign: "center" },
+      2: { cellWidth: 22, halign: "center" },
+      3: { cellWidth: 30, halign: "right" },
+      4: { cellWidth: 30, halign: "right" },
+    },
+  });
+
+  let currentY = ((doc as any).lastAutoTable?.finalY || 88) + 8;
+
+  const observacionesLines = remision.observaciones
+    ? doc.splitTextToSize(remision.observaciones, 95)
+    : [];
+
+  const observacionesHeight = remision.observaciones
+    ? Math.max(24, 12 + observacionesLines.length * 4.5)
+    : 0;
+
+  const totalsHeight = 24;
+  const blockHeight = Math.max(observacionesHeight, totalsHeight);
+
+  if (currentY + blockHeight > pageHeight - 24) {
+    doc.addPage();
+    currentY = 20;
+  }
+
+  // Observaciones
+  if (remision.observaciones) {
+    doc.setFillColor(255, 251, 235);
+    doc.roundedRect(marginX, currentY, 108, observacionesHeight, 3, 3, "F");
+
+    doc.setTextColor(146, 64, 14);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text("Observaciones", marginX + 4, currentY + 7);
+
+    doc.setTextColor(87, 83, 78);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.7);
+    doc.text(observacionesLines, marginX + 4, currentY + 13);
+  }
+
+  // Total
+  const totalsX = remision.observaciones ? 128 : 124;
+  const totalsWidth = remision.observaciones ? 68 : 72;
+
+  doc.setFillColor(...COLORS.card);
+  doc.roundedRect(totalsX, currentY, totalsWidth, totalsHeight, 3, 3, "F");
+
+  doc.setFillColor(...COLORS.primary);
+  doc.roundedRect(totalsX + 2, currentY + 7, totalsWidth - 4, 9, 2, 2, "F");
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10.5);
+  doc.text("TOTAL", totalsX + 5, currentY + 13.5);
+  doc.text(
+    formatMoneyPdf(remision.total || 0),
+    totalsX + totalsWidth - 4,
+    currentY + 13.5,
+    { align: "right" }
+  );
+
+  // Footer
+  const generatedAt = new Date().toLocaleString("es-CO");
+  const totalPages = doc.getNumberOfPages();
+
+  for (let page = 1; page <= totalPages; page++) {
+    doc.setPage(page);
+
+    doc.setDrawColor(...COLORS.border);
+    doc.setLineWidth(0.3);
+    doc.line(marginX, pageHeight - 14, rightX, pageHeight - 14);
+
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(8);
+    doc.setTextColor(...COLORS.muted);
+    doc.text(`Generado el ${generatedAt} • VManage`, marginX, pageHeight - 8);
+    doc.text(`Página ${page} de ${totalPages}`, rightX, pageHeight - 8, {
+      align: "right",
+    });
+  }
+
+  doc.save(`Remision_Venta_${remision.numeroRemision}.pdf`);
+};
+
+const handleDescargarPDF = async (remision: RemisionListadoUi) => {
+  try {
+    const detalle =
+      remision.detalle.length > 0
+        ? remision
+        : buildRemisionUi(await remisionesVentaService.getOne(remision.id));
+
+    await generarPDF(detalle);
+    toast.success(`PDF de la remisión ${detalle.numeroRemision} descargado exitosamente`);
+  } catch (error: any) {
+    console.error(error);
+    toast.error(error?.message || "No se pudo generar el PDF");
+  }
+};
 
   return (
     <div className="space-y-6">
@@ -1079,7 +1363,7 @@ export default function RemisionesVenta() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => generarPDF(remision)}
+                          onClick={() => void handleDescargarPDF(remision)}
                           className="hover:bg-green-50"
                           title="Descargar PDF"
                         >
@@ -1506,7 +1790,7 @@ export default function RemisionesVenta() {
                 </div>
 
                 <Button
-                  onClick={() => generarPDF(remisionSeleccionada)}
+                  onClick={() => void handleDescargarPDF(remisionSeleccionada)}
                   className="bg-green-600 hover:bg-green-700"
                 >
                   <Download size={16} className="mr-2" />
