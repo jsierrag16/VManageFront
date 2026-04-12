@@ -64,7 +64,7 @@ import {
   getFechaActual,
 } from "../services/ordenes-compra.mapper";
 
-import logoVmanage from "../../../../assets/images/VLogo.png"
+import logoVmanage from "../../../../assets/images/VLogo.png";
 
 import {
   comprasService,
@@ -271,9 +271,12 @@ export default function Compras() {
   const [bodegas, setBodegas] = useState<BasicOption[]>([]);
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [showConfirmEstadoModal, setShowConfirmEstadoModal] =
-    useState(false);
+  const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
   const [compraParaCambioEstado, setCompraParaCambioEstado] =
+    useState<Compra | null>(null);
+
+  const [showPdfOptionsModal, setShowPdfOptionsModal] = useState(false);
+  const [compraParaDescargarPdf, setCompraParaDescargarPdf] =
     useState<Compra | null>(null);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -669,43 +672,46 @@ export default function Compras() {
     }
   };
 
-type PdfImageInfo = {
-  dataUrl: string;
-  width: number;
-  height: number;
-};
+  type PdfImageInfo = {
+    dataUrl: string;
+    width: number;
+    height: number;
+  };
 
-const loadImageInfoAsDataUrl = (src: string): Promise<PdfImageInfo> => {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
+  const loadImageInfoAsDataUrl = (src: string): Promise<PdfImageInfo> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
 
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
 
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        reject(new Error("No se pudo obtener el contexto del canvas"));
-        return;
-      }
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("No se pudo obtener el contexto del canvas"));
+          return;
+        }
 
-      ctx.drawImage(img, 0, 0);
+        ctx.drawImage(img, 0, 0);
 
-      resolve({
-        dataUrl: canvas.toDataURL("image/png"),
-        width: img.naturalWidth,
-        height: img.naturalHeight,
-      });
-    };
+        resolve({
+          dataUrl: canvas.toDataURL("image/png"),
+          width: img.naturalWidth,
+          height: img.naturalHeight,
+        });
+      };
 
-    img.onerror = () => reject(new Error("No se pudo cargar el logo"));
-    img.src = src;
-  });
-};
+      img.onerror = () => reject(new Error("No se pudo cargar el logo"));
+      img.src = src;
+    });
+  };
 
-const generateCompraPDF = async (compra: Compra) => {
+const generateCompraPDF = async (
+  compra: Compra,
+  includePrices: boolean = true
+) => {
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
@@ -733,37 +739,46 @@ const generateCompraPDF = async (compra: Compra) => {
     border: [226, 232, 240] as const,
   };
 
-  const formatMoney = (value: number) =>
+  const formatMoneyPdf = (value: number) =>
     `$${Number(value || 0).toLocaleString("es-CO", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
 
-  const formatDate = (value?: string | null) =>
-    value ? new Date(value).toLocaleDateString("es-CO") : "-";
+  const formatDatePdf = (value?: string | Date | null) => {
+    if (!value) return "-";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "-";
+    return date.toLocaleDateString("es-CO");
+  };
+
+  const safeText = (value: unknown, fallback = "-") => {
+    const text = String(value ?? "").trim();
+    return text || fallback;
+  };
 
   const getEstadoStyle = (estado: string) => {
     const normalized = (estado || "").toLowerCase();
 
-    if (normalized.includes("aprob")) {
+    if (normalized.includes("aprobad")) {
       return {
-        bg: COLORS.successBg,
-        text: COLORS.successText,
-        label: estado,
+        bg: [...COLORS.successBg] as const,
+        text: [...COLORS.successText] as const,
+        label: estado || "Aprobada",
       };
     }
 
     if (normalized.includes("anulad")) {
       return {
-        bg: COLORS.dangerBg,
-        text: COLORS.dangerText,
-        label: estado,
+        bg: [...COLORS.dangerBg] as const,
+        text: [...COLORS.dangerText] as const,
+        label: estado || "Anulada",
       };
     }
 
     return {
-      bg: COLORS.warningBg,
-      text: COLORS.warningText,
+      bg: [...COLORS.warningBg] as const,
+      text: [...COLORS.warningText] as const,
       label: estado || "Pendiente",
     };
   };
@@ -775,15 +790,18 @@ const generateCompraPDF = async (compra: Compra) => {
     console.warn("No se pudo cargar el logo para el PDF:", error);
   }
 
+  const subtotalGeneral = Number(compra.subtotal || 0);
+  const ivaGeneral = Number(compra.impuestos || 0);
+  const totalGeneral = Number(compra.total || 0);
+
   // Header
   doc.setFillColor(...COLORS.primary);
   doc.rect(0, 0, pageWidth, 34, "F");
 
-  // Línea inferior decorativa del header
   doc.setFillColor(9, 92, 181);
   doc.rect(0, 34, pageWidth, 1.2, "F");
 
-  // Logo sin fondo blanco
+  // Logo
   if (logo) {
     const maxLogoWidth = 22;
     const maxLogoHeight = 14;
@@ -812,22 +830,25 @@ const generateCompraPDF = async (compra: Compra) => {
     align: "center",
   });
 
-  // Datos a la derecha
+  // Datos derecha
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8.7);
-  doc.text(`Código: ${compra.numeroOrden || "-"}`, rightX, 11.5, {
+  doc.text(`Código: ${safeText(compra.numeroOrden)}`, rightX, 11.5, {
     align: "right",
   });
-  doc.text(`Fecha: ${formatDate(compra.fecha)}`, rightX, 17.8, {
+  doc.text(`Fecha: ${formatDatePdf(compra.fecha)}`, rightX, 17.8, {
     align: "right",
   });
-  doc.text(`Entrega: ${formatDate(compra.fechaEntrega)}`, rightX, 24.1, {
-    align: "right",
-  });
+  doc.text(
+    `Entrega: ${formatDatePdf(compra.fechaEntrega)}`,
+    rightX,
+    24.1,
+    { align: "right" }
+  );
 
   // Tarjeta información general
   doc.setFillColor(...COLORS.card);
-  doc.roundedRect(marginX, 42, pageWidth - marginX * 2, 34, 3, 3, "F");
+  doc.roundedRect(marginX, 42, pageWidth - marginX * 2, 42, 3, 3, "F");
 
   doc.setTextColor(...COLORS.text);
   doc.setFont("helvetica", "bold");
@@ -837,49 +858,78 @@ const generateCompraPDF = async (compra: Compra) => {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9.2);
 
-  const proveedorLines = doc.splitTextToSize(compra.proveedor || "-", 70);
+  const proveedorLines = doc.splitTextToSize(
+    safeText(compra.proveedor),
+    64
+  );
 
   doc.text("Proveedor:", marginX + 4, 56);
   doc.text(proveedorLines, marginX + 28, 56);
 
-  doc.text("Término pago:", marginX + 4, 65);
-  doc.text(compra.terminoPago || "-", marginX + 28, 65);
+  doc.text("Tipo Doc.:", marginX + 4, 65);
+  doc.text(safeText(compra.proveedorTipoDocumento), marginX + 28, 65);
+
+  doc.text("N° Documento:", marginX + 4, 74);
+  doc.text(safeText(compra.proveedorNumeroDocumento), marginX + 32, 74);
 
   doc.text("Bodega:", 112, 56);
-  doc.text(compra.bodega || "-", 128, 56);
+  doc.text(safeText(compra.bodega), 128, 56);
+
+  doc.text("Térm. pago:", 112, 65);
+  doc.text(safeText(compra.terminoPago), 132, 65);
 
   const estadoStyle = getEstadoStyle(compra.estado);
-  doc.setFillColor(estadoStyle.bg[0], estadoStyle.bg[1], estadoStyle.bg[2]);
-  doc.roundedRect(112, 60, 44, 9.5, 3, 3, "F");
+  doc.setFillColor(...(estadoStyle.bg as [number, number, number]));
+  doc.roundedRect(112, 69, 44, 9.5, 3, 3, "F");
 
-  doc.setTextColor(estadoStyle.text[0], estadoStyle.text[1], estadoStyle.text[2]);
+  doc.setTextColor(...(estadoStyle.text as [number, number, number]));
   doc.setFont("helvetica", "bold");
-  doc.text(`Estado: ${estadoStyle.label}`, 134, 66.4, { align: "center" });
+  doc.text(`Estado: ${estadoStyle.label}`, 134, 75.4, { align: "center" });
 
   // Línea separadora
   doc.setDrawColor(...COLORS.primaryLine);
   doc.setLineWidth(0.6);
-  doc.line(marginX, 82, rightX, 82);
+  doc.line(marginX, 90, rightX, 90);
 
-  // Tabla de productos
+  // Tabla
+  const tableHead = includePrices
+    ? [["Producto", "Cantidad", "IVA", "Precio Unit.", "Subtotal"]]
+    : [["Producto", "Cantidad", "IVA"]];
+
   const tableData =
-    compra.productos?.map((item) => [
-      item.producto?.nombre || "-",
-      String(item.cantidad ?? 0),
-      `${item.ivaNombre || "IVA"} (${Number(item.ivaPorcentaje || 0).toFixed(
-        2
-      )}%)`,
-      formatMoney(item.precio || 0),
-      formatMoney(item.subtotal || 0),
-    ]) || [];
+    compra.productos?.map((item) => {
+      const detalleProducto = [
+        item.producto?.nombre || "-",
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      if (includePrices) {
+        return [
+          detalleProducto,
+          String(item.cantidad ?? 0),
+          `IVA (${Number(item.ivaPorcentaje || 0).toFixed(2)}%)`,
+          formatMoneyPdf(item.precio || 0),
+          formatMoneyPdf(item.subtotal || 0),
+        ];
+      }
+
+      return [
+        detalleProducto,
+        String(item.cantidad ?? 0),
+        `IVA (${Number(item.ivaPorcentaje || 0).toFixed(2)}%)`,
+      ];
+    }) || [];
 
   autoTable(doc, {
-    startY: 88,
+    startY: 96,
     margin: { left: marginX, right: marginX },
-    head: [["Producto", "Cantidad", "IVA", "Precio Unit.", "Subtotal"]],
+    head: tableHead,
     body: tableData.length
       ? tableData
-      : [["Sin productos", "-", "-", "-", "-"]],
+      : includePrices
+      ? [["Sin productos", "-", "-", "-", "-"]]
+      : [["Sin productos", "-", "-"]],
     theme: "grid",
     headStyles: {
       fillColor: [...COLORS.primary],
@@ -892,7 +942,7 @@ const generateCompraPDF = async (compra: Compra) => {
       lineWidth: 0.1,
     },
     bodyStyles: {
-      fontSize: 8.5,
+      fontSize: 8.3,
       textColor: [...COLORS.text],
       lineColor: [...COLORS.border],
       lineWidth: 0.1,
@@ -905,27 +955,34 @@ const generateCompraPDF = async (compra: Compra) => {
       cellPadding: 3.2,
       overflow: "linebreak",
     },
-    columnStyles: {
-      0: { cellWidth: 74 },
-      1: { cellWidth: 22, halign: "center" },
-      2: { cellWidth: 34, halign: "center" },
-      3: { cellWidth: 28, halign: "right" },
-      4: { cellWidth: 28, halign: "right" },
-    },
+    columnStyles: includePrices
+      ? {
+          0: { cellWidth: 82 },
+          1: { cellWidth: 20, halign: "center" },
+          2: { cellWidth: 24, halign: "center" },
+          3: { cellWidth: 28, halign: "right" },
+          4: { cellWidth: 32, halign: "right" },
+        }
+      : {
+          0: { cellWidth: 130 },
+          1: { cellWidth: 24, halign: "center" },
+          2: { cellWidth: 28, halign: "center" },
+        },
   });
 
-  let currentY = ((doc as any).lastAutoTable?.finalY || 88) + 8;
+  let currentY = ((doc as any).lastAutoTable?.finalY || 96) + 8;
 
-  const observacionesLines = compra.observaciones
-    ? doc.splitTextToSize(compra.observaciones, 95)
+  const observaciones = safeText(compra.observaciones, "");
+  const observacionesLines = observaciones
+    ? doc.splitTextToSize(observaciones, includePrices ? 95 : 174)
     : [];
 
-  const observacionesHeight = compra.observaciones
+  const observacionesHeight = observaciones
     ? Math.max(24, 12 + observacionesLines.length * 4.5)
     : 0;
 
-  const totalsHeight = 31;
-  const blockHeight = Math.max(observacionesHeight, totalsHeight);
+  const totalsHeight = includePrices ? 31 : 0;
+  const blockHeight = Math.max(observacionesHeight, totalsHeight || 24);
 
   if (currentY + blockHeight > pageHeight - 24) {
     doc.addPage();
@@ -933,9 +990,11 @@ const generateCompraPDF = async (compra: Compra) => {
   }
 
   // Observaciones
-  if (compra.observaciones) {
+  if (observaciones) {
+    const obsWidth = includePrices ? 108 : pageWidth - marginX * 2;
+
     doc.setFillColor(255, 251, 235);
-    doc.roundedRect(marginX, currentY, 108, observacionesHeight, 3, 3, "F");
+    doc.roundedRect(marginX, currentY, obsWidth, observacionesHeight, 3, 3, "F");
 
     doc.setTextColor(146, 64, 14);
     doc.setFont("helvetica", "bold");
@@ -948,46 +1007,48 @@ const generateCompraPDF = async (compra: Compra) => {
     doc.text(observacionesLines, marginX + 4, currentY + 13);
   }
 
-  // Totales
-  const totalsX = compra.observaciones ? 128 : 124;
-  const totalsWidth = compra.observaciones ? 68 : 72;
+  // Totales solo si incluye precios
+  if (includePrices) {
+    const totalsX = observaciones ? 128 : 124;
+    const totalsWidth = observaciones ? 68 : 72;
 
-  doc.setFillColor(...COLORS.card);
-  doc.roundedRect(totalsX, currentY, totalsWidth, totalsHeight, 3, 3, "F");
+    doc.setFillColor(...COLORS.card);
+    doc.roundedRect(totalsX, currentY, totalsWidth, totalsHeight, 3, 3, "F");
 
-  doc.setTextColor(...COLORS.text);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9.5);
+    doc.setTextColor(...COLORS.text);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.5);
 
-  doc.text("Subtotal:", totalsX + 4, currentY + 8);
-  doc.text(
-    formatMoney(compra.subtotal || 0),
-    totalsX + totalsWidth - 4,
-    currentY + 8,
-    { align: "right" }
-  );
+    doc.text("Subtotal:", totalsX + 4, currentY + 8);
+    doc.text(
+      formatMoneyPdf(subtotalGeneral),
+      totalsX + totalsWidth - 4,
+      currentY + 8,
+      { align: "right" }
+    );
 
-  doc.text("IVA:", totalsX + 4, currentY + 15);
-  doc.text(
-    formatMoney(compra.impuestos || 0),
-    totalsX + totalsWidth - 4,
-    currentY + 15,
-    { align: "right" }
-  );
+    doc.text("IVA:", totalsX + 4, currentY + 15);
+    doc.text(
+      formatMoneyPdf(ivaGeneral),
+      totalsX + totalsWidth - 4,
+      currentY + 15,
+      { align: "right" }
+    );
 
-  doc.setFillColor(...COLORS.primary);
-  doc.roundedRect(totalsX + 2, currentY + 20, totalsWidth - 4, 9, 2, 2, "F");
+    doc.setFillColor(...COLORS.primary);
+    doc.roundedRect(totalsX + 2, currentY + 20, totalsWidth - 4, 9, 2, 2, "F");
 
-  doc.setTextColor(255, 255, 255);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10.5);
-  doc.text("TOTAL", totalsX + 5, currentY + 26);
-  doc.text(
-    formatMoney(compra.total || 0),
-    totalsX + totalsWidth - 4,
-    currentY + 26,
-    { align: "right" }
-  );
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.5);
+    doc.text("TOTAL", totalsX + 5, currentY + 26);
+    doc.text(
+      formatMoneyPdf(totalGeneral),
+      totalsX + totalsWidth - 4,
+      currentY + 26,
+      { align: "right" }
+    );
+  }
 
   // Footer
   const generatedAt = new Date().toLocaleString("es-CO");
@@ -1009,24 +1070,38 @@ const generateCompraPDF = async (compra: Compra) => {
     });
   }
 
-  doc.save(`Orden_Compra_${compra.numeroOrden}.pdf`);
-  toast.success("PDF descargado exitosamente");
+  doc.save(
+    `Orden_Compra_${safeText(compra.numeroOrden, "SIN_CODIGO")}_${
+      includePrices ? "con_precios" : "sin_precios"
+    }.pdf`
+  );
 };
 
-const handleDownloadPDF = async (compra: Compra) => {
-  try {
-    if (compra.productos?.length) {
-      await generateCompraPDF(compra);
-      return;
+  const handleOpenPdfOptions = (compra: Compra) => {
+    setCompraParaDescargarPdf(compra);
+    setShowPdfOptionsModal(true);
+  };
+
+  const handleDownloadPDF = async (includePrices: boolean) => {
+    if (!compraParaDescargarPdf) return;
+
+    try {
+      const compraBase = compraParaDescargarPdf;
+
+      if (compraBase.productos?.length) {
+        await generateCompraPDF(compraBase, includePrices);
+      } else {
+        const compraFull = await comprasService.getById(compraBase.id);
+        await generateCompraPDF(compraFull, includePrices);
+      }
+
+      setShowPdfOptionsModal(false);
+      setCompraParaDescargarPdf(null);
+    } catch (error) {
+      console.error("Error generando PDF:", error);
+      toast.error("No se pudo generar el PDF de la compra");
     }
-
-    const compraFull = await comprasService.getById(compra.id);
-    await generateCompraPDF(compraFull);
-  } catch (error) {
-    console.error("Error generando PDF:", error);
-    toast.error("No se pudo generar el PDF de la compra");
-  }
-};
+  };
 
   const resetCompraForm = () => {
     setFormData({
@@ -1125,8 +1200,7 @@ const handleDownloadPDF = async (compra: Compra) => {
         ...prev,
         proveedorId: value,
         proveedorTipoDocumento: proveedorSeleccionado?.tipoDocumento || "",
-        proveedorNumeroDocumento:
-          proveedorSeleccionado?.numeroDocumento || "",
+        proveedorNumeroDocumento: proveedorSeleccionado?.numeroDocumento || "",
       }));
     },
     [proveedoresActivos]
@@ -1223,106 +1297,116 @@ const handleDownloadPDF = async (compra: Compra) => {
     );
   };
 
-  const confirmCreate = async () => {
-    if (isSaving) return;
+const confirmCreate = async () => {
+  if (isSaving) return;
 
-    if (!formData.bodegaId) {
-      toast.error("Debes seleccionar una bodega");
-      return;
-    }
+  if (!formData.bodegaId) {
+    toast.error("Debes seleccionar una bodega");
+    return;
+  }
 
-    if (!formData.proveedorId) {
-      toast.error("Debes seleccionar un proveedor");
-      return;
-    }
+  if (!formData.proveedorId) {
+    toast.error("Debes seleccionar un proveedor");
+    return;
+  }
 
-    if (!formData.terminoPagoId) {
-      toast.error("Debes seleccionar un término de pago");
-      return;
-    }
+  if (!formData.terminoPagoId) {
+    toast.error("Debes seleccionar un término de pago");
+    return;
+  }
 
-    if (!formData.fechaEntrega) {
-      toast.error("Debes ingresar la fecha de entrega");
-      return;
-    }
+  if (!formData.fechaEntrega) {
+    toast.error("Debes ingresar la fecha de entrega");
+    return;
+  }
 
-    if (productosOrden.length === 0) {
-      toast.error("Debes agregar al menos un producto");
-      return;
-    }
+  if (formData.fechaEntrega < getFechaActual()) {
+    toast.error("La fecha de entrega no puede ser anterior a hoy");
+    return;
+  }
 
-    try {
-      setIsSaving(true);
+  if (productosOrden.length === 0) {
+    toast.error("Debes agregar al menos un producto");
+    return;
+  }
 
-      await comprasService.create(buildCompraPayload());
+  try {
+    setIsSaving(true);
 
-      await loadCompras();
-      closeToList();
-      setShowSuccessModal(true);
-    } catch (error) {
-      console.error("Error creando compra:", error);
-      toast.error("No se pudo crear la orden de compra");
-    } finally {
-      setIsSaving(false);
-    }
-  };
+    await comprasService.create(buildCompraPayload());
 
-  const confirmEdit = async () => {
-    if (!compraDetalle || isSaving) return;
+    await loadCompras();
+    closeToList();
+    setShowSuccessModal(true);
+  } catch (error) {
+    console.error("Error creando compra:", error);
+    toast.error("No se pudo crear la orden de compra");
+  } finally {
+    setIsSaving(false);
+  }
+};  
 
-    if (!formData.bodegaId) {
-      toast.error("Debes seleccionar una bodega");
-      return;
-    }
+const confirmEdit = async () => {
+  if (!compraDetalle || isSaving) return;
 
-    if (compraDetalle.estado === "Anulada") {
-      toast.error("No puedes editar una orden anulada");
-      return;
-    }
+  if (!formData.bodegaId) {
+    toast.error("Debes seleccionar una bodega");
+    return;
+  }
 
-    if (compraDetalle.estado === "Aprobada") {
-      toast.error("No puedes editar una orden aprobada");
-      return;
-    }
+  if (compraDetalle.estado === "Anulada") {
+    toast.error("No puedes editar una orden anulada");
+    return;
+  }
 
-    if (!formData.proveedorId) {
-      toast.error("Debes seleccionar un proveedor");
-      return;
-    }
+  if (compraDetalle.estado === "Aprobada") {
+    toast.error("No puedes editar una orden aprobada");
+    return;
+  }
 
-    if (!formData.terminoPagoId) {
-      toast.error("Debes seleccionar un término de pago");
-      return;
-    }
+  if (!formData.proveedorId) {
+    toast.error("Debes seleccionar un proveedor");
+    return;
+  }
 
-    if (!formData.fechaEntrega) {
-      toast.error("Debes ingresar la fecha de entrega");
-      return;
-    }
+  if (!formData.terminoPagoId) {
+    toast.error("Debes seleccionar un término de pago");
+    return;
+  }
 
-    if (productosOrden.length === 0) {
-      toast.error("Debes agregar al menos un producto");
-      return;
-    }
+  if (!formData.fechaEntrega) {
+    toast.error("Debes ingresar la fecha de entrega");
+    return;
+  }
 
-    try {
-      setIsSaving(true);
+  if (formData.fechaEntrega < getFechaActual()) {
+    toast.error("La fecha de entrega no puede ser anterior a hoy");
+    return;
+  }
 
-      await comprasService.update(compraDetalle.id, {
-        ...buildCompraPayload(),
-        id_estado_compra: ESTADO_COMPRA_IDS[formData.estado],
-      });
+  if (productosOrden.length === 0) {
+    toast.error("Debes agregar al menos un producto");
+    return;
+  }
 
-      await loadCompras();
-      toast.success("Orden actualizada exitosamente");
-      closeToList();
-    } catch (error) {
-      console.error("Error actualizando compra:", error);
-      toast.error("No se pudo actualizar la orden");
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  try {
+    setIsSaving(true);
+
+    await comprasService.update(compraDetalle.id, {
+      ...buildCompraPayload(),
+      id_estado_compra: ESTADO_COMPRA_IDS[formData.estado],
+    });
+
+    await loadCompras();
+    toast.success("Orden actualizada exitosamente");
+    closeToList();
+  } catch (error) {
+    console.error("Error actualizando compra:", error);
+    toast.error("No se pudo actualizar la orden");
+  } finally {
+    setIsSaving(false);
+  }
+};
 
   const handleSuccessModalClose = () => {
     setShowSuccessModal(false);
@@ -1369,9 +1453,7 @@ const handleDownloadPDF = async (compra: Compra) => {
       <div>
         <h2 className="text-xl font-semibold text-gray-900">Órdenes de Compra</h2>
         <div className="flex items-center gap-2 mt-1">
-          <p className="text-gray-600">
-            Gestiona las órdenes de compra en
-          </p>
+          <p className="text-gray-600">Gestiona las órdenes de compra en</p>
           <Badge
             variant="outline"
             className="bg-purple-50 text-purple-700 border-purple-200"
@@ -1461,7 +1543,7 @@ const handleDownloadPDF = async (compra: Compra) => {
                 <TableHead>N° Orden</TableHead>
                 <TableHead>Proveedor</TableHead>
                 <TableHead>Fecha</TableHead>
-                <TableHead>Fecha Entrega</TableHead>
+                <TableHead>Fecha Entrega</TableHead>    
                 <TableHead>Items</TableHead>
                 <TableHead className="text-center">Estado</TableHead>
                 <TableHead className="text-center">Acciones</TableHead>
@@ -1538,7 +1620,7 @@ const handleDownloadPDF = async (compra: Compra) => {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDownloadPDF(compra)}
+                          onClick={() => handleOpenPdfOptions(compra)}
                           className="hover:bg-green-50"
                           title="Descargar PDF"
                         >
@@ -1696,6 +1778,7 @@ const handleDownloadPDF = async (compra: Compra) => {
                   <Input
                     id="fechaEntrega"
                     type="date"
+                    min={getFechaActual()}
                     value={formData.fechaEntrega}
                     onChange={(e) =>
                       setFormData({ ...formData, fechaEntrega: e.target.value })
@@ -2274,7 +2357,7 @@ const handleDownloadPDF = async (compra: Compra) => {
           <DialogFooter>
             {compraSeleccionada && (
               <Button
-                onClick={() => handleDownloadPDF(compraSeleccionada)}
+                onClick={() => handleOpenPdfOptions(compraSeleccionada)}
                 className="bg-green-600 hover:bg-green-700"
               >
                 <Download size={16} className="mr-2" />
@@ -2285,6 +2368,43 @@ const handleDownloadPDF = async (compra: Compra) => {
               Cerrar
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showPdfOptionsModal}
+        onOpenChange={(open) => {
+          setShowPdfOptionsModal(open);
+          if (!open) {
+            setCompraParaDescargarPdf(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Descargar orden de compra</DialogTitle>
+            <DialogDescription>
+              Selecciona cómo deseas exportar el PDF.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-3 py-2">
+            <Button
+              onClick={() => handleDownloadPDF(true)}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              <Download size={16} className="mr-2" />
+              Descargar con precios
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={() => handleDownloadPDF(false)}
+            >
+              <Download size={16} className="mr-2" />
+              Descargar sin precios
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -2339,6 +2459,7 @@ const handleDownloadPDF = async (compra: Compra) => {
                   <Input
                     id="edit-fechaEntrega"
                     type="date"
+                    min={getFechaActual()}
                     value={formData.fechaEntrega}
                     onChange={(e) =>
                       setFormData({ ...formData, fechaEntrega: e.target.value })
