@@ -30,7 +30,7 @@ import { Button } from "../../../../shared/components/ui/button";
 import { Input } from "../../../../shared/components/ui/input";
 import { Label } from "../../../../shared/components/ui/label";
 import { Badge } from "../../../../shared/components/ui/badge";
-import logoVManage from "../../../../assets/images/VLogo.png"
+import logoVManage from "../../../../assets/images/VLogo.png";
 import {
   Table,
   TableBody,
@@ -349,8 +349,11 @@ const getStoredBodegaState = () => {
   };
 };
 
-const renderReadonlyBox = (value: string, emptyLabel = "—") => (
-  <div className="h-10 w-full rounded-md border border-input bg-gray-50 px-3 py-2 text-sm text-gray-700 flex items-center">
+const renderReadonlyBox = (
+  value: string,
+  emptyLabel = "—"
+) => (
+  <div className="h-10 w-full rounded-md border border-input bg-gray-50 px-3 py-2 text-sm text-gray-500 flex items-center">
     {value || emptyLabel}
   </div>
 );
@@ -481,6 +484,10 @@ export default function RemisionesCompra() {
     useState<RemisionCompraUI | null>(null);
   const [nuevoEstadoLabel, setNuevoEstadoLabel] = useState<string | null>(null);
   const [lastCreatedCode, setLastCreatedCode] = useState("");
+
+  const [showPdfOptionsModal, setShowPdfOptionsModal] = useState(false);
+  const [remisionParaDescargarPdf, setRemisionParaDescargarPdf] =
+    useState<RemisionCompraUI | null>(null);
 
   const [formData, setFormData] = useState<FormState>(buildEmptyForm());
 
@@ -614,13 +621,13 @@ export default function RemisionesCompra() {
       numeroRemision:
         options?.keepNumeroRemision === true
           ? prev.numeroRemision ||
-          options?.numeroRemisionFallback ||
-          compra.numeroRemisionSugerido ||
-          ""
+            options?.numeroRemisionFallback ||
+            compra.numeroRemisionSugerido ||
+            ""
           : compra.numeroRemisionSugerido ||
-          prev.numeroRemision ||
-          options?.numeroRemisionFallback ||
-          "",
+            prev.numeroRemision ||
+            options?.numeroRemisionFallback ||
+            "",
       id_compra: String(compra.id),
       ordenCompra: compra.codigo,
       id_proveedor: String(compra.proveedorId),
@@ -949,27 +956,45 @@ export default function RemisionesCompra() {
     loteInput?.focus();
   };
 
-  const validateBeforeSubmit = () => {
-    if (!formData.id_compra) {
-      toast.error("Debes seleccionar una orden de compra válida");
+const validateBeforeSubmit = () => {
+  const today = new Date().toISOString().split("T")[0];
+
+  if (!formData.id_compra) {
+    toast.error("Debes seleccionar una orden de compra válida");
+    return false;
+  }
+
+  if (
+    Number(formData.id_proveedor) <= 0 ||
+    Number(formData.id_bodega) <= 0
+  ) {
+    toast.error("La compra seleccionada no tiene proveedor o bodega válidos");
+    return false;
+  }
+
+  if (formData.fechaVencimiento && formData.fechaVencimiento < today) {
+    toast.error(
+      "La fecha de vencimiento de la remisión no puede ser anterior a hoy"
+    );
+    return false;
+  }
+
+  if (items.length === 0) {
+    toast.error("Debes agregar al menos un producto a la remisión");
+    return false;
+  }
+
+  for (const item of items) {
+    if (item.fecha_vencimiento && item.fecha_vencimiento < today) {
+      toast.error(
+        `La fecha de vencimiento del producto "${item.productoNombre}" no puede ser anterior a hoy`
+      );
       return false;
     }
+  }
 
-    if (
-      Number(formData.id_proveedor) <= 0 ||
-      Number(formData.id_bodega) <= 0
-    ) {
-      toast.error("La compra seleccionada no tiene proveedor o bodega válidos");
-      return false;
-    }
-
-    if (items.length === 0) {
-      toast.error("Debes agregar al menos un producto a la remisión");
-      return false;
-    }
-
-    return true;
-  };
+  return true;
+};
 
   const buildDetallePayload = () => {
     return items.map((item) => ({
@@ -1153,372 +1178,424 @@ export default function RemisionesCompra() {
     navigate("/app/remisiones-compra", { replace: true });
   };
 
-const generateRemisionPDF = async (remision: RemisionCompraUI) => {
-  const doc = new jsPDF({
-    orientation: "portrait",
-    unit: "mm",
-    format: "a4",
-  });
+  const generateRemisionPDF = async (
+    remision: RemisionCompraUI,
+    includePrices: boolean = true
+  ) => {
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+    });
 
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const marginX = 14;
-  const rightX = pageWidth - marginX;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const marginX = 14;
+    const rightX = pageWidth - marginX;
 
-  const COLORS = {
-    primary: [14, 116, 217] as const,
-    primarySoft: [239, 246, 255] as const,
-    primaryLine: [191, 219, 254] as const,
-    text: [51, 65, 85] as const,
-    muted: [100, 116, 139] as const,
-    card: [248, 250, 252] as const,
-    successBg: [220, 252, 231] as const,
-    successText: [22, 101, 52] as const,
-    dangerBg: [254, 226, 226] as const,
-    dangerText: [153, 27, 27] as const,
-    warningBg: [255, 247, 237] as const,
-    warningText: [180, 83, 9] as const,
-    border: [226, 232, 240] as const,
-  };
-
-  const formatMoneyPdf = (value: number) =>
-    `$${Number(value || 0).toLocaleString("es-CO", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
-
-  const formatDatePdf = (value?: string | null) =>
-    value ? new Date(value).toLocaleDateString("es-CO") : "-";
-
-  const getEstadoStyle = (estado: string) => {
-    const normalized = (estado || "").toLowerCase();
-
-    if (
-      normalized.includes("aplic") ||
-      normalized.includes("recibid") ||
-      normalized.includes("aprobad") ||
-      normalized.includes("confirm")
-    ) {
-      return {
-        bg: [...COLORS.successBg] as const,
-        text: [...COLORS.successText] as const,
-        label: estado,
-      };
-    }
-
-    if (normalized.includes("anulad")) {
-      return {
-        bg: [...COLORS.dangerBg] as const,
-        text: [...COLORS.dangerText] as const,
-        label: estado,
-      };
-    }
-
-    return {
-      bg: [...COLORS.warningBg] as const,
-      text: [...COLORS.warningText] as const,
-      label: estado || "Pendiente",
+    const COLORS = {
+      primary: [14, 116, 217] as const,
+      primarySoft: [239, 246, 255] as const,
+      primaryLine: [191, 219, 254] as const,
+      text: [51, 65, 85] as const,
+      muted: [100, 116, 139] as const,
+      card: [248, 250, 252] as const,
+      successBg: [220, 252, 231] as const,
+      successText: [22, 101, 52] as const,
+      dangerBg: [254, 226, 226] as const,
+      dangerText: [153, 27, 27] as const,
+      warningBg: [255, 247, 237] as const,
+      warningText: [180, 83, 9] as const,
+      border: [226, 232, 240] as const,
     };
-  };
 
-  let logo: PdfImageInfo | null = null;
-  try {
-    logo = await loadImageInfoAsDataUrl(logoVManage);
-  } catch (error) {
-    console.warn("No se pudo cargar el logo para el PDF:", error);
-  }
+    const formatMoneyPdf = (value: number) =>
+      `$${Number(value || 0).toLocaleString("es-CO", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`;
 
-  const subtotalGeneral = remision.items.reduce(
-    (acc, item) =>
-      acc + Number(item.cantidad || 0) * Number(item.precio_unitario || 0),
-    0
-  );
+    const formatDatePdf = (value?: string | null) =>
+      value ? new Date(value).toLocaleDateString("es-CO") : "-";
 
-  const ivaGeneral = remision.items.reduce((acc, item) => {
-    const subtotal =
-      Number(item.cantidad || 0) * Number(item.precio_unitario || 0);
-    return acc + subtotal * (Number(item.ivaPorcentaje || 0) / 100);
-  }, 0);
+    const getEstadoStyle = (estado: string) => {
+      const normalized = (estado || "").toLowerCase();
 
-  const totalGeneral = subtotalGeneral + ivaGeneral;
+      if (
+        normalized.includes("aplic") ||
+        normalized.includes("recibid") ||
+        normalized.includes("aprobad") ||
+        normalized.includes("confirm")
+      ) {
+        return {
+          bg: [...COLORS.successBg] as const,
+          text: [...COLORS.successText] as const,
+          label: estado,
+        };
+      }
 
-  // Header
-  doc.setFillColor(...COLORS.primary);
-  doc.rect(0, 0, pageWidth, 34, "F");
+      if (normalized.includes("anulad")) {
+        return {
+          bg: [...COLORS.dangerBg] as const,
+          text: [...COLORS.dangerText] as const,
+          label: estado,
+        };
+      }
 
-  doc.setFillColor(9, 92, 181);
-  doc.rect(0, 34, pageWidth, 1.2, "F");
+      return {
+        bg: [...COLORS.warningBg] as const,
+        text: [...COLORS.warningText] as const,
+        label: estado || "Pendiente",
+      };
+    };
 
-  // Logo sin caja blanca
-  if (logo) {
-    const maxLogoWidth = 22;
-    const maxLogoHeight = 14;
-    const scale = Math.min(
-      maxLogoWidth / logo.width,
-      maxLogoHeight / logo.height
+    let logo: PdfImageInfo | null = null;
+    try {
+      logo = await loadImageInfoAsDataUrl(logoVManage);
+    } catch (error) {
+      console.warn("No se pudo cargar el logo para el PDF:", error);
+    }
+
+    const subtotalGeneral = remision.items.reduce(
+      (acc, item) =>
+        acc + Number(item.cantidad || 0) * Number(item.precio_unitario || 0),
+      0
     );
 
-    const drawWidth = logo.width * scale;
-    const drawHeight = logo.height * scale;
-    const logoX = marginX;
-    const logoY = (34 - drawHeight) / 2;
-
-    doc.addImage(logo.dataUrl, "PNG", logoX, logoY, drawWidth, drawHeight);
-  }
-
-  // Título
-  doc.setTextColor(255, 255, 255);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
-  doc.text("REMISIÓN DE COMPRA", pageWidth / 2, 14.8, { align: "center" });
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.text("VManage • Gestión empresarial", pageWidth / 2, 21.8, {
-    align: "center",
-  });
-
-  // Datos derecha
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.7);
-  doc.text(`Código: ${remision.numeroRemision || "-"}`, rightX, 11.5, {
-    align: "right",
-  });
-  doc.text(`Fecha: ${formatDatePdf(remision.fecha)}`, rightX, 17.8, {
-    align: "right",
-  });
-  doc.text(
-    `Vencimiento: ${formatDatePdf(remision.fechaVencimiento)}`,
-    rightX,
-    24.1,
-    { align: "right" }
-  );
-
-  // Tarjeta información general
-  doc.setFillColor(...COLORS.card);
-  doc.roundedRect(marginX, 42, pageWidth - marginX * 2, 42, 3, 3, "F");
-
-  doc.setTextColor(...COLORS.text);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10.5);
-  doc.text("Información general", marginX + 4, 49);
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9.2);
-
-  const proveedorLines = doc.splitTextToSize(remision.proveedor || "-", 64);
-
-  doc.text("Proveedor:", marginX + 4, 56);
-  doc.text(proveedorLines, marginX + 28, 56);
-
-  doc.text("Tipo Doc.:", marginX + 4, 65);
-  doc.text(remision.proveedorTipoDocumento || "-", marginX + 28, 65);
-
-  doc.text("N° Documento:", marginX + 4, 74);
-  doc.text(remision.proveedorNumeroDocumento || "-", marginX + 32, 74);
-
-  doc.text("Bodega:", 112, 56);
-  doc.text(remision.bodega || "-", 128, 56);
-
-  doc.text("Orden compra:", 112, 65);
-  doc.text(remision.ordenCompra || "-", 136, 65);
-
-  const estadoStyle = getEstadoStyle(remision.estado);
-  doc.setFillColor(...(estadoStyle.bg as [number, number, number]));
-  doc.roundedRect(112, 69, 44, 9.5, 3, 3, "F");
-
-  doc.setTextColor(...(estadoStyle.text as [number, number, number]));
-  doc.setFont("helvetica", "bold");
-  doc.text(`Estado: ${estadoStyle.label}`, 134, 75.4, { align: "center" });
-
-  // Línea separadora
-  doc.setDrawColor(...COLORS.primaryLine);
-  doc.setLineWidth(0.6);
-  doc.line(marginX, 90, rightX, 90);
-
-  // Tabla
-  const tableData =
-    remision.items?.map((item) => {
+    const ivaGeneral = remision.items.reduce((acc, item) => {
       const subtotal =
         Number(item.cantidad || 0) * Number(item.precio_unitario || 0);
+      return acc + subtotal * (Number(item.ivaPorcentaje || 0) / 100);
+    }, 0);
 
-      const detalleProducto = [
-        item.productoNombre || "-",
-        item.lote ? `Lote: ${item.lote}` : null,
-        item.fecha_vencimiento
-          ? `Vence: ${new Date(item.fecha_vencimiento).toLocaleDateString("es-CO")}`
-          : null,
-        item.codigo_barras || item.cod_barras
-          ? `Cod. barras: ${item.codigo_barras || item.cod_barras}`
-          : null,
-        item.nota ? `Nota: ${item.nota}` : null,
-      ]
-        .filter(Boolean)
-        .join("\n");
+    const totalGeneral = subtotalGeneral + ivaGeneral;
 
-      return [
-        detalleProducto,
-        String(item.cantidad ?? 0),
-        `IVA (${Number(item.ivaPorcentaje || 0).toFixed(2)}%)`,
-        formatMoneyPdf(item.precio_unitario || 0),
-        formatMoneyPdf(subtotal),
-      ];
-    }) || [];
+    doc.setFillColor(...COLORS.primary);
+    doc.rect(0, 0, pageWidth, 34, "F");
 
-  autoTable(doc, {
-    startY: 96,
-    margin: { left: marginX, right: marginX },
-    head: [["Producto", "Cantidad", "IVA", "Precio Unit.", "Subtotal"]],
-    body: tableData.length
-      ? tableData
-      : [["Sin productos", "-", "-", "-", "-"]],
-    theme: "grid",
-    headStyles: {
-      fillColor: [...COLORS.primary],
-      textColor: [255, 255, 255],
-      fontStyle: "bold",
-      fontSize: 9,
-      halign: "center",
-      valign: "middle",
-      lineColor: [...COLORS.primary],
-      lineWidth: 0.1,
-    },
-    bodyStyles: {
-      fontSize: 8.3,
-      textColor: [...COLORS.text],
-      lineColor: [...COLORS.border],
-      lineWidth: 0.1,
-      valign: "middle",
-    },
-    alternateRowStyles: {
-      fillColor: [...COLORS.primarySoft],
-    },
-    styles: {
-      cellPadding: 3.2,
-      overflow: "linebreak",
-    },
-    columnStyles: {
-      0: { cellWidth: 82 },
-      1: { cellWidth: 20, halign: "center" },
-      2: { cellWidth: 24, halign: "center" },
-      3: { cellWidth: 28, halign: "right" },
-      4: { cellWidth: 32, halign: "right" },
-    },
-  });
+    doc.setFillColor(9, 92, 181);
+    doc.rect(0, 34, pageWidth, 1.2, "F");
 
-  let currentY = ((doc as any).lastAutoTable?.finalY || 96) + 8;
+    if (logo) {
+      const maxLogoWidth = 22;
+      const maxLogoHeight = 14;
+      const scale = Math.min(
+        maxLogoWidth / logo.width,
+        maxLogoHeight / logo.height
+      );
 
-  const observacionesLines = remision.observaciones
-    ? doc.splitTextToSize(remision.observaciones, 95)
-    : [];
+      const drawWidth = logo.width * scale;
+      const drawHeight = logo.height * scale;
+      const logoX = marginX;
+      const logoY = (34 - drawHeight) / 2;
 
-  const observacionesHeight = remision.observaciones
-    ? Math.max(24, 12 + observacionesLines.length * 4.5)
-    : 0;
+      doc.addImage(logo.dataUrl, "PNG", logoX, logoY, drawWidth, drawHeight);
+    }
 
-  const totalsHeight = 31;
-  const blockHeight = Math.max(observacionesHeight, totalsHeight);
-
-  if (currentY + blockHeight > pageHeight - 24) {
-    doc.addPage();
-    currentY = 20;
-  }
-
-  // Observaciones
-  if (remision.observaciones) {
-    doc.setFillColor(255, 251, 235);
-    doc.roundedRect(marginX, currentY, 108, observacionesHeight, 3, 3, "F");
-
-    doc.setTextColor(146, 64, 14);
+    doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.text("Observaciones", marginX + 4, currentY + 7);
+    doc.setFontSize(18);
+    doc.text("REMISIÓN DE COMPRA", pageWidth / 2, 14.8, { align: "center" });
 
-    doc.setTextColor(87, 83, 78);
     doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text(
+      includePrices
+        ? "VManage • Gestión empresarial"
+        : "VManage • Gestión empresarial",
+      pageWidth / 2,
+      21.8,
+      {
+        align: "center",
+      }
+    );
+
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(8.7);
-    doc.text(observacionesLines, marginX + 4, currentY + 13);
-  }
-
-  // Totales
-  const totalsX = remision.observaciones ? 128 : 124;
-  const totalsWidth = remision.observaciones ? 68 : 72;
-
-  doc.setFillColor(...COLORS.card);
-  doc.roundedRect(totalsX, currentY, totalsWidth, totalsHeight, 3, 3, "F");
-
-  doc.setTextColor(...COLORS.text);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9.5);
-
-  doc.text("Subtotal:", totalsX + 4, currentY + 8);
-  doc.text(
-    formatMoneyPdf(subtotalGeneral),
-    totalsX + totalsWidth - 4,
-    currentY + 8,
-    { align: "right" }
-  );
-
-  doc.text("IVA:", totalsX + 4, currentY + 15);
-  doc.text(
-    formatMoneyPdf(ivaGeneral),
-    totalsX + totalsWidth - 4,
-    currentY + 15,
-    { align: "right" }
-  );
-
-  doc.setFillColor(...COLORS.primary);
-  doc.roundedRect(totalsX + 2, currentY + 20, totalsWidth - 4, 9, 2, 2, "F");
-
-  doc.setTextColor(255, 255, 255);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10.5);
-  doc.text("TOTAL", totalsX + 5, currentY + 26);
-  doc.text(
-    formatMoneyPdf(totalGeneral),
-    totalsX + totalsWidth - 4,
-    currentY + 26,
-    { align: "right" }
-  );
-
-  // Footer
-  const generatedAt = new Date().toLocaleString("es-CO");
-  const totalPages = doc.getNumberOfPages();
-
-  for (let page = 1; page <= totalPages; page++) {
-    doc.setPage(page);
-
-    doc.setDrawColor(...COLORS.border);
-    doc.setLineWidth(0.3);
-    doc.line(marginX, pageHeight - 14, rightX, pageHeight - 14);
-
-    doc.setFont("helvetica", "italic");
-    doc.setFontSize(8);
-    doc.setTextColor(...COLORS.muted);
-    doc.text(`Generado el ${generatedAt} • VManage`, marginX, pageHeight - 8);
-    doc.text(`Página ${page} de ${totalPages}`, rightX, pageHeight - 8, {
+    doc.text(`Código: ${remision.numeroRemision || "-"}`, rightX, 11.5, {
       align: "right",
     });
-  }
-
-  doc.save(`Remision_Compra_${remision.numeroRemision}.pdf`);
-};
-
-const handleDescargarRemision = async (remision: RemisionCompraUI) => {
-  try {
-    const detalle =
-      remision.items.length > 0
-        ? remision
-        : await getRemisionCompraById(remision.id);
-
-    await generateRemisionPDF(detalle);
-    toast.success(
-      `PDF de la remisión ${detalle.numeroRemision} descargado exitosamente`
+    doc.text(`Fecha: ${formatDatePdf(remision.fecha)}`, rightX, 17.8, {
+      align: "right",
+    });
+    doc.text(
+      `Vencimiento: ${formatDatePdf(remision.fechaVencimiento)}`,
+      rightX,
+      24.1,
+      { align: "right" }
     );
-  } catch (error) {
-    toast.error(getErrorMessage(error, "Error al descargar la remisión en PDF"));
-  }
-};
+
+    doc.setFillColor(...COLORS.card);
+    doc.roundedRect(marginX, 42, pageWidth - marginX * 2, 42, 3, 3, "F");
+
+    doc.setTextColor(...COLORS.text);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.5);
+    doc.text("Información general", marginX + 4, 49);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.2);
+
+    const proveedorLines = doc.splitTextToSize(remision.proveedor || "-", 64);
+
+    doc.text("Proveedor:", marginX + 4, 56);
+    doc.text(proveedorLines, marginX + 28, 56);
+
+    doc.text("Tipo Doc.:", marginX + 4, 65);
+    doc.text(remision.proveedorTipoDocumento || "-", marginX + 28, 65);
+
+    doc.text("N° Documento:", marginX + 4, 74);
+    doc.text(remision.proveedorNumeroDocumento || "-", marginX + 32, 74);
+
+    doc.text("Bodega:", 112, 56);
+    doc.text(remision.bodega || "-", 128, 56);
+
+    doc.text("Orden compra:", 112, 65);
+    doc.text(remision.ordenCompra || "-", 136, 65);
+
+    const estadoStyle = getEstadoStyle(remision.estado);
+    doc.setFillColor(...(estadoStyle.bg as [number, number, number]));
+    doc.roundedRect(112, 69, 44, 9.5, 3, 3, "F");
+
+    doc.setTextColor(...(estadoStyle.text as [number, number, number]));
+    doc.setFont("helvetica", "bold");
+    doc.text(`Estado: ${estadoStyle.label}`, 134, 75.4, { align: "center" });
+
+    doc.setDrawColor(...COLORS.primaryLine);
+    doc.setLineWidth(0.6);
+    doc.line(marginX, 90, rightX, 90);
+
+    const tableData =
+      remision.items?.map((item) => {
+        const subtotal =
+          Number(item.cantidad || 0) * Number(item.precio_unitario || 0);
+
+        const detalleProducto = [
+          item.productoNombre || "-",
+          item.lote ? `Lote: ${item.lote}` : null,
+          item.fecha_vencimiento
+            ? `Vence: ${new Date(item.fecha_vencimiento).toLocaleDateString(
+                "es-CO"
+              )}`
+            : null,
+          item.codigo_barras || item.cod_barras
+            ? `Cod. barras: ${item.codigo_barras || item.cod_barras}`
+            : null,
+          item.nota ? `Nota: ${item.nota}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n");
+
+        if (includePrices) {
+          return [
+            detalleProducto,
+            String(item.cantidad ?? 0),
+            `IVA (${Number(item.ivaPorcentaje || 0).toFixed(2)}%)`,
+            formatMoneyPdf(item.precio_unitario || 0),
+            formatMoneyPdf(subtotal),
+          ];
+        }
+
+        return [
+          detalleProducto,
+          String(item.cantidad ?? 0),
+          `IVA (${Number(item.ivaPorcentaje || 0).toFixed(2)}%)`,
+        ];
+      }) || [];
+
+    autoTable(doc, {
+      startY: 96,
+      margin: { left: marginX, right: marginX },
+      head: includePrices
+        ? [["Producto", "Cantidad", "IVA", "Precio Unit.", "Subtotal"]]
+        : [["Producto", "Cantidad", "IVA"]],
+      body: tableData.length
+        ? tableData
+        : includePrices
+          ? [["Sin productos", "-", "-", "-", "-"]]
+          : [["Sin productos", "-", "-"]],
+      theme: "grid",
+      headStyles: {
+        fillColor: [...COLORS.primary],
+        textColor: [255, 255, 255],
+        fontStyle: "bold",
+        fontSize: 9,
+        halign: "center",
+        valign: "middle",
+        lineColor: [...COLORS.primary],
+        lineWidth: 0.1,
+      },
+      bodyStyles: {
+        fontSize: 8.3,
+        textColor: [...COLORS.text],
+        lineColor: [...COLORS.border],
+        lineWidth: 0.1,
+        valign: "middle",
+      },
+      alternateRowStyles: {
+        fillColor: [...COLORS.primarySoft],
+      },
+      styles: {
+        cellPadding: 3.2,
+        overflow: "linebreak",
+      },
+      columnStyles: includePrices
+        ? {
+            0: { cellWidth: 82 },
+            1: { cellWidth: 20, halign: "center" },
+            2: { cellWidth: 24, halign: "center" },
+            3: { cellWidth: 28, halign: "right" },
+            4: { cellWidth: 32, halign: "right" },
+          }
+        : {
+            0: { cellWidth: 126 },
+            1: { cellWidth: 24, halign: "center" },
+            2: { cellWidth: 36, halign: "center" },
+          },
+    });
+
+    let currentY = ((doc as any).lastAutoTable?.finalY || 96) + 8;
+
+    const observacionesLines = remision.observaciones
+      ? doc.splitTextToSize(
+          remision.observaciones,
+          includePrices ? 95 : pageWidth - marginX * 2 - 8
+        )
+      : [];
+
+    const observacionesHeight = remision.observaciones
+      ? Math.max(24, 12 + observacionesLines.length * 4.5)
+      : 0;
+
+    const totalsHeight = includePrices ? 31 : 0;
+    const blockHeight = Math.max(observacionesHeight, includePrices ? totalsHeight : 0);
+
+    if (currentY + Math.max(blockHeight, 24) > pageHeight - 24) {
+      doc.addPage();
+      currentY = 20;
+    }
+
+    if (remision.observaciones) {
+      const observacionesWidth = includePrices
+        ? 108
+        : pageWidth - marginX * 2;
+
+      doc.setFillColor(255, 251, 235);
+      doc.roundedRect(
+        marginX,
+        currentY,
+        observacionesWidth,
+        observacionesHeight,
+        3,
+        3,
+        "F"
+      );
+
+      doc.setTextColor(146, 64, 14);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text("Observaciones", marginX + 4, currentY + 7);
+
+      doc.setTextColor(87, 83, 78);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.7);
+      doc.text(observacionesLines, marginX + 4, currentY + 13);
+    }
+
+    if (includePrices) {
+      const totalsX = remision.observaciones ? 128 : 124;
+      const totalsWidth = remision.observaciones ? 68 : 72;
+
+      doc.setFillColor(...COLORS.card);
+      doc.roundedRect(totalsX, currentY, totalsWidth, totalsHeight, 3, 3, "F");
+
+      doc.setTextColor(...COLORS.text);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9.5);
+
+      doc.text("Subtotal:", totalsX + 4, currentY + 8);
+      doc.text(
+        formatMoneyPdf(subtotalGeneral),
+        totalsX + totalsWidth - 4,
+        currentY + 8,
+        { align: "right" }
+      );
+
+      doc.text("IVA:", totalsX + 4, currentY + 15);
+      doc.text(
+        formatMoneyPdf(ivaGeneral),
+        totalsX + totalsWidth - 4,
+        currentY + 15,
+        { align: "right" }
+      );
+
+      doc.setFillColor(...COLORS.primary);
+      doc.roundedRect(totalsX + 2, currentY + 20, totalsWidth - 4, 9, 2, 2, "F");
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10.5);
+      doc.text("TOTAL", totalsX + 5, currentY + 26);
+      doc.text(
+        formatMoneyPdf(totalGeneral),
+        totalsX + totalsWidth - 4,
+        currentY + 26,
+        { align: "right" }
+      );
+    }
+
+    const generatedAt = new Date().toLocaleString("es-CO");
+    const totalPages = doc.getNumberOfPages();
+
+    for (let page = 1; page <= totalPages; page++) {
+      doc.setPage(page);
+
+      doc.setDrawColor(...COLORS.border);
+      doc.setLineWidth(0.3);
+      doc.line(marginX, pageHeight - 14, rightX, pageHeight - 14);
+
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(8);
+      doc.setTextColor(...COLORS.muted);
+      doc.text(`Generado el ${generatedAt} • VManage`, marginX, pageHeight - 8);
+      doc.text(`Página ${page} de ${totalPages}`, rightX, pageHeight - 8, {
+        align: "right",
+      });
+    }
+
+    doc.save(
+      `Remision_Compra_${remision.numeroRemision}_${
+        includePrices ? "con_precios" : "sin_precios"
+      }.pdf`
+    );
+  };
+
+  const handleOpenPdfOptions = (remision: RemisionCompraUI) => {
+    setRemisionParaDescargarPdf(remision);
+    setShowPdfOptionsModal(true);
+  };
+
+  const handleDownloadPDF = async (includePrices: boolean) => {
+    if (!remisionParaDescargarPdf) return;
+
+    try {
+      const detalle =
+        remisionParaDescargarPdf.items.length > 0
+          ? remisionParaDescargarPdf
+          : await getRemisionCompraById(remisionParaDescargarPdf.id);
+
+      await generateRemisionPDF(detalle, includePrices);
+
+      setShowPdfOptionsModal(false);
+      setRemisionParaDescargarPdf(null);
+
+      toast.success(
+        `PDF de la remisión ${detalle.numeroRemision} descargado exitosamente`
+      );
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Error al descargar la remisión en PDF"));
+    }
+  };
 
   const totalFormulario = useMemo(() => {
     return items.reduce((acc, item) => {
@@ -1545,9 +1622,7 @@ const handleDescargarRemision = async (remision: RemisionCompraUI) => {
       <div>
         <h2 className="text-xl font-semibold text-gray-900">Remisiones de Compra</h2>
         <div className="flex items-center gap-2 mt-1">
-          <p className="text-gray-600">
-            Gestiona las remisiones de compra en
-          </p>
+          <p className="text-gray-600">Gestiona las remisiones de compra en</p>
           <Badge
             variant="outline"
             className="bg-purple-50 text-purple-700 border-purple-200"
@@ -1675,12 +1750,13 @@ const handleDescargarRemision = async (remision: RemisionCompraUI) => {
                           size="sm"
                           onClick={() => handleEstadoClick(remision)}
                           disabled={remision.estadoKey !== "PENDIENTE"}
-                          className={`h-7 ${remision.estadoKey === "APLICADA"
-                            ? "bg-green-100 text-green-800 hover:bg-green-200"
-                            : remision.estadoKey === "PENDIENTE"
-                              ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                              : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
-                            }`}
+                          className={`h-7 ${
+                            remision.estadoKey === "APLICADA"
+                              ? "bg-green-100 text-green-800 hover:bg-green-200"
+                              : remision.estadoKey === "PENDIENTE"
+                                ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                                : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
+                          }`}
                         >
                           {remision.estado}
                         </Button>
@@ -1700,7 +1776,7 @@ const handleDescargarRemision = async (remision: RemisionCompraUI) => {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleDescargarRemision(remision)}
+                            onClick={() => handleOpenPdfOptions(remision)}
                             className="hover:bg-green-50"
                             title="Descargar"
                           >
@@ -1828,325 +1904,376 @@ const handleDescargarRemision = async (remision: RemisionCompraUI) => {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Número de Remisión</Label>
-                {renderReadonlyBox(
-                  formData.numeroRemision,
-                  "Se genera automáticamente"
-                )}
-              </div>
+<div className="space-y-8 py-4">
+  <div className="rounded-2xl border border-gray-200 bg-white p-5 md:p-6">
+    <div className="mb-5">
+      <h3 className="text-lg font-semibold text-gray-900">
+        Información general
+      </h3>
+      <p className="mt-1 text-sm text-gray-500">
+        Selecciona la orden de compra y completa los datos principales de la remisión.
+      </p>
+    </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="ordenCompra">Orden de Compra *</Label>
-                <Select
-                  value={formData.id_compra}
-                  onValueChange={handleOrdenCompraChange}
-                >
-                  <SelectTrigger id="ordenCompra">
-                    <SelectValue placeholder="Seleccionar orden de compra" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {comprasOptions.map((compra) => (
-                      <SelectItem key={compra.id} value={String(compra.id)}>
-                        {compra.codigo} - {compra.proveedorNombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+      <div className="space-y-2">
+        <Label>Número de Remisión</Label>
+        {renderReadonlyBox(
+          formData.numeroRemision,
+          "Se genera automáticamente"
+        )}
+      </div>
 
-              <div className="space-y-2">
-                <Label>Proveedor</Label>
-                {renderReadonlyBox(formData.proveedor)}
-              </div>
+      <div className="space-y-2">
+        <Label htmlFor="ordenCompra">Orden de Compra *</Label>
+        <Select
+          value={formData.id_compra}
+          onValueChange={handleOrdenCompraChange}
+        >
+          <SelectTrigger id="ordenCompra" className="h-11">
+            <SelectValue placeholder="Seleccionar orden de compra" />
+          </SelectTrigger>
+          <SelectContent>
+            {comprasOptions.map((compra) => (
+              <SelectItem key={compra.id} value={String(compra.id)}>
+                {compra.codigo} - {compra.proveedorNombre}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
 
-              <div className="space-y-2">
-                <Label>Tipo de Documento</Label>
-                {renderReadonlyBox(formData.proveedorTipoDocumento)}
-              </div>
+    <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2">
+      <div className="space-y-2">
+        <Label>Proveedor</Label>
+        {renderReadonlyBox(
+          formData.proveedor,
+          "Se completa al seleccionar orden de compra"
+        )}
+      </div>
 
-              <div className="space-y-2">
-                <Label>Número de Documento</Label>
-                {renderReadonlyBox(formData.proveedorNumeroDocumento)}
-              </div>
+      <div className="space-y-2">
+        <Label>Tipo de Documento</Label>
+        {renderReadonlyBox(
+          formData.proveedorTipoDocumento,
+          "Se completa al seleccionar orden de compra"
+        )}
+      </div>
 
-              <div className="space-y-2">
-                <Label>Bodega</Label>
-                {renderReadonlyBox(formData.bodega)}
-              </div>
+      <div className="space-y-2">
+        <Label>Número de Documento</Label>
+        {renderReadonlyBox(
+          formData.proveedorNumeroDocumento,
+          "Se completa al seleccionar orden de compra"
+        )}
+      </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="fechaVencimiento">Fecha de Vencimiento</Label>
-                <Input
-                  id="fechaVencimiento"
-                  type="date"
-                  value={formData.fechaVencimiento}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      fechaVencimiento: e.target.value,
-                    }))
-                  }
-                />
-              </div>
+      <div className="space-y-2">
+        <Label>Bodega</Label>
+        {renderReadonlyBox(
+          formData.bodega,
+          "Se completa al seleccionar orden de compra"
+        )}
+      </div>
+    </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="idFactura">ID Factura</Label>
-                <Input
-                  id="idFactura"
-                  type="number"
-                  min="1"
-                  value={formData.idFactura}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, idFactura: e.target.value }))
-                  }
-                  placeholder="Opcional"
-                />
-              </div>
+    <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2">
+      <div className="space-y-2">
+        <Label htmlFor="fechaVencimiento">Fecha de Vencimiento</Label>
+        <Input
+          id="fechaVencimiento"
+          type="date"
+          min={new Date().toISOString().split("T")[0]}
+          value={formData.fechaVencimiento}
+          onChange={(e) =>
+            setFormData((prev) => ({
+              ...prev,
+              fechaVencimiento: e.target.value,
+            }))
+          }
+          className="h-11"
+        />
+      </div>
 
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="observaciones">Observaciones</Label>
-                <Input
-                  id="observaciones"
-                  value={formData.observaciones}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      observaciones: e.target.value,
-                    }))
-                  }
-                  placeholder="Notas adicionales..."
-                />
-              </div>
-            </div>
+      <div className="space-y-2">
+        <Label htmlFor="idFactura">ID Factura</Label>
+        <Input
+          id="idFactura"
+          type="number"
+          min="1"
+          value={formData.idFactura}
+          onChange={(e) =>
+            setFormData((prev) => ({ ...prev, idFactura: e.target.value }))
+          }
+          placeholder="Opcional"
+          className="h-11"
+        />
+      </div>
+    </div>
 
-            {selectedCompra && (
-              <div className="border rounded-lg p-4 bg-blue-50 border-blue-200">
-                <div className="flex items-center justify-between gap-4 mb-3">
-                  <div>
-                    <p className="font-semibold text-blue-900">
-                      Compra seleccionada: {selectedCompra.codigo}
-                    </p>
-                    <p className="text-sm text-blue-800">
-                      Proveedor: {selectedCompra.proveedorNombre} | Tipo Doc.:{""}
-                      {selectedCompra.proveedorTipoDocumento || ""} | N° Doc.:{" "}
-                      {selectedCompra.proveedorNumeroDocumento || ""} | Bodega:{" "}
-                      {selectedCompra.bodegaNombre}
-                    </p>
-                  </div>
-                  {loadingCompraDetalle && (
-                    <div className="flex items-center gap-2 text-blue-700 text-sm">
-                      <Loader2 size={16} className="animate-spin" />
-                      Cargando detalle...
-                    </div>
-                  )}
-                </div>
+    <div className="mt-6 space-y-2">
+      <Label htmlFor="observaciones">Observaciones</Label>
+      <Input
+        id="observaciones"
+        value={formData.observaciones}
+        onChange={(e) =>
+          setFormData((prev) => ({
+            ...prev,
+            observaciones: e.target.value,
+          }))
+        }
+        placeholder="Notas adicionales..."
+        className="h-11"
+      />
+    </div>
+  </div>
 
-                <div className="border rounded-lg overflow-hidden bg-white">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-gray-50">
-                        <TableHead>Producto</TableHead>
-                        <TableHead>Cantidad Compra</TableHead>
-                        <TableHead>Precio Unitario</TableHead>
-                        <TableHead>IVA %</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {productosDeCompra.map((item) => (
-                        <TableRow key={item.idProducto}>
-                          <TableCell>{item.productoNombre}</TableCell>
-                          <TableCell>{item.cantidad}</TableCell>
-                          <TableCell>{formatMoney(item.precioUnitario)}</TableCell>
-                          <TableCell>{item.ivaPorcentaje}%</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
-            )}
+  {selectedCompra && (
+    <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 md:p-6">
+      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-blue-900">
+            Resumen de la compra seleccionada
+          </h3>
+          <p className="mt-1 text-sm text-blue-800">
+            Compra: {selectedCompra.codigo}
+          </p>
+          <p className="mt-1 text-sm text-blue-800">
+            Proveedor: {selectedCompra.proveedorNombre} | Tipo Doc.:{" "}
+            {selectedCompra.proveedorTipoDocumento || ""} | N° Doc.:{" "}
+            {selectedCompra.proveedorNumeroDocumento || ""} | Bodega:{" "}
+            {selectedCompra.bodegaNombre}
+          </p>
+        </div>
 
-            <div className="border-t pt-4 mt-4">
-              <div className="flex items-center gap-2 mb-4">
-                <Package size={20} className="text-blue-600" />
-                <h3 className="font-semibold">Productos de la Remisión</h3>
-              </div>
-
-              <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 mb-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Barcode size={20} className="text-blue-600" />
-                  <Label htmlFor="codigoBarras" className="text-blue-900">
-                    Código de Barras del Ítem
-                  </Label>
-                </div>
-
-                <div className="relative">
-                  <Input
-                    id="codigoBarras"
-                    ref={barcodeInputRef}
-                    value={codigoBarras}
-                    onChange={(e) => setCodigoBarras(e.target.value)}
-                    onKeyDown={handleBarcodeKeyDown}
-                    placeholder="Escanee o escriba el código de barras del lote/ítem..."
-                    className="pr-10 bg-white border-blue-300 focus:border-blue-500"
-                  />
-                  <Barcode
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-400"
-                    size={20}
-                  />
-                </div>
-
-                <p className="text-xs text-blue-700 mt-2">
-                  Opcional. Este código se guarda en el detalle de la remisión y luego
-                  en existencias.
-                </p>
-              </div>
-
-              <div className="bg-gray-50 p-4 rounded-lg space-y-4 mb-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="producto">Producto *</Label>
-                    <Select
-                      value={currentProducto}
-                      onValueChange={(value: string) => setCurrentProducto(value)}
-                    >
-                      <SelectTrigger id="producto">
-                        <SelectValue placeholder="Seleccionar producto de la compra" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {productosDisponibles.map((producto) => (
-                          <SelectItem
-                            key={producto.idProducto}
-                            value={String(producto.idProducto)}
-                          >
-                            {producto.productoNombre}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="numeroLote">Número de Lote *</Label>
-                    <Input
-                      id="numeroLote"
-                      value={currentNumeroLote}
-                      onChange={(e) => setCurrentNumeroLote(e.target.value)}
-                      placeholder="Ej: AL-2026-001"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="cantidad">Cantidad *</Label>
-                    <Input
-                      id="cantidad"
-                      type="number"
-                      value={currentCantidad}
-                      onChange={(e) => setCurrentCantidad(e.target.value)}
-                      placeholder="0"
-                      min="0.01"
-                      step="0.01"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="fechaVencimientoItem">
-                      Fecha de Vencimiento *
-                    </Label>
-                    <Input
-                      id="fechaVencimientoItem"
-                      type="date"
-                      value={currentFechaVencimiento}
-                      onChange={(e) => setCurrentFechaVencimiento(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="md:col-span-2 space-y-2">
-                    <Label htmlFor="notaItem">Nota del Ítem</Label>
-                    <Input
-                      id="notaItem"
-                      value={currentNota}
-                      onChange={(e) => setCurrentNota(e.target.value)}
-                      placeholder="Opcional"
-                    />
-                  </div>
-                </div>
-
-                <Button
-                  type="button"
-                  onClick={handleAddItem}
-                  className="bg-green-600 hover:bg-green-700 w-full"
-                  disabled={!selectedCompra}
-                >
-                  <Plus size={16} className="mr-2" />
-                  Agregar Producto
-                </Button>
-              </div>
-
-              {items.length > 0 ? (
-                <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-gray-50">
-                        <TableHead>Producto</TableHead>
-                        <TableHead>Lote</TableHead>
-                        <TableHead>Cantidad</TableHead>
-                        <TableHead>Precio</TableHead>
-                        <TableHead>IVA</TableHead>
-                        <TableHead>Vencimiento</TableHead>
-                        <TableHead>Cód. Barras</TableHead>
-                        <TableHead>Nota</TableHead>
-                        <TableHead className="w-16"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {items.map((item) => (
-                        <TableRow key={item.localId}>
-                          <TableCell>{item.productoNombre}</TableCell>
-                          <TableCell>{item.lote}</TableCell>
-                          <TableCell>{item.cantidad}</TableCell>
-                          <TableCell>{formatMoney(item.precio_unitario)}</TableCell>
-                          <TableCell>{item.ivaPorcentaje}%</TableCell>
-                          <TableCell>{formatDate(item.fecha_vencimiento)}</TableCell>
-                          <TableCell>{item.codigo_barras || "—"}</TableCell>
-                          <TableCell>{item.nota || "—"}</TableCell>
-                          <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveItem(item.localId)}
-                              className="hover:bg-red-50"
-                            >
-                              <X size={16} className="text-red-600" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      <TableRow className="bg-gray-50">
-                        <TableCell colSpan={8} className="text-right font-semibold">
-                          Total aproximado
-                        </TableCell>
-                        <TableCell className="font-semibold">
-                          {formatMoney(totalFormulario)}
-                        </TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500 border rounded-lg border-dashed">
-                  <Package size={48} className="mx-auto mb-2 text-gray-300" />
-                  <p>No hay productos agregados</p>
-                  <p className="text-sm">
-                    Selecciona la compra y agrega productos desde su detalle
-                  </p>
-                </div>
-              )}
-            </div>
+        {loadingCompraDetalle && (
+          <div className="flex items-center gap-2 text-sm text-blue-700">
+            <Loader2 size={16} className="animate-spin" />
+            Cargando detalle...
           </div>
+        )}
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-blue-100 bg-white">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-gray-50">
+              <TableHead>Producto</TableHead>
+              <TableHead>Cantidad Compra</TableHead>
+              <TableHead>Precio Unitario</TableHead>
+              <TableHead>IVA %</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {productosDeCompra.map((item) => (
+              <TableRow key={item.idProducto}>
+                <TableCell>{item.productoNombre}</TableCell>
+                <TableCell>{item.cantidad}</TableCell>
+                <TableCell>{formatMoney(item.precioUnitario)}</TableCell>
+                <TableCell>{item.ivaPorcentaje}%</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  )}
+
+  <div className="rounded-2xl border border-gray-200 bg-white p-5 md:p-6">
+    <div className="mb-5 flex items-center gap-2">
+      <Package size={20} className="text-blue-600" />
+      <div>
+        <h3 className="text-lg font-semibold text-gray-900">
+          Productos de la Remisión
+        </h3>
+        <p className="mt-1 text-sm text-gray-500">
+          Agrega los productos con su lote, vencimiento y observaciones del ítem.
+        </p>
+      </div>
+    </div>
+
+    <div className="mb-6 rounded-2xl border-2 border-blue-200 bg-blue-50 p-4 md:p-5">
+      <div className="mb-3 flex items-center gap-2">
+        <Barcode size={20} className="text-blue-600" />
+        <Label htmlFor="codigoBarras" className="text-blue-900">
+          Código de Barras del Ítem
+        </Label>
+      </div>
+
+      <div className="relative">
+        <Input
+          id="codigoBarras"
+          ref={barcodeInputRef}
+          value={codigoBarras}
+          onChange={(e) => setCodigoBarras(e.target.value)}
+          onKeyDown={handleBarcodeKeyDown}
+          placeholder="Escanee o escriba el código de barras del lote/ítem..."
+          className="h-11 pr-10 bg-white border-blue-300 focus:border-blue-500"
+        />
+        <Barcode
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-400"
+          size={20}
+        />
+      </div>
+
+      <p className="mt-3 text-xs text-blue-700">
+        Opcional. Este código se guarda en el detalle de la remisión y luego en existencias.
+      </p>
+    </div>
+
+    <div className="rounded-2xl bg-gray-50 p-4 md:p-5">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="producto">Producto *</Label>
+          <Select
+            value={currentProducto}
+            onValueChange={(value: string) => setCurrentProducto(value)}
+          >
+            <SelectTrigger id="producto" className="h-11">
+              <SelectValue placeholder="Seleccionar producto de la compra" />
+            </SelectTrigger>
+            <SelectContent>
+              {productosDisponibles.map((producto) => (
+                <SelectItem
+                  key={producto.idProducto}
+                  value={String(producto.idProducto)}
+                >
+                  {producto.productoNombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="numeroLote">Número de Lote *</Label>
+          <Input
+            id="numeroLote"
+            value={currentNumeroLote}
+            onChange={(e) => setCurrentNumeroLote(e.target.value)}
+            placeholder="Ej: AL-2026-001"
+            className="h-11"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="cantidad">Cantidad *</Label>
+          <Input
+            id="cantidad"
+            type="number"
+            value={currentCantidad}
+            onChange={(e) => setCurrentCantidad(e.target.value)}
+            placeholder="0"
+            min="0.01"
+            step="0.01"
+            className="h-11"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="fechaVencimientoItem">
+            Fecha de Vencimiento *
+          </Label>
+          <Input
+            id="fechaVencimientoItem"
+            type="date"
+            min={new Date().toISOString().split("T")[0]}
+            value={currentFechaVencimiento}
+            onChange={(e) => setCurrentFechaVencimiento(e.target.value)}
+            className="h-11"
+          />
+        </div>
+
+        <div className="md:col-span-2 space-y-2">
+          <Label htmlFor="notaItem">Nota del Ítem</Label>
+          <Input
+            id="notaItem"
+            value={currentNota}
+            onChange={(e) => setCurrentNota(e.target.value)}
+            placeholder="Opcional"
+            className="h-11"
+          />
+        </div>
+      </div>
+
+      <div className="mt-5">
+        <Button
+          type="button"
+          onClick={handleAddItem}
+          className="bg-green-600 hover:bg-green-700 w-full h-11"
+          disabled={!selectedCompra}
+        >
+          <Plus size={16} className="mr-2" />
+          Agregar Producto
+        </Button>
+      </div>
+    </div>
+
+    <div className="mt-6">
+      {items.length > 0 ? (
+        <div className="overflow-hidden rounded-2xl border border-gray-200">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-gray-50">
+                <TableHead>Producto</TableHead>
+                <TableHead>Lote</TableHead>
+                <TableHead>Cantidad</TableHead>
+                <TableHead>Precio</TableHead>
+                <TableHead>IVA</TableHead>
+                <TableHead>Vencimiento</TableHead>
+                <TableHead>Cód. Barras</TableHead>
+                <TableHead>Nota</TableHead>
+                <TableHead className="w-16"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {items.map((item) => (
+                <TableRow key={item.localId}>
+                  <TableCell>{item.productoNombre}</TableCell>
+                  <TableCell>{item.lote}</TableCell>
+                  <TableCell>{item.cantidad}</TableCell>
+                  <TableCell>{formatMoney(item.precio_unitario)}</TableCell>
+                  <TableCell>{item.ivaPorcentaje}%</TableCell>
+                  <TableCell>{formatDate(item.fecha_vencimiento)}</TableCell>
+                  <TableCell>{item.codigo_barras || "—"}</TableCell>
+                  <TableCell>{item.nota || "—"}</TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemoveItem(item.localId)}
+                      className="hover:bg-red-50"
+                    >
+                      <X size={16} className="text-red-600" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+
+              <TableRow className="bg-gray-50">
+                <TableCell colSpan={8} className="text-right font-semibold">
+                  Total aproximado
+                </TableCell>
+                <TableCell className="font-semibold">
+                  {formatMoney(totalFormulario)}
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-dashed border-gray-300 py-10 text-center text-gray-500">
+          <Package size={48} className="mx-auto mb-3 text-gray-300" />
+          <p className="font-medium">No hay productos agregados</p>
+          <p className="mt-1 text-sm">
+            Selecciona la compra y agrega productos desde su detalle
+          </p>
+        </div>
+      )}
+    </div>
+  </div>
+</div>
 
           <DialogFooter>
             <Button
@@ -2402,6 +2529,7 @@ const handleDescargarRemision = async (remision: RemisionCompraUI) => {
                       <Input
                         id="edit-fechaVencimientoItem"
                         type="date"
+                        min={new Date().toISOString().split("T")[0]}
                         value={currentFechaVencimiento}
                         onChange={(e) => setCurrentFechaVencimiento(e.target.value)}
                       />
@@ -2659,7 +2787,7 @@ const handleDescargarRemision = async (remision: RemisionCompraUI) => {
 
           <DialogFooter className="gap-2 sm:justify-end">
             <Button
-              onClick={() => selectedRemision && handleDescargarRemision(selectedRemision)}
+              onClick={() => selectedRemision && handleOpenPdfOptions(selectedRemision)}
               className="bg-green-600 hover:bg-green-700 text-white"
               disabled={!selectedRemision || loadingDetalleRemision}
             >
@@ -2671,6 +2799,43 @@ const handleDescargarRemision = async (remision: RemisionCompraUI) => {
               Cerrar
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showPdfOptionsModal}
+        onOpenChange={(open) => {
+          setShowPdfOptionsModal(open);
+          if (!open) {
+            setRemisionParaDescargarPdf(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Descargar remisión de compra</DialogTitle>
+            <DialogDescription>
+              Selecciona cómo deseas exportar el PDF.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-3 py-2">
+            <Button
+              onClick={() => handleDownloadPDF(true)}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              <Download size={16} className="mr-2" />
+              Descargar con precios
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={() => handleDownloadPDF(false)}
+            >
+              <Download size={16} className="mr-2" />
+              Descargar sin precios
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
