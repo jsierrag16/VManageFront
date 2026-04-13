@@ -97,6 +97,9 @@ export default function Cotizaciones() {
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [productosCatalogo, setProductosCatalogo] = useState<Producto[]>([]);
+  const [precioMinimoPorProducto, setPrecioMinimoPorProducto] = useState<
+  Record<string, number>
+>({});
 
   const [isPdfOptionsModalOpen, setIsPdfOptionsModalOpen] = useState(false);
   const [cotizacionParaPdf, setCotizacionParaPdf] =
@@ -182,6 +185,14 @@ export default function Cotizaciones() {
     return productosCatalogo.filter((p) => p.estado);
   }, [productosCatalogo]);
 
+  const getPrecioMinimoProducto = (productoId: string) => {
+    return Number(precioMinimoPorProducto[productoId] ?? 0);
+  };
+
+  const precioMinimoProductoSeleccionado = selectedProductoId
+    ? getPrecioMinimoProducto(selectedProductoId)
+    : 0;
+
   const generarNumeroCotizacion = () => {
     const maxNum = cotizaciones.reduce((max, c) => {
       const match = /^COT-(\d+)$/.exec(c.numeroCotizacion);
@@ -260,6 +271,15 @@ export default function Cotizaciones() {
       }
 
       if (productosResult.status === "fulfilled") {
+        setPrecioMinimoPorProducto(
+          Object.fromEntries(
+            (productosResult.value ?? []).map((producto) => [
+              String(producto.id_producto),
+              Number(producto.precio_minimo_venta ?? 0),
+            ])
+          )
+        );
+
         setProductosCatalogo(
           productosResult.value.map((producto) => ({
             id: String(producto.id_producto),
@@ -303,6 +323,10 @@ export default function Cotizaciones() {
   const clientesActivos = useMemo(() => {
     return clientes.filter((c) => c.estado === "Activo");
   }, [clientes]);
+  
+  const clienteSeleccionadoForm = useMemo(() => {
+    return clientesActivos.find((cliente) => cliente.id === formData.idCliente) ?? null;
+  }, [clientesActivos, formData.idCliente]);
 
   const filteredCotizaciones = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -429,6 +453,16 @@ export default function Cotizaciones() {
     setPrecioProducto("");
   }, [isEditar, cotizacionSeleccionada]);
 
+  useEffect(() => {
+    if (!selectedProductoId) {
+      setPrecioProducto("");
+      return;
+    }
+
+    const precioMinimo = getPrecioMinimoProducto(selectedProductoId);
+    setPrecioProducto(precioMinimo > 0 ? String(precioMinimo) : "");
+  }, [selectedProductoId, precioMinimoPorProducto]);
+
   const handleAgregarProducto = () => {
     if (!selectedProductoId) {
       toast.error("Por favor selecciona un producto");
@@ -446,6 +480,15 @@ export default function Cotizaciones() {
 
     if (!precioProducto.trim() || Number.isNaN(precio) || precio <= 0) {
       toast.error("El precio debe ser mayor a cero");
+      return;
+    }
+
+    const precioMinimo = getPrecioMinimoProducto(selectedProductoId);
+
+    if (precioMinimo > 0 && precio < precioMinimo) {
+      toast.error(
+        `El precio no puede ser menor a ${precioMinimo.toLocaleString("es-CO")}`
+      );
       return;
     }
 
@@ -653,6 +696,18 @@ export default function Cotizaciones() {
     if (!currentUserId) {
       toast.error("No se pudo identificar el usuario actual");
       return;
+    }
+
+    for (const item of productosOrden) {
+      const precioMinimo = getPrecioMinimoProducto(String(item.producto.id));
+      const precioActual = Number(item.precio ?? 0);
+
+      if (precioMinimo > 0 && precioActual < precioMinimo) {
+        toast.error(
+          `El producto "${item.producto.nombre}" no puede tener un precio menor a ${precioMinimo.toLocaleString("es-CO")}`
+        );
+        return;
+      }
     }
 
     try {
@@ -1231,51 +1286,65 @@ export default function Cotizaciones() {
               </div>
             </div>
 
-            <div>
-              <Label htmlFor="cliente">Cliente *</Label>
-              <div className="flex gap-2">
-                <Select
-                  value={formData.idCliente}
-                  onValueChange={(value: string) => {
-                    const clienteSeleccionado = clientesActivos.find(
-                      (cliente) => cliente.id === value
-                    );
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="cliente">Cliente *</Label>
+                <div className="flex gap-2">
+                  <Select
+                    value={formData.idCliente}
+                    onValueChange={(value: string) => {
+                      const clienteSeleccionado = clientesActivos.find(
+                        (cliente) => cliente.id === value
+                      );
 
-                    setFormData({
-                      ...formData,
-                      idCliente: value,
-                      cliente: clienteSeleccionado?.nombre ?? "",
-                    });
-                  }}
-                >
-                  <SelectTrigger id="cliente" className="flex-1">
-                    <SelectValue placeholder="Selecciona un cliente" />
-                  </SelectTrigger>
+                      setFormData({
+                        ...formData,
+                        idCliente: value,
+                        cliente: clienteSeleccionado?.nombre ?? "",
+                      });
+                    }}
+                  >
+                    <SelectTrigger id="cliente" className="flex-1">
+                      <SelectValue placeholder="Selecciona un cliente" />
+                    </SelectTrigger>
 
-                  <SelectContent>
-                    {clientesActivos.length === 0 ? (
-                      <div className="px-2 py-2 text-sm text-gray-500">
-                        No hay clientes activos disponibles
-                      </div>
-                    ) : (
-                      clientesActivos.map((cliente) => (
-                        <SelectItem key={cliente.id} value={cliente.id}>
-                          {cliente.nombre}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
+                    <SelectContent>
+                      {clientesActivos.length === 0 ? (
+                        <div className="px-2 py-2 text-sm text-gray-500">
+                          No hay clientes activos disponibles
+                        </div>
+                      ) : (
+                        clientesActivos.map((cliente) => (
+                          <SelectItem key={cliente.id} value={cliente.id}>
+                            {cliente.nombre}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => navigate("/app/clientes/crear")}
-                  className="border-blue-600 text-blue-600 hover:bg-blue-50"
-                >
-                  <Plus size={16} className="mr-1" />
-                  Nuevo
-                </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => navigate("/app/clientes/crear")}
+                    className="border-blue-600 text-blue-600 hover:bg-blue-50"
+                  >
+                    <Plus size={16} className="mr-1" />
+                    Nuevo
+                  </Button>
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="numeroDocumentoCliente">Número de documento</Label>
+                <Input
+                  id="numeroDocumentoCliente"
+                  value={clienteSeleccionadoForm?.numeroDocumento ?? ""}
+                  readOnly
+                  disabled
+                  placeholder="Se completa al seleccionar cliente"
+                  className="bg-gray-100"
+                />
               </div>
             </div>
 
@@ -1373,18 +1442,28 @@ export default function Cotizaciones() {
                   />
                 </div>
 
-                <div className="col-span-3">
+                 <div className="col-span-3">
                   <Label htmlFor="precio">Precio Unit.</Label>
                   <Input
                     id="precio"
                     type="number"
                     value={precioProducto}
                     onChange={(e) => setPrecioProducto(e.target.value)}
-                    min="0"
+                    min={
+                      precioMinimoProductoSeleccionado > 0
+                        ? precioMinimoProductoSeleccionado
+                        : 0
+                    }
                     step="0"
                     placeholder="0.00"
                     className="sin-flechas w-full"
                   />
+                  {precioMinimoProductoSeleccionado > 0 && (
+                    <p className="mt-1 text-xs text-amber-600">
+                      Mínimo permitido: $
+                      {precioMinimoProductoSeleccionado.toLocaleString("es-CO")}
+                    </p>
+                  )}
                 </div>
 
                 <div className="col-span-2 flex items-end">
@@ -1468,30 +1547,6 @@ export default function Cotizaciones() {
                     })}
                   </span>
                 </div>
-
-                {/* {Object.keys(calcularTotales.impuestosPorPorcentaje).length > 0 && (
-                  <div className="space-y-1 border-t pt-2">
-                    {Object.entries(calcularTotales.impuestosPorPorcentaje)
-                      .sort(([a], [b]) => Number(a) - Number(b))
-                      .map(([porcentaje, monto]) => (
-                        <div
-                          key={porcentaje}
-                          className="flex justify-between text-sm"
-                        >
-                          <span className="text-gray-600">
-                            Total IVA {porcentaje}%:
-                          </span>
-                          <span className="font-medium">
-                            $
-                            {monto.toLocaleString("es-CO", {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}
-                          </span>
-                        </div>
-                      ))}
-                  </div>
-                )} */}
 
                 {(() => {
                   const ivaEntries = Object.entries(calcularTotales.impuestosPorPorcentaje).sort(
@@ -1622,34 +1677,48 @@ export default function Cotizaciones() {
               </div>
             </div>
 
-            <div>
-              <Label htmlFor="clienteEdit">Cliente *</Label>
-              <Select
-                value={formData.idCliente}
-                onValueChange={(value: string) => {
-                  const clienteSeleccionado = clientesActivos.find(
-                    (cliente) => cliente.id === value
-                  );
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="clienteEdit">Cliente *</Label>
+                <Select
+                  value={formData.idCliente}
+                  onValueChange={(value: string) => {
+                    const clienteSeleccionado = clientesActivos.find(
+                      (cliente) => cliente.id === value
+                    );
 
-                  setFormData({
-                    ...formData,
-                    idCliente: value,
-                    cliente: clienteSeleccionado?.nombre ?? "",
-                  });
-                }}
-              >
-                <SelectTrigger id="clienteEdit">
-                  <SelectValue placeholder="Selecciona un cliente" />
-                </SelectTrigger>
+                    setFormData({
+                      ...formData,
+                      idCliente: value,
+                      cliente: clienteSeleccionado?.nombre ?? "",
+                    });
+                  }}
+                >
+                  <SelectTrigger id="clienteEdit">
+                    <SelectValue placeholder="Selecciona un cliente" />
+                  </SelectTrigger>
 
-                <SelectContent>
-                  {clientesActivos.map((cliente) => (
-                    <SelectItem key={cliente.id} value={cliente.id}>
-                      {cliente.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                  <SelectContent>
+                    {clientesActivos.map((cliente) => (
+                      <SelectItem key={cliente.id} value={cliente.id}>
+                        {cliente.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="numeroDocumentoClienteEdit">Número de documento</Label>
+                <Input
+                  id="numeroDocumentoClienteEdit"
+                  value={clienteSeleccionadoForm?.numeroDocumento ?? ""}
+                  readOnly
+                  disabled
+                  placeholder="Se completa al seleccionar cliente"
+                  className="bg-gray-100"
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -1753,11 +1822,21 @@ export default function Cotizaciones() {
                     type="number"
                     value={precioProducto}
                     onChange={(e) => setPrecioProducto(e.target.value)}
-                    min="0"
+                    min={
+                      precioMinimoProductoSeleccionado > 0
+                        ? precioMinimoProductoSeleccionado
+                        : 0
+                    }
                     step="0"
                     placeholder="0.00"
                     className="sin-flechas w-full"
                   />
+                  {precioMinimoProductoSeleccionado > 0 && (
+                    <p className="mt-1 text-xs text-amber-600">
+                      Mínimo permitido: $
+                      {precioMinimoProductoSeleccionado.toLocaleString("es-CO")}
+                    </p>
+                  )}
                 </div>
 
                 <div className="col-span-2 flex items-end">

@@ -80,6 +80,7 @@ type ProductoForm = {
   cantidad: number;
   precio_unitario: number;
   subtotal: number;
+  iva: number;
 };
 
 const ITEMS_PER_PAGE = 10;
@@ -137,6 +138,10 @@ function getPrecioProductoCatalogo(producto?: CatalogoProducto) {
   return Number(producto?.precio_venta ?? producto?.precio ?? 0);
 }
 
+function getPrecioMinimoProductoCatalogo(producto?: CatalogoProducto) {
+  return Number(producto?.precio_minimo_venta ?? 0);
+}
+
 function getPrecioDetalleCotizacion(item: DetalleCotizacionApi) {
   return Number(item.precio_unitario ?? item.precio ?? item.valor_unitario ?? 0);
 }
@@ -145,6 +150,7 @@ function mapDetalleOrdenToForm(detalles?: DetalleOrdenVentaApi[]): ProductoForm[
   return (detalles || []).map((item) => {
     const cantidad = Number(item.cantidad || 0);
     const precio = Number(item.precio_unitario || 0);
+    const iva = Number(item.producto?.iva?.porcentaje ?? 0);
 
     return {
       id_producto: Number(item.id_producto),
@@ -152,6 +158,7 @@ function mapDetalleOrdenToForm(detalles?: DetalleOrdenVentaApi[]): ProductoForm[
       cantidad,
       precio_unitario: precio,
       subtotal: cantidad * precio,
+      iva,
     };
   });
 }
@@ -160,6 +167,7 @@ function mapDetalleCotizacionToForm(detalles?: DetalleCotizacionApi[]): Producto
   return (detalles || []).map((item) => {
     const cantidad = Number(item.cantidad || 0);
     const precio = getPrecioDetalleCotizacion(item);
+    const iva = Number(item.producto?.iva?.porcentaje ?? item.iva_porcentaje ?? 0);
 
     return {
       id_producto: Number(item.id_producto),
@@ -167,6 +175,7 @@ function mapDetalleCotizacionToForm(detalles?: DetalleCotizacionApi[]): Producto
       cantidad,
       precio_unitario: precio,
       subtotal: cantidad * precio,
+      iva,
     };
   });
 }
@@ -202,6 +211,42 @@ function sumarDiasAFecha(fechaStr: string, dias: number) {
 
   fecha.setDate(fecha.getDate() + dias);
   return fecha.toISOString().slice(0, 10);
+}
+
+function calcularTotalesConIva(
+  items: Array<{ subtotal: number; iva?: number }>
+) {
+  let subtotalSinIva = 0;
+  let totalIva = 0;
+  const impuestosPorPorcentaje: Record<number, number> = {};
+
+  items.forEach((item) => {
+    const subtotalBruto = Number(item.subtotal || 0);
+    const ivaPorcentaje = Number(item.iva || 0);
+
+    const base = ivaPorcentaje > 0
+      ? subtotalBruto / (1 + ivaPorcentaje / 100)
+      : subtotalBruto;
+
+    const ivaValor = subtotalBruto - base;
+
+    subtotalSinIva += base;
+    totalIva += ivaValor;
+
+    if (ivaPorcentaje > 0) {
+      if (!impuestosPorPorcentaje[ivaPorcentaje]) {
+        impuestosPorPorcentaje[ivaPorcentaje] = 0;
+      }
+      impuestosPorPorcentaje[ivaPorcentaje] += ivaValor;
+    }
+  });
+
+  return {
+    subtotalSinIva,
+    totalIva,
+    impuestosPorPorcentaje,
+    total: subtotalSinIva + totalIva,
+  };
 }
 
 function getSiguienteEstadoInfo(
@@ -318,6 +363,7 @@ export default function OrdenesVenta() {
   const [terminosPago, setTerminosPago] = useState<CatalogoTerminoPago[]>([]);
   const [estados, setEstados] = useState<CatalogoEstadoOrdenVenta[]>([]);
   const [cotizaciones, setCotizaciones] = useState<CatalogoCotizacion[]>([]);
+  const [precioTouched, setPrecioTouched] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -408,16 +454,13 @@ export default function OrdenesVenta() {
   useEffect(() => {
     if (!selectedProductoId) {
       setPrecioProducto("");
+      setPrecioTouched(false);
       return;
     }
 
-    const producto = productos.find(
-      (item) => Number(item.id_producto) === Number(selectedProductoId)
-    );
-
-    const precio = getPrecioProductoCatalogo(producto);
-    setPrecioProducto(precio > 0 ? String(precio) : "");
-  }, [selectedProductoId, productos]);
+    setPrecioProducto("");
+    setPrecioTouched(false);
+  }, [selectedProductoId]);
 
   useEffect(() => {
     if (!formData.fecha_creacion) return;
@@ -489,6 +532,14 @@ export default function OrdenesVenta() {
 
     return { totalOrdenes, pendientes, procesando };
   }, [ordenes]);
+
+  const clienteSeleccionado = useMemo(() => {
+    return (
+      clientes.find(
+        (cliente) => String(cliente.id_cliente) === String(formData.id_cliente)
+      ) ?? null
+    );
+  }, [clientes, formData.id_cliente]);
 
   const cotizacionesDisponibles = useMemo(() => {
     return cotizaciones.filter((cotizacion) => {
@@ -609,6 +660,21 @@ export default function OrdenesVenta() {
     toast.success("Productos cargados desde la cotización");
   };
 
+  const productoSeleccionado = productos.find(
+    (item) => Number(item.id_producto) === Number(selectedProductoId)
+  );
+
+  const precioMinimoProductoSeleccionado =
+    getPrecioMinimoProductoCatalogo(productoSeleccionado);
+
+  const precioIngresadoNumero = Number(precioProducto || 0);
+
+  const precioEsMenorAlMinimo =
+    !!selectedProductoId &&
+    !!precioProducto &&
+    precioMinimoProductoSeleccionado > 0 &&
+    precioIngresadoNumero < precioMinimoProductoSeleccionado;
+
   const handleAgregarProducto = () => {
     if (!selectedProductoId) {
       toast.error("Selecciona un producto");
@@ -654,12 +720,14 @@ export default function OrdenesVenta() {
         cantidad,
         precio_unitario: precio,
         subtotal: cantidad * precio,
+        iva: Number(producto.iva?.porcentaje ?? 0),
       },
     ]);
 
     setSelectedProductoId("");
     setCantidadProducto("");
     setPrecioProducto("");
+    setPrecioTouched(false);
   };
 
   const handleEliminarProducto = (idProducto: number) => {
@@ -668,8 +736,8 @@ export default function OrdenesVenta() {
     );
   };
 
-  const totalForm = useMemo(() => {
-    return productosOrden.reduce((acc, item) => acc + item.subtotal, 0);
+  const totalesFormulario = useMemo(() => {
+    return calcularTotalesConIva(productosOrden);
   }, [productosOrden]);
 
   const handleSave = async () => {
@@ -1497,12 +1565,9 @@ export default function OrdenesVenta() {
                 <Input
                   type="date"
                   value={formData.fecha_creacion}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      fecha_creacion: e.target.value,
-                    }))
-                  }
+                  disabled
+                  readOnly
+                  className="bg-gray-100 cursor-not-allowed"
                 />
               </div>
 
@@ -1517,28 +1582,41 @@ export default function OrdenesVenta() {
                 />
               </div>
 
-              <div>
-                <Label>Cliente *</Label>
-                <Select
-                  value={formData.id_cliente}
-                  onValueChange={(value) =>
-                    setFormData((prev) => ({ ...prev, id_cliente: value }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona un cliente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clientes.map((cliente) => (
-                      <SelectItem
-                        key={cliente.id_cliente}
-                        value={String(cliente.id_cliente)}
-                      >
-                        {getClienteNombre(cliente)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:col-span-2">
+                <div>
+                  <Label>Cliente *</Label>
+                  <Select
+                    value={formData.id_cliente}
+                    onValueChange={(value) =>
+                      setFormData((prev) => ({ ...prev, id_cliente: value }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona un cliente" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clientes.map((cliente) => (
+                        <SelectItem
+                          key={cliente.id_cliente}
+                          value={String(cliente.id_cliente)}
+                        >
+                          {getClienteNombre(cliente)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>Número de documento</Label>
+                  <Input
+                    value={clienteSeleccionado?.num_documento ?? ""}
+                    readOnly
+                    disabled
+                    placeholder="Se completa al seleccionar cliente"
+                    className="bg-gray-100"
+                  />
+                </div>
               </div>
 
               <div>
@@ -1694,14 +1772,40 @@ export default function OrdenesVenta() {
 
                 <div className="md:col-span-3">
                   <Label>Precio unitario</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    placeholder="0"
-                    value={precioProducto}
-                    onChange={(e) => setPrecioProducto(e.target.value)}
-                    className="placeholder:text-gray-400"
-                  />
+                  <div className="space-y-1">
+                    <Input
+                      type="number"
+                      placeholder={
+                        precioMinimoProductoSeleccionado > 0
+                          ? `Mínimo: ${precioMinimoProductoSeleccionado}`
+                          : "0"
+                      }
+                      value={precioProducto}
+                      onChange={(e) => {
+                        setPrecioProducto(e.target.value);
+                        if (!precioTouched) setPrecioTouched(true);
+                      }}
+                      onBlur={() => setPrecioTouched(true)}
+                      className={`placeholder:text-gray-400 ${
+                        precioTouched && precioEsMenorAlMinimo
+                          ? "border-red-500 focus-visible:ring-red-500"
+                          : ""
+                      }`}
+                    />
+
+                    {precioMinimoProductoSeleccionado > 0 && (
+                      <p className="text-xs text-gray-500">
+                        Precio mínimo del producto: $
+                        {precioMinimoProductoSeleccionado.toLocaleString("es-CO")}
+                      </p>
+                    )}
+
+                    {precioTouched && precioEsMenorAlMinimo && (
+                      <p className="text-xs font-medium text-red-600">
+                        Valor menor al precio mínimo permitido
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex items-end md:col-span-2">
@@ -1722,6 +1826,7 @@ export default function OrdenesVenta() {
                       <TableHead>Producto</TableHead>
                       <TableHead>Cantidad</TableHead>
                       <TableHead>Precio</TableHead>
+                      <TableHead>IVA %</TableHead>
                       <TableHead>Subtotal</TableHead>
                       <TableHead className="text-right">Acción</TableHead>
                     </TableRow>
@@ -1730,7 +1835,7 @@ export default function OrdenesVenta() {
                     {productosOrden.length === 0 ? (
                       <TableRow>
                         <TableCell
-                          colSpan={5}
+                          colSpan={6}
                           className="py-8 text-center text-gray-500"
                         >
                           No hay productos agregados
@@ -1742,6 +1847,7 @@ export default function OrdenesVenta() {
                           <TableCell>{item.nombre}</TableCell>
                           <TableCell>{item.cantidad}</TableCell>
                           <TableCell>{formatMoney(item.precio_unitario)}</TableCell>
+                          <TableCell>{item.iva}%</TableCell>
                           <TableCell>{formatMoney(item.subtotal)}</TableCell>
                           <TableCell className="text-right">
                             <Button
@@ -1762,12 +1868,24 @@ export default function OrdenesVenta() {
               </div>
 
               <div className="mt-4 flex justify-end">
-                <div className="rounded-lg bg-gray-50 px-4 py-3 text-right">
+                <div className="rounded-lg bg-gray-50 px-4 py-3 text-right min-w-[280px]">
                   <p className="text-sm text-gray-500">
                     Items: {productosOrden.length}
                   </p>
-                  <p className="text-lg font-bold text-gray-900">
-                    Total: {formatMoney(totalForm)}
+                  <p className="text-sm text-gray-600 mt-2">
+                    Subtotal sin IVA:{" "}
+                    <span className="font-medium text-gray-900">
+                      {formatMoney(totalesFormulario.subtotalSinIva)}
+                    </span>
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Total IVA:{" "}
+                    <span className="font-medium text-gray-900">
+                      {formatMoney(totalesFormulario.totalIva)}
+                    </span>
+                  </p>
+                  <p className="text-lg font-bold text-gray-900 mt-2">
+                    Total: {formatMoney(totalesFormulario.total)}
                   </p>
                 </div>
               </div>
@@ -1868,6 +1986,7 @@ export default function OrdenesVenta() {
                       <TableHead>Producto</TableHead>
                       <TableHead>Cantidad</TableHead>
                       <TableHead>Precio</TableHead>
+                      <TableHead>IVA %</TableHead>
                       <TableHead>Subtotal</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1876,6 +1995,8 @@ export default function OrdenesVenta() {
                       (item, index) => {
                         const cantidad = Number(item.cantidad || 0);
                         const precio = Number(item.precio_unitario || 0);
+                        const iva = Number(item.producto?.iva?.porcentaje ?? 0);
+                        const subtotal = cantidad * precio;
 
                         return (
                           <TableRow
@@ -1884,7 +2005,8 @@ export default function OrdenesVenta() {
                             <TableCell>{getProductoNombre(item.producto)}</TableCell>
                             <TableCell>{cantidad}</TableCell>
                             <TableCell>{formatMoney(precio)}</TableCell>
-                            <TableCell>{formatMoney(cantidad * precio)}</TableCell>
+                            <TableCell>{iva}%</TableCell>
+                            <TableCell>{formatMoney(subtotal)}</TableCell>
                           </TableRow>
                         );
                       }
@@ -1892,11 +2014,47 @@ export default function OrdenesVenta() {
                   </TableBody>
                 </Table>
 
-                <div className="mt-4 text-right">
-                  <p className="text-lg font-bold">
-                    Total: {formatMoney(getTotalOrden(selectedOrden))}
-                  </p>
-                </div>
+                {(() => {
+                  const totalesDetalle = calcularTotalesConIva(
+                    (selectedOrden.detalle_orden_venta || []).map((item) => {
+                      const cantidad = Number(item.cantidad || 0);
+                      const precio = Number(item.precio_unitario || 0);
+                      const iva = Number(item.producto?.iva?.porcentaje ?? 0);
+
+                      return {
+                        subtotal: cantidad * precio,
+                        iva,
+                      };
+                    })
+                  );
+
+                  return (
+                    <div className="mt-4 flex justify-end">
+                      <div className="min-w-[300px] rounded-lg border border-blue-200 bg-blue-50 p-4">
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Subtotal sin IVA:</span>
+                            <span className="font-medium">
+                              {formatMoney(totalesDetalle.subtotalSinIva)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Total IVA:</span>
+                            <span className="font-medium">
+                              {formatMoney(totalesDetalle.totalIva)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between border-t border-blue-300 pt-2 text-lg">
+                            <span className="font-semibold text-gray-700">Total:</span>
+                            <span className="font-bold text-blue-600">
+                              {formatMoney(totalesDetalle.total)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="rounded-lg border p-4">
