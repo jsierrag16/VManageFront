@@ -1,5 +1,8 @@
 import api from "@/shared/services/api";
 
+export type DashboardPeriodo = "30d" | "3m" | "6m" | "12m";
+export type DashboardAgrupacion = "dia" | "mes";
+
 export type DashboardResumenResponse = {
   bodega: {
     id_bodega: number | null;
@@ -38,6 +41,30 @@ export type DashboardResumenResponse = {
   logistica: {
     traslados_pendientes: number;
   };
+};
+
+export type DashboardSeriesResponse = {
+  periodo: DashboardPeriodo | string;
+  agrupacion: DashboardAgrupacion | string;
+  labels: string[];
+  ventas: number[];
+  compras: number[];
+};
+
+export type DashboardRankingItem = {
+  label: string;
+  total: number;
+};
+
+export type DashboardRankingResponse = {
+  periodo: DashboardPeriodo | string;
+  items: DashboardRankingItem[];
+};
+
+type DashboardChartParams = {
+  idBodega?: number | null;
+  periodo?: DashboardPeriodo;
+  agrupacion?: DashboardAgrupacion;
 };
 
 const toNumber = (value: unknown) => {
@@ -100,6 +127,34 @@ const normalizeResumen = (raw: any): DashboardResumenResponse => {
   };
 };
 
+const normalizeSeries = (raw: any): DashboardSeriesResponse => {
+  return {
+    periodo: String(raw?.periodo ?? "6m"),
+    agrupacion: String(raw?.agrupacion ?? "mes"),
+    labels: Array.isArray(raw?.labels)
+      ? raw.labels.map((item: unknown) => String(item ?? ""))
+      : [],
+    ventas: Array.isArray(raw?.ventas)
+      ? raw.ventas.map((item: unknown) => toNumber(item))
+      : [],
+    compras: Array.isArray(raw?.compras)
+      ? raw.compras.map((item: unknown) => toNumber(item))
+      : [],
+  };
+};
+
+const normalizeRanking = (raw: any): DashboardRankingResponse => {
+  return {
+    periodo: String(raw?.periodo ?? "6m"),
+    items: Array.isArray(raw?.items)
+      ? raw.items.map((item: any) => ({
+          label: String(item?.label ?? ""),
+          total: toNumber(item?.total),
+        }))
+      : [],
+  };
+};
+
 export const dashboardService = {
   async getResumen(
     idBodega?: number | null,
@@ -112,5 +167,54 @@ export const dashboardService = {
     });
 
     return normalizeResumen(unwrapResponse(response));
+  },
+
+  async getSeries(
+    params: DashboardChartParams = {},
+  ): Promise<DashboardSeriesResponse> {
+    const response = await api.get("/dashboard/series", {
+      params: {
+        id_bodega:
+          params.idBodega === null || params.idBodega === undefined
+            ? undefined
+            : params.idBodega,
+        periodo: params.periodo ?? "6m",
+        agrupacion: params.agrupacion ?? "mes",
+      },
+    });
+
+    return normalizeSeries(unwrapResponse(response));
+  },
+
+  async getVentasPorCategoria(
+    params: DashboardChartParams = {},
+  ): Promise<DashboardRankingResponse> {
+    const response = await api.get("/dashboard/ventas-por-categoria", {
+      params: {
+        id_bodega:
+          params.idBodega === null || params.idBodega === undefined
+            ? undefined
+            : params.idBodega,
+        periodo: params.periodo ?? "6m",
+      },
+    });
+
+    return normalizeRanking(unwrapResponse(response));
+  },
+
+  async getComprasPorProveedor(
+    params: DashboardChartParams = {},
+  ): Promise<DashboardRankingResponse> {
+    const response = await api.get("/dashboard/compras-por-proveedor", {
+      params: {
+        id_bodega:
+          params.idBodega === null || params.idBodega === undefined
+            ? undefined
+            : params.idBodega,
+        periodo: params.periodo ?? "6m",
+      },
+    });
+
+    return normalizeRanking(unwrapResponse(response));
   },
 };
