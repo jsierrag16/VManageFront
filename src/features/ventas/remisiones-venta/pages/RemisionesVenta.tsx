@@ -84,6 +84,7 @@ type RemisionListadoUi = {
     cantidad: number;
     precio: number;
     subtotal: number;
+    iva: number;
   }>;
 };
 
@@ -100,6 +101,7 @@ type FormProductoState = {
   id_producto: number;
   nombre: string;
   precio_unitario: number;
+  iva: number;
   cantidad_orden: number;
   cantidad_remitida: number;
   cantidad_pendiente: number;
@@ -124,6 +126,33 @@ function toNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function calcularTotalesConIva(
+  items: Array<{ subtotal: number; iva?: number }>
+) {
+  let subtotalSinIva = 0;
+  let totalIva = 0;
+
+  items.forEach((item) => {
+    const subtotalBruto = Number(item.subtotal || 0);
+    const ivaPorcentaje = Number(item.iva || 0);
+
+    const base = ivaPorcentaje > 0
+      ? subtotalBruto / (1 + ivaPorcentaje / 100)
+      : subtotalBruto;
+
+    const ivaValor = subtotalBruto - base;
+
+    subtotalSinIva += base;
+    totalIva += ivaValor;
+  });
+
+  return {
+    subtotalSinIva,
+    totalIva,
+    total: subtotalSinIva + totalIva,
+  };
+}
+
 function mapEstado(nombre?: string | null): EstadoUi {
   const text = normalizeText(nombre);
 
@@ -138,6 +167,7 @@ function buildRemisionUi(item: RemisionVentaApi): RemisionListadoUi {
   const detalle = (item.detalle_remision_venta ?? []).map((d) => {
     const cantidad = toNumber(d.cantidad);
     const precio = toNumber(d.precio_unitario);
+    const iva = toNumber(d.iva);
 
     return {
       producto: d.existencias?.producto?.nombre_producto ?? "Producto",
@@ -145,6 +175,7 @@ function buildRemisionUi(item: RemisionVentaApi): RemisionListadoUi {
       cantidad,
       precio,
       subtotal: cantidad * precio,
+      iva,
     };
   });
 
@@ -437,11 +468,12 @@ export default function RemisionesVenta() {
           const seleccionados =
             cantidadesPorProductoYLote.get(detalle.id_producto) ??
             new Map<number, number>();
-
+        
           return {
             id_producto: detalle.id_producto,
             nombre: detalle.producto?.nombre_producto ?? "Producto",
             precio_unitario: toNumber(detalle.precio_unitario),
+            iva: toNumber(detalle.producto?.iva?.porcentaje),
             cantidad_orden: toNumber(detalle.cantidad_orden),
             cantidad_remitida: toNumber(detalle.cantidad_remitida),
             cantidad_pendiente: toNumber(detalle.cantidad_pendiente),
@@ -509,6 +541,10 @@ export default function RemisionesVenta() {
     if (!id) return null;
     return ordenesDisponibles.find((o) => o.id_orden_venta === id) ?? null;
   }, [formOrdenId, ordenesDisponibles]);
+  
+  const numeroDocumentoClienteSeleccionado = useMemo(() => {
+    return ordenSeleccionada?.cliente?.num_documento ?? "";
+  }, [ordenSeleccionada]);
 
   const bodegaFormularioNombre = useMemo(() => {
     return (
@@ -518,14 +554,20 @@ export default function RemisionesVenta() {
     );
   }, [ordenSeleccionada, selectedBodegaNombre]);
 
-  const totalFormulario = useMemo(() => {
-    return formProductos.reduce((acc, producto) => {
+  const totalesFormulario = useMemo(() => {
+    const items = formProductos.map((producto) => {
       const subtotal = producto.lotes.reduce(
         (sum, lote) => sum + toNumber(lote.cantidad) * producto.precio_unitario,
         0
       );
-      return acc + subtotal;
-    }, 0);
+  
+      return {
+        subtotal,
+        iva: producto.iva,
+      };
+    });
+  
+    return calcularTotalesConIva(items);
   }, [formProductos]);
 
   const cantidadTotalItemsFormulario = useMemo(() => {
@@ -672,6 +714,7 @@ export default function RemisionesVenta() {
       id_producto: detalle.id_producto,
       nombre: detalle.producto?.nombre_producto ?? "Producto",
       precio_unitario: toNumber(detalle.precio_unitario),
+      iva: toNumber(detalle.producto?.iva?.porcentaje),
       cantidad_orden: toNumber(detalle.cantidad_orden),
       cantidad_remitida: toNumber(detalle.cantidad_remitida),
       cantidad_pendiente: toNumber(detalle.cantidad_pendiente),
@@ -1494,7 +1537,9 @@ const handleDescargarPDF = async (remision: RemisionListadoUi) => {
                   <Input
                     type="date"
                     value={formFecha}
-                    onChange={(e) => setFormFecha(e.target.value)}
+                    disabled
+                    readOnly
+                    className="bg-gray-100 cursor-not-allowed"
                   />
                 </div>
 
@@ -1503,30 +1548,7 @@ const handleDescargarPDF = async (remision: RemisionListadoUi) => {
                   <Input value={bodegaFormularioNombre} disabled />
                 </div>
 
-                <div>
-                  <Label>Estado inicial</Label>
-                  <Input
-                    value={
-                      estados.find(
-                        (estado) =>
-                          String(estado.id_estado_remision_venta) === formEstadoId
-                      )?.nombre_estado ?? "Pendiente"
-                    }
-                    disabled
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-gray-200 p-4">
-              <div className="flex items-center gap-2 mb-4">
-                <ShoppingCart size={18} className="text-blue-600" />
-                <h3 className="font-semibold text-gray-900">
-                  Orden asociada
-                </h3>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-2">
                   <Label>Orden de Venta Aprobada</Label>
                   <select
@@ -1552,8 +1574,44 @@ const handleDescargarPDF = async (remision: RemisionListadoUi) => {
                   <Label>Cliente</Label>
                   <Input value={formCliente} disabled />
                 </div>
+
+                <div>
+                  <Label>Número de documento</Label>
+                  <Input
+                    value={numeroDocumentoClienteSeleccionado}
+                    disabled
+                    readOnly
+                    placeholder="Se completa al seleccionar la orden"
+                    className="bg-gray-100"
+                  />
+                </div>
+              </div>
+
+            </div>
+                <div>
+                  <Label>Estado inicial</Label>
+                  <Input
+                    value={
+                      estados.find(
+                        (estado) =>
+                          String(estado.id_estado_remision_venta) === formEstadoId
+                      )?.nombre_estado ?? "Pendiente"
+                    }
+                    disabled
+                  />
+                </div>
               </div>
             </div>
+
+            <div className="rounded-xl border border-gray-200 p-4">
+              <div className="flex items-center gap-2 mb-4">
+                <ShoppingCart size={18} className="text-blue-600" />
+                <h3 className="font-semibold text-gray-900">
+                  Orden asociada
+                </h3>
+              </div>
+
+ 
 
             <div className="rounded-xl border border-gray-200 p-4">
               <div className="flex items-center gap-2 mb-4">
@@ -1581,11 +1639,32 @@ const handleDescargarPDF = async (remision: RemisionListadoUi) => {
                       {cantidadTotalItemsFormulario}
                     </p>
                   </div>
+
+                  <div>
+                    <p className="text-sm text-gray-500">Subtotal sin IVA</p>
+                    <p className="text-base font-semibold text-gray-900">
+                      $
+                      {totalesFormulario.subtotalSinIva.toLocaleString("es-CO", {
+                        minimumFractionDigits: 2,
+                      })}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-gray-500">Total IVA</p>
+                    <p className="text-base font-semibold text-gray-900">
+                      $
+                      {totalesFormulario.totalIva.toLocaleString("es-CO", {
+                        minimumFractionDigits: 2,
+                      })}
+                    </p>
+                  </div>
+
                   <div>
                     <p className="text-sm text-gray-500">Total remisión</p>
                     <p className="text-xl font-semibold text-blue-700">
                       $
-                      {totalFormulario.toLocaleString("es-CO", {
+                      {totalesFormulario.total.toLocaleString("es-CO", {
                         minimumFractionDigits: 2,
                       })}
                     </p>
@@ -1735,40 +1814,42 @@ const handleDescargarPDF = async (remision: RemisionListadoUi) => {
                 </div>
               </div>
 
-              <div className="overflow-x-auto rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Producto</TableHead>
-                      <TableHead>Lote</TableHead>
-                      <TableHead>Cantidad</TableHead>
-                      <TableHead>Precio</TableHead>
-                      <TableHead>Subtotal</TableHead>
+            <div className="overflow-x-auto rounded-lg border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Producto</TableHead>
+                    <TableHead>Lote</TableHead>
+                    <TableHead>Cantidad</TableHead>
+                    <TableHead>Precio</TableHead>
+                    <TableHead>IVA %</TableHead>
+                    <TableHead>Subtotal</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {remisionSeleccionada.detalle.map((item, index) => (
+                    <TableRow key={`${item.producto}-${index}`}>
+                      <TableCell>{item.producto}</TableCell>
+                      <TableCell>{item.lote || "-"}</TableCell>
+                      <TableCell>{item.cantidad}</TableCell>
+                      <TableCell>
+                        $
+                        {item.precio.toLocaleString("es-CO", {
+                          minimumFractionDigits: 2,
+                        })}
+                      </TableCell>
+                      <TableCell>{item.iva}%</TableCell>
+                      <TableCell>
+                        $
+                        {item.subtotal.toLocaleString("es-CO", {
+                          minimumFractionDigits: 2,
+                        })}
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {remisionSeleccionada.detalle.map((item, index) => (
-                      <TableRow key={`${item.producto}-${index}`}>
-                        <TableCell>{item.producto}</TableCell>
-                        <TableCell>{item.lote || "-"}</TableCell>
-                        <TableCell>{item.cantidad}</TableCell>
-                        <TableCell>
-                          $
-                          {item.precio.toLocaleString("es-CO", {
-                            minimumFractionDigits: 2,
-                          })}
-                        </TableCell>
-                        <TableCell>
-                          $
-                          {item.subtotal.toLocaleString("es-CO", {
-                            minimumFractionDigits: 2,
-                          })}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
 
               {remisionSeleccionada.observaciones && (
                 <div>
