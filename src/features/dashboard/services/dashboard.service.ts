@@ -1,6 +1,5 @@
 import api from "@/shared/services/api";
 
-export type DashboardPeriodo = "30d" | "3m" | "6m" | "12m";
 export type DashboardAgrupacion = "dia" | "mes";
 
 export type DashboardResumenResponse = {
@@ -44,7 +43,7 @@ export type DashboardResumenResponse = {
 };
 
 export type DashboardSeriesResponse = {
-  periodo: DashboardPeriodo | string;
+  periodo: string;
   agrupacion: DashboardAgrupacion | string;
   labels: string[];
   ventas: number[];
@@ -57,13 +56,20 @@ export type DashboardRankingItem = {
 };
 
 export type DashboardRankingResponse = {
-  periodo: DashboardPeriodo | string;
+  periodo: string;
   items: DashboardRankingItem[];
+};
+
+type DashboardResumenParams = {
+  idBodega?: number | null;
+  fechaInicio?: string;
+  fechaFin?: string;
 };
 
 type DashboardChartParams = {
   idBodega?: number | null;
-  periodo?: DashboardPeriodo;
+  fechaInicio?: string;
+  fechaFin?: string;
   agrupacion?: DashboardAgrupacion;
 };
 
@@ -129,7 +135,7 @@ const normalizeResumen = (raw: any): DashboardResumenResponse => {
 
 const normalizeSeries = (raw: any): DashboardSeriesResponse => {
   return {
-    periodo: String(raw?.periodo ?? "6m"),
+    periodo: String(raw?.periodo ?? ""),
     agrupacion: String(raw?.agrupacion ?? "mes"),
     labels: Array.isArray(raw?.labels)
       ? raw.labels.map((item: unknown) => String(item ?? ""))
@@ -145,24 +151,28 @@ const normalizeSeries = (raw: any): DashboardSeriesResponse => {
 
 const normalizeRanking = (raw: any): DashboardRankingResponse => {
   return {
-    periodo: String(raw?.periodo ?? "6m"),
+    periodo: String(raw?.periodo ?? ""),
     items: Array.isArray(raw?.items)
       ? raw.items.map((item: any) => ({
-          label: String(item?.label ?? ""),
-          total: toNumber(item?.total),
-        }))
+        label: String(item?.label ?? ""),
+        total: toNumber(item?.total),
+      }))
       : [],
   };
 };
 
 export const dashboardService = {
   async getResumen(
-    idBodega?: number | null,
+    params: DashboardResumenParams = {},
   ): Promise<DashboardResumenResponse> {
     const response = await api.get("/dashboard/resumen", {
       params: {
         id_bodega:
-          idBodega === null || idBodega === undefined ? undefined : idBodega,
+          params.idBodega === null || params.idBodega === undefined
+            ? undefined
+            : params.idBodega,
+        fecha_inicio: params.fechaInicio || undefined,
+        fecha_fin: params.fechaFin || undefined,
       },
     });
 
@@ -178,8 +188,9 @@ export const dashboardService = {
           params.idBodega === null || params.idBodega === undefined
             ? undefined
             : params.idBodega,
-        periodo: params.periodo ?? "6m",
-        agrupacion: params.agrupacion ?? "mes",
+        fecha_inicio: params.fechaInicio || undefined,
+        fecha_fin: params.fechaFin || undefined,
+        agrupacion: params.agrupacion || undefined,
       },
     });
 
@@ -195,7 +206,8 @@ export const dashboardService = {
           params.idBodega === null || params.idBodega === undefined
             ? undefined
             : params.idBodega,
-        periodo: params.periodo ?? "6m",
+        fecha_inicio: params.fechaInicio || undefined,
+        fecha_fin: params.fechaFin || undefined,
       },
     });
 
@@ -211,7 +223,8 @@ export const dashboardService = {
           params.idBodega === null || params.idBodega === undefined
             ? undefined
             : params.idBodega,
-        periodo: params.periodo ?? "6m",
+        fecha_inicio: params.fechaInicio || undefined,
+        fecha_fin: params.fechaFin || undefined,
       },
     });
 

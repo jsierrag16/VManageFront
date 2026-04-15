@@ -37,7 +37,6 @@ import type { AppOutletContext } from "@/layouts/MainLayout";
 import { useAuth } from "@/shared/context/AuthContext";
 import {
   dashboardService,
-  type DashboardPeriodo,
   type DashboardRankingResponse,
   type DashboardResumenResponse,
   type DashboardSeriesResponse,
@@ -61,6 +60,13 @@ function formatNumber(value?: number | string | null) {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   });
+}
+
+function formatDateInput(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function extractErrorMessage(error: any) {
@@ -110,13 +116,6 @@ const toneClasses: Record<ModuleCard["tone"], string> = {
   orange: "bg-orange-50 text-orange-700 border-orange-100",
 };
 
-const periodOptions: Array<{ value: DashboardPeriodo; label: string }> = [
-  { value: "30d", label: "30 días" },
-  { value: "3m", label: "3 meses" },
-  { value: "6m", label: "6 meses" },
-  { value: "12m", label: "12 meses" },
-];
-
 function MainStatCard({
   title,
   value,
@@ -130,9 +129,8 @@ function MainStatCard({
       type="button"
       onClick={onClick}
       disabled={!onClick}
-      className={`w-full rounded-2xl p-6 text-left shadow-lg transition-all ${
-        onClick ? "hover:-translate-y-0.5 cursor-pointer" : "cursor-default"
-      } ${gradient}`}
+      className={`w-full rounded-2xl p-6 text-left shadow-lg transition-all ${onClick ? "hover:-translate-y-0.5 cursor-pointer" : "cursor-default"
+        } ${gradient}`}
     >
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -162,11 +160,10 @@ function ModuleStatCard({
       type="button"
       onClick={onClick}
       disabled={!onClick}
-      className={`w-full rounded-xl border bg-white p-4 text-left shadow-sm transition-all ${
-        onClick
-          ? "hover:shadow-md hover:-translate-y-0.5 cursor-pointer"
-          : "cursor-default"
-      }`}
+      className={`w-full rounded-xl border bg-white p-4 text-left shadow-sm transition-all ${onClick
+        ? "hover:shadow-md hover:-translate-y-0.5 cursor-pointer"
+        : "cursor-default"
+        }`}
     >
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -217,8 +214,8 @@ function DashboardSkeleton() {
         <div className="h-6 w-40 bg-gray-200 rounded" />
         <div className="h-4 w-72 bg-gray-100 rounded mt-3" />
         <div className="flex gap-3 mt-4">
-          <div className="h-9 w-40 bg-gray-100 rounded-full" />
-          <div className="h-9 w-32 bg-gray-100 rounded-full" />
+          <div className="h-16 w-44 bg-gray-100 rounded-xl" />
+          <div className="h-16 w-44 bg-gray-100 rounded-xl" />
         </div>
       </div>
 
@@ -316,15 +313,25 @@ export default function Dashboard() {
   const { tienePermiso } = useAuth();
   const navigate = useNavigate();
 
+  const today = useMemo(() => new Date(), []);
+  const currentMonthStart = useMemo(
+    () => new Date(today.getFullYear(), today.getMonth(), 1),
+    [today],
+  );
+
+  const maxSelectableDate = useMemo(() => formatDateInput(today), [today]);
+
+  const [fechaInicio, setFechaInicio] = useState(
+    formatDateInput(currentMonthStart),
+  );
+  const [fechaFin, setFechaFin] = useState(formatDateInput(today));
+
   const [resumen, setResumen] = useState<DashboardResumenResponse | null>(null);
   const [series, setSeries] = useState<DashboardSeriesResponse | null>(null);
   const [ventasPorCategoria, setVentasPorCategoria] =
     useState<DashboardRankingResponse | null>(null);
   const [comprasPorProveedor, setComprasPorProveedor] =
     useState<DashboardRankingResponse | null>(null);
-
-  const [selectedPeriodo, setSelectedPeriodo] =
-    useState<DashboardPeriodo>("6m");
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -335,8 +342,20 @@ export default function Dashboard() {
   const [errorMessage, setErrorMessage] = useState("");
   const [chartsErrorMessage, setChartsErrorMessage] = useState("");
 
+  const isDateRangeValid = useMemo(() => {
+    if (!fechaInicio || !fechaFin) return true;
+    return fechaInicio <= fechaFin;
+  }, [fechaInicio, fechaFin]);
+
   const loadResumen = useCallback(
     async (manual = false) => {
+      if (!isDateRangeValid) {
+        setErrorMessage("La fecha inicial no puede ser mayor que la fecha final.");
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+
       try {
         if (manual) {
           setRefreshing(true);
@@ -346,9 +365,11 @@ export default function Dashboard() {
 
         setErrorMessage("");
 
-        const response = await dashboardService.getResumen(
-          selectedBodegaId ?? undefined,
-        );
+        const response = await dashboardService.getResumen({
+          idBodega: selectedBodegaId ?? undefined,
+          fechaInicio,
+          fechaFin,
+        });
 
         setResumen(response);
       } catch (error) {
@@ -360,11 +381,20 @@ export default function Dashboard() {
         setRefreshing(false);
       }
     },
-    [selectedBodegaId],
+    [selectedBodegaId, fechaInicio, fechaFin, isDateRangeValid],
   );
 
   const loadCharts = useCallback(
     async (manual = false) => {
+      if (!isDateRangeValid) {
+        setChartsErrorMessage(
+          "La fecha inicial no puede ser mayor que la fecha final.",
+        );
+        setChartsLoading(false);
+        setChartsRefreshing(false);
+        return;
+      }
+
       try {
         if (manual) {
           setChartsRefreshing(true);
@@ -374,22 +404,30 @@ export default function Dashboard() {
 
         setChartsErrorMessage("");
 
-        const agrupacion = selectedPeriodo === "30d" ? "dia" : "mes";
+        const diffMs =
+          new Date(`${fechaFin}T00:00:00`).getTime() -
+          new Date(`${fechaInicio}T00:00:00`).getTime();
+
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1;
+        const agrupacion = diffDays <= 45 ? "dia" : "mes";
 
         const [seriesResponse, ventasCategoriaResponse, comprasProveedorResponse] =
           await Promise.all([
             dashboardService.getSeries({
               idBodega: selectedBodegaId ?? undefined,
-              periodo: selectedPeriodo,
+              fechaInicio,
+              fechaFin,
               agrupacion,
             }),
             dashboardService.getVentasPorCategoria({
               idBodega: selectedBodegaId ?? undefined,
-              periodo: selectedPeriodo,
+              fechaInicio,
+              fechaFin,
             }),
             dashboardService.getComprasPorProveedor({
               idBodega: selectedBodegaId ?? undefined,
-              periodo: selectedPeriodo,
+              fechaInicio,
+              fechaFin,
             }),
           ]);
 
@@ -405,7 +443,7 @@ export default function Dashboard() {
         setChartsRefreshing(false);
       }
     },
-    [selectedBodegaId, selectedPeriodo],
+    [selectedBodegaId, fechaInicio, fechaFin, isDateRangeValid],
   );
 
   useEffect(() => {
@@ -420,9 +458,9 @@ export default function Dashboard() {
     () =>
       Boolean(
         tienePermiso("ventas", "cotizaciones") ||
-          tienePermiso("ventas", "ordenesVenta") ||
-          tienePermiso("ventas", "remisionesVenta") ||
-          tienePermiso("ventas", "pagos"),
+        tienePermiso("ventas", "ordenesVenta") ||
+        tienePermiso("ventas", "remisionesVenta") ||
+        tienePermiso("ventas", "pagos"),
       ),
     [tienePermiso],
   );
@@ -431,7 +469,7 @@ export default function Dashboard() {
     () =>
       Boolean(
         tienePermiso("compras", "ordenesCompra") ||
-          tienePermiso("compras", "remisionesCompra"),
+        tienePermiso("compras", "remisionesCompra"),
       ),
     [tienePermiso],
   );
@@ -440,7 +478,7 @@ export default function Dashboard() {
     () =>
       Boolean(
         tienePermiso("existencias", "productos") ||
-          tienePermiso("existencias", "traslados"),
+        tienePermiso("existencias", "traslados"),
       ),
     [tienePermiso],
   );
@@ -449,7 +487,7 @@ export default function Dashboard() {
     () =>
       Boolean(
         tienePermiso("ventas", "clientes") ||
-          tienePermiso("compras", "proveedores"),
+        tienePermiso("compras", "proveedores"),
       ),
     [tienePermiso],
   );
@@ -466,9 +504,9 @@ export default function Dashboard() {
 
     if (canVentas) {
       cards.push({
-        title: "Ventas del mes",
+        title: "Ventas del período",
         value: formatMoney(resumen.ventas.total_mes_actual),
-        description: `Periodo actual: ${resumen.periodo.etiqueta}`,
+        description: resumen.periodo.etiqueta || "Rango seleccionado",
         icon: BadgeDollarSign,
         gradient: "bg-gradient-to-br from-blue-500 to-blue-600",
         onClick: tienePermiso("ventas", "pagos")
@@ -494,7 +532,7 @@ export default function Dashboard() {
 
     if (canCompras) {
       cards.push({
-        title: "Compras del mes",
+        title: "Compras del período",
         value: formatMoney(resumen.compras.total_mes_actual),
         description: `${formatNumber(
           resumen.compras.ordenes_pendientes,
@@ -767,6 +805,11 @@ export default function Dashboard() {
   }, [comprasPorProveedor]);
 
   const handleRefreshDashboard = async () => {
+    if (!isDateRangeValid) {
+      toast.error("La fecha inicial no puede ser mayor que la fecha final.");
+      return;
+    }
+
     try {
       await Promise.all([loadResumen(true), loadCharts(true)]);
       toast.success("Dashboard actualizado");
@@ -792,7 +835,7 @@ export default function Dashboard() {
             <h2 className="text-gray-900 text-xl font-semibold">Dashboard</h2>
             <p className="text-gray-600 mt-1">
               Resumen ejecutivo, operativo y analítico del sistema según la
-              bodega seleccionada.
+              bodega y el rango de fechas seleccionados.
             </p>
 
             <div className="flex flex-wrap items-center gap-2 mt-4">
@@ -806,17 +849,17 @@ export default function Dashboard() {
                   "Todas las bodegas"}
               </Badge>
 
-              {resumen?.periodo?.etiqueta ? (
+              {resumen?.periodo?.fecha_inicio && resumen?.periodo?.fecha_fin ? (
                 <Badge
                   variant="outline"
                   className="bg-blue-50 text-blue-700 border-blue-200"
                 >
-                  {resumen.periodo.etiqueta}
+                  {resumen.periodo.fecha_inicio} al {resumen.periodo.fecha_fin}
                 </Badge>
               ) : null}
 
               {(resumen?.bodega?.total_bodegas ?? 0) > 1 &&
-              (!selectedBodegaId || selectedBodegaId <= 0) ? (
+                (!selectedBodegaId || selectedBodegaId <= 0) ? (
                 <Badge
                   variant="outline"
                   className="bg-emerald-50 text-emerald-700 border-emerald-200"
@@ -828,28 +871,54 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-            <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 p-1">
-              {periodOptions.map((option) => (
-                <Button
-                  key={option.value}
-                  type="button"
-                  size="sm"
-                  variant={
-                    selectedPeriodo === option.value ? "default" : "ghost"
-                  }
-                  onClick={() => setSelectedPeriodo(option.value)}
-                  className={
-                    selectedPeriodo === option.value
-                      ? "bg-blue-600 text-white hover:bg-blue-700"
-                      : ""
-                  }
-                >
-                  {option.label}
-                </Button>
-              ))}
-            </div>
+          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-2">
+            <div className="flex flex-col sm:flex-row items-start sm:items-end gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Desde</label>
+                <input
+                  type="date"
+                  value={fechaInicio}
+                  max={fechaFin && fechaFin < maxSelectableDate ? fechaFin : maxSelectableDate}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (!value) {
+                      setFechaInicio(value);
+                      return;
+                    }
 
+                    const maxDate =
+                      fechaFin && fechaFin < maxSelectableDate ? fechaFin : maxSelectableDate;
+
+                    if (value <= maxDate) {
+                      setFechaInicio(value);
+                    }
+                  }}
+                  className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Hasta</label>
+                <input
+                  type="date"
+                  value={fechaFin}
+                  min={fechaInicio || undefined}
+                  max={maxSelectableDate}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (!value) {
+                      setFechaFin(value);
+                      return;
+                    }
+
+                    if (value <= maxSelectableDate && (!fechaInicio || value >= fechaInicio)) {
+                      setFechaFin(value);
+                    }
+                  }}
+                  className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm"
+                />
+              </div>
+            </div>
             <Button
               variant="outline"
               onClick={handleRefreshDashboard}
@@ -858,15 +927,23 @@ export default function Dashboard() {
             >
               <RefreshCw
                 size={16}
-                className={`mr-2 ${
-                  refreshing || chartsRefreshing ? "animate-spin" : ""
-                }`}
+                className={`mr-2 ${refreshing || chartsRefreshing ? "animate-spin" : ""
+                  }`}
               />
               Actualizar
             </Button>
           </div>
         </div>
       </div>
+
+      {!isDateRangeValid ? (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-4">
+          <p className="font-medium">Rango de fechas inválido</p>
+          <p className="text-sm mt-1">
+            La fecha inicial no puede ser mayor que la fecha final.
+          </p>
+        </div>
+      ) : null}
 
       {errorMessage ? (
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-4 flex items-center justify-between gap-3">
@@ -914,12 +991,12 @@ export default function Dashboard() {
 
           <AnalyticChartCard
             title="Evolución de ventas y compras"
-            subtitle="Comportamiento comparativo del período seleccionado."
+            subtitle="Comportamiento comparativo del rango seleccionado."
             loading={chartsLoading}
           >
             {seriesChartData.length === 0 ? (
               <EmptyChart
-                title="Sin datos en el período seleccionado"
+                title="Sin datos en el rango seleccionado"
                 subtitle="No hay ventas ni compras para construir la serie."
               />
             ) : (
@@ -958,7 +1035,7 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             <AnalyticChartCard
               title="Ventas por categoría"
-              subtitle="Top categorías de productos vendidas en el período."
+              subtitle="Top categorías de productos vendidas en el rango."
               loading={chartsLoading}
             >
               {ventasPorCategoriaChartData.length === 0 ? (
@@ -1000,7 +1077,7 @@ export default function Dashboard() {
 
             <AnalyticChartCard
               title="Compras por proveedor"
-              subtitle="Top proveedores por monto comprado en el período."
+              subtitle="Top proveedores por monto comprado en el rango."
               loading={chartsLoading}
             >
               {comprasPorProveedorChartData.length === 0 ? (
