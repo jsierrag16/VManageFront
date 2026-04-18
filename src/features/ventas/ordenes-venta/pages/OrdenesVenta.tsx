@@ -555,9 +555,30 @@ export default function OrdenesVenta() {
     });
   }, [cotizaciones, formData.id_cliente, formData.id_bodega]);
 
+  // const resetForm = () => {
+  //   const hoy = new Date().toISOString().slice(0, 10);
+
+  //   setFormData({
+  //     id_cliente: "",
+  //     fecha_creacion: hoy,
+  //     fecha_vencimiento: sumarDiasAFecha(hoy, 15),
+  //     id_estado_orden_venta: estadoPendienteId ? String(estadoPendienteId) : "",
+  //     id_termino_pago: "",
+  //     descripcion: "",
+  //     id_bodega:
+  //       selectedBodegaId && selectedBodegaId > 0 ? String(selectedBodegaId) : "",
+  //   });
+  //   setSelectedCotizacionId("sin-cotizacion");
+  //   setSelectedProductoId("");
+  //   setCantidadProducto("");
+  //   setPrecioProducto("");
+  //   setProductosOrden([]);
+  //   setSelectedOrden(null);
+  // };
+
   const resetForm = () => {
     const hoy = new Date().toISOString().slice(0, 10);
-
+  
     setFormData({
       id_cliente: "",
       fecha_creacion: hoy,
@@ -572,6 +593,7 @@ export default function OrdenesVenta() {
     setSelectedProductoId("");
     setCantidadProducto("");
     setPrecioProducto("");
+    setPrecioTouched(false);
     setProductosOrden([]);
     setSelectedOrden(null);
   };
@@ -675,43 +697,106 @@ export default function OrdenesVenta() {
     precioMinimoProductoSeleccionado > 0 &&
     precioIngresadoNumero < precioMinimoProductoSeleccionado;
 
+  // const handleAgregarProducto = () => {
+  //   if (!selectedProductoId) {
+  //     toast.error("Selecciona un producto");
+  //     return;
+  //   }
+
+  //   const cantidad = Number(cantidadProducto);
+  //   const precio = Number(precioProducto);
+
+  //   if (!cantidadProducto || cantidad <= 0) {
+  //     toast.error("La cantidad debe ser mayor a cero");
+  //     return;
+  //   }
+
+  //   if (!precioProducto || precio <= 0) {
+  //     toast.error("El precio unitario debe ser mayor a cero");
+  //     return;
+  //   }
+
+  //   const producto = productos.find(
+  //     (item) => Number(item.id_producto) === Number(selectedProductoId)
+  //   );
+
+  //   if (!producto) {
+  //     toast.error("No se encontró el producto");
+  //     return;
+  //   }
+
+  //   const yaExiste = productosOrden.some(
+  //     (item) => Number(item.id_producto) === Number(selectedProductoId)
+  //   );
+
+  //   if (yaExiste) {
+  //     toast.error("Ese producto ya está agregado");
+  //     return;
+  //   }
+
+  //   setProductosOrden((prev) => [
+  //     ...prev,
+  //     {
+  //       id_producto: Number(producto.id_producto),
+  //       nombre: getProductoNombre(producto),
+  //       cantidad,
+  //       precio_unitario: precio,
+  //       subtotal: cantidad * precio,
+  //       iva: Number(producto.iva?.porcentaje ?? 0),
+  //     },
+  //   ]);
+
+  //   setSelectedProductoId("");
+  //   setCantidadProducto("");
+  //   setPrecioProducto("");
+  //   setPrecioTouched(false);
+  // };
+
   const handleAgregarProducto = () => {
     if (!selectedProductoId) {
       toast.error("Selecciona un producto");
       return;
     }
-
+  
     const cantidad = Number(cantidadProducto);
     const precio = Number(precioProducto);
-
+  
     if (!cantidadProducto || cantidad <= 0) {
       toast.error("La cantidad debe ser mayor a cero");
       return;
     }
-
+  
     if (!precioProducto || precio <= 0) {
       toast.error("El precio unitario debe ser mayor a cero");
       return;
     }
-
+  
     const producto = productos.find(
       (item) => Number(item.id_producto) === Number(selectedProductoId)
     );
-
+  
     if (!producto) {
       toast.error("No se encontró el producto");
       return;
     }
-
+  
+    const precioMinimoPermitido = getPrecioMinimoProductoCatalogo(producto);
+  
+    if (precioMinimoPermitido > 0 && precio < precioMinimoPermitido) {
+      setPrecioTouched(true);
+      toast.error("Precio menor al permitido");
+      return;
+    }
+  
     const yaExiste = productosOrden.some(
       (item) => Number(item.id_producto) === Number(selectedProductoId)
     );
-
+  
     if (yaExiste) {
       toast.error("Ese producto ya está agregado");
       return;
     }
-
+  
     setProductosOrden((prev) => [
       ...prev,
       {
@@ -723,7 +808,7 @@ export default function OrdenesVenta() {
         iva: Number(producto.iva?.porcentaje ?? 0),
       },
     ]);
-
+  
     setSelectedProductoId("");
     setCantidadProducto("");
     setPrecioProducto("");
@@ -1770,7 +1855,7 @@ export default function OrdenesVenta() {
                   />
                 </div>
 
-                <div className="md:col-span-3">
+                {/* <div className="md:col-span-3">
                   <Label>Precio unitario</Label>
                   <div className="space-y-1">
                     <Input
@@ -1806,9 +1891,47 @@ export default function OrdenesVenta() {
                       </p>
                     )}
                   </div>
+                </div> */}
+
+                <div className="md:col-span-3">
+                  <Label>Precio unitario</Label>
+                  <div className="space-y-1">
+                    <Input
+                      type="number"
+                      placeholder={
+                        precioMinimoProductoSeleccionado > 0
+                          ? `Precio compra: ${precioMinimoProductoSeleccionado}`
+                          : "0"
+                      }
+                      value={precioProducto}
+                      onChange={(e) => {
+                        setPrecioProducto(e.target.value);
+                        if (!precioTouched) setPrecioTouched(true);
+                      }}
+                      onBlur={() => setPrecioTouched(true)}
+                      className={`placeholder:text-gray-400 ${
+                        precioTouched && precioEsMenorAlMinimo
+                          ? "border-red-500 bg-red-50 text-red-700 focus-visible:ring-red-500"
+                          : ""
+                      }`}
+                    />
+
+                    {precioMinimoProductoSeleccionado > 0 && (
+                      <p className="text-xs text-gray-500">
+                        Precio de compra del producto: $
+                        {precioMinimoProductoSeleccionado.toLocaleString("es-CO")}
+                      </p>
+                    )}
+
+                    {precioTouched && precioEsMenorAlMinimo && (
+                      <p className="text-xs font-medium text-red-600">
+                        Precio menor al permitido
+                      </p>
+                    )}
+                  </div>
                 </div>
 
-                <div className="flex items-end md:col-span-2">
+                {/* <div className="flex items-end md:col-span-2">
                   <Button
                     type="button"
                     onClick={handleAgregarProducto}
@@ -1816,6 +1939,17 @@ export default function OrdenesVenta() {
                   >
                     Agregar
                   </Button>
+                </div> */}
+
+                <div className="flex items-end md:col-span-2">
+                <Button
+                  type="button"
+                  onClick={handleAgregarProducto}
+                  disabled={precioTouched && precioEsMenorAlMinimo}
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Agregar
+                </Button>
                 </div>
               </div>
 
