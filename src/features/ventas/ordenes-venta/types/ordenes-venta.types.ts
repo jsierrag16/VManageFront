@@ -15,6 +15,7 @@ export type CatalogoProducto = {
   nombre?: string;
   precio_venta?: number;
   precio?: number;
+  precio_minimo_venta?: number | null;
   estado?: boolean;
   categoria_producto?: {
     id_categoria_producto?: number;

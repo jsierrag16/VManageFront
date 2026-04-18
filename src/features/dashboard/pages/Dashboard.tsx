@@ -4,8 +4,9 @@ import { motion } from "motion/react";
 import {
   AlertTriangle,
   BadgeDollarSign,
-  Building2,
+  BarChart3,
   Boxes,
+  Building2,
   FileText,
   Package,
   Receipt,
@@ -17,6 +18,18 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -24,7 +37,9 @@ import type { AppOutletContext } from "@/layouts/MainLayout";
 import { useAuth } from "@/shared/context/AuthContext";
 import {
   dashboardService,
+  type DashboardRankingResponse,
   type DashboardResumenResponse,
+  type DashboardSeriesResponse,
 } from "../services/dashboard.service";
 
 function formatMoney(value?: number | string | null) {
@@ -45,6 +60,13 @@ function formatNumber(value?: number | string | null) {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   });
+}
+
+function formatDateInput(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function extractErrorMessage(error: any) {
@@ -138,7 +160,9 @@ function ModuleStatCard({
       type="button"
       onClick={onClick}
       disabled={!onClick}
-      className={`w-full rounded-xl border bg-white p-4 text-left shadow-sm transition-all ${onClick ? "hover:shadow-md hover:-translate-y-0.5 cursor-pointer" : "cursor-default"
+      className={`w-full rounded-xl border bg-white p-4 text-left shadow-sm transition-all ${onClick
+        ? "hover:shadow-md hover:-translate-y-0.5 cursor-pointer"
+        : "cursor-default"
         }`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -190,8 +214,8 @@ function DashboardSkeleton() {
         <div className="h-6 w-40 bg-gray-200 rounded" />
         <div className="h-4 w-72 bg-gray-100 rounded mt-3" />
         <div className="flex gap-3 mt-4">
-          <div className="h-9 w-40 bg-gray-100 rounded-full" />
-          <div className="h-9 w-32 bg-gray-100 rounded-full" />
+          <div className="h-16 w-44 bg-gray-100 rounded-xl" />
+          <div className="h-16 w-44 bg-gray-100 rounded-xl" />
         </div>
       </div>
 
@@ -205,13 +229,79 @@ function DashboardSkeleton() {
       </div>
 
       <div className="grid grid-cols-1 gap-4">
-        {Array.from({ length: 3 }).map((_, index) => (
+        {Array.from({ length: 5 }).map((_, index) => (
           <div
             key={index}
-            className="rounded-2xl h-56 bg-gray-100 border border-gray-200"
+            className="rounded-2xl h-64 bg-gray-100 border border-gray-200"
           />
         ))}
       </div>
+    </div>
+  );
+}
+
+function EmptyChart({
+  title,
+  subtitle,
+}: {
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <div className="h-80 flex flex-col items-center justify-center text-center text-gray-500">
+      <BarChart3 className="h-12 w-12 mb-3 opacity-25" />
+      <p className="font-medium text-gray-700">{title}</p>
+      <p className="text-sm mt-1">{subtitle}</p>
+    </div>
+  );
+}
+
+function MoneyTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-md">
+      <p className="text-sm font-medium text-gray-900 mb-2">{label}</p>
+      <div className="space-y-1">
+        {payload.map((entry: any, index: number) => (
+          <div
+            key={`${entry?.dataKey}-${index}`}
+            className="flex items-center justify-between gap-4 text-sm"
+          >
+            <span className="text-gray-600">{entry?.name}</span>
+            <span className="font-medium text-gray-900">
+              {formatMoney(entry?.value)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AnalyticChartCard({
+  title,
+  subtitle,
+  children,
+  loading = false,
+}: {
+  title: string;
+  subtitle: string;
+  children: React.ReactNode;
+  loading?: boolean;
+}) {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+      <div className="mb-4">
+        <h3 className="text-gray-900 font-semibold">{title}</h3>
+        <p className="text-sm text-gray-600 mt-1">{subtitle}</p>
+      </div>
+
+      {loading ? (
+        <div className="h-80 animate-pulse rounded-xl bg-gray-100 border border-gray-200" />
+      ) : (
+        children
+      )}
     </div>
   );
 }
@@ -223,13 +313,49 @@ export default function Dashboard() {
   const { tienePermiso } = useAuth();
   const navigate = useNavigate();
 
+  const today = useMemo(() => new Date(), []);
+  const currentMonthStart = useMemo(
+    () => new Date(today.getFullYear(), today.getMonth(), 1),
+    [today],
+  );
+
+  const maxSelectableDate = useMemo(() => formatDateInput(today), [today]);
+
+  const [fechaInicio, setFechaInicio] = useState(
+    formatDateInput(currentMonthStart),
+  );
+  const [fechaFin, setFechaFin] = useState(formatDateInput(today));
+
   const [resumen, setResumen] = useState<DashboardResumenResponse | null>(null);
+  const [series, setSeries] = useState<DashboardSeriesResponse | null>(null);
+  const [ventasPorCategoria, setVentasPorCategoria] =
+    useState<DashboardRankingResponse | null>(null);
+  const [comprasPorProveedor, setComprasPorProveedor] =
+    useState<DashboardRankingResponse | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  const [chartsLoading, setChartsLoading] = useState(true);
+  const [chartsRefreshing, setChartsRefreshing] = useState(false);
+
   const [errorMessage, setErrorMessage] = useState("");
+  const [chartsErrorMessage, setChartsErrorMessage] = useState("");
+
+  const isDateRangeValid = useMemo(() => {
+    if (!fechaInicio || !fechaFin) return true;
+    return fechaInicio <= fechaFin;
+  }, [fechaInicio, fechaFin]);
 
   const loadResumen = useCallback(
     async (manual = false) => {
+      if (!isDateRangeValid) {
+        setErrorMessage("La fecha inicial no puede ser mayor que la fecha final.");
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+
       try {
         if (manual) {
           setRefreshing(true);
@@ -239,9 +365,11 @@ export default function Dashboard() {
 
         setErrorMessage("");
 
-        const response = await dashboardService.getResumen(
-          selectedBodegaId ?? undefined,
-        );
+        const response = await dashboardService.getResumen({
+          idBodega: selectedBodegaId ?? undefined,
+          fechaInicio,
+          fechaFin,
+        });
 
         setResumen(response);
       } catch (error) {
@@ -253,12 +381,78 @@ export default function Dashboard() {
         setRefreshing(false);
       }
     },
-    [selectedBodegaId],
+    [selectedBodegaId, fechaInicio, fechaFin, isDateRangeValid],
+  );
+
+  const loadCharts = useCallback(
+    async (manual = false) => {
+      if (!isDateRangeValid) {
+        setChartsErrorMessage(
+          "La fecha inicial no puede ser mayor que la fecha final.",
+        );
+        setChartsLoading(false);
+        setChartsRefreshing(false);
+        return;
+      }
+
+      try {
+        if (manual) {
+          setChartsRefreshing(true);
+        } else {
+          setChartsLoading(true);
+        }
+
+        setChartsErrorMessage("");
+
+        const diffMs =
+          new Date(`${fechaFin}T00:00:00`).getTime() -
+          new Date(`${fechaInicio}T00:00:00`).getTime();
+
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1;
+        const agrupacion = diffDays <= 45 ? "dia" : "mes";
+
+        const [seriesResponse, ventasCategoriaResponse, comprasProveedorResponse] =
+          await Promise.all([
+            dashboardService.getSeries({
+              idBodega: selectedBodegaId ?? undefined,
+              fechaInicio,
+              fechaFin,
+              agrupacion,
+            }),
+            dashboardService.getVentasPorCategoria({
+              idBodega: selectedBodegaId ?? undefined,
+              fechaInicio,
+              fechaFin,
+            }),
+            dashboardService.getComprasPorProveedor({
+              idBodega: selectedBodegaId ?? undefined,
+              fechaInicio,
+              fechaFin,
+            }),
+          ]);
+
+        setSeries(seriesResponse);
+        setVentasPorCategoria(ventasCategoriaResponse);
+        setComprasPorProveedor(comprasProveedorResponse);
+      } catch (error) {
+        const message = extractErrorMessage(error);
+        setChartsErrorMessage(message);
+        toast.error(message);
+      } finally {
+        setChartsLoading(false);
+        setChartsRefreshing(false);
+      }
+    },
+    [selectedBodegaId, fechaInicio, fechaFin, isDateRangeValid],
   );
 
   useEffect(() => {
-    void loadResumen();
+    void loadResumen(false);
   }, [loadResumen]);
+
+  useEffect(() => {
+    void loadCharts(false);
+  }, [loadCharts]);
 
   const canVentas = useMemo(
     () =>
@@ -298,6 +492,11 @@ export default function Dashboard() {
     [tienePermiso],
   );
 
+  const canCharts = useMemo(
+    () => Boolean(canVentas || canCompras),
+    [canVentas, canCompras],
+  );
+
   const mainCards = useMemo<MainCard[]>(() => {
     if (!resumen) return [];
 
@@ -305,9 +504,9 @@ export default function Dashboard() {
 
     if (canVentas) {
       cards.push({
-        title: "Ventas del mes",
+        title: "Ventas del período",
         value: formatMoney(resumen.ventas.total_mes_actual),
-        description: `Periodo actual: ${resumen.periodo.etiqueta}`,
+        description: resumen.periodo.etiqueta || "Rango seleccionado",
         icon: BadgeDollarSign,
         gradient: "bg-gradient-to-br from-blue-500 to-blue-600",
         onClick: tienePermiso("ventas", "pagos")
@@ -333,7 +532,7 @@ export default function Dashboard() {
 
     if (canCompras) {
       cards.push({
-        title: "Compras del mes",
+        title: "Compras del período",
         value: formatMoney(resumen.compras.total_mes_actual),
         description: `${formatNumber(
           resumen.compras.ordenes_pendientes,
@@ -587,6 +786,38 @@ export default function Dashboard() {
     return actions.filter((item) => item.visible);
   }, [tienePermiso]);
 
+  const seriesChartData = useMemo(() => {
+    if (!series) return [];
+
+    return series.labels.map((label, index) => ({
+      label,
+      ventas: series.ventas[index] ?? 0,
+      compras: series.compras[index] ?? 0,
+    }));
+  }, [series]);
+
+  const ventasPorCategoriaChartData = useMemo(() => {
+    return ventasPorCategoria?.items ?? [];
+  }, [ventasPorCategoria]);
+
+  const comprasPorProveedorChartData = useMemo(() => {
+    return comprasPorProveedor?.items ?? [];
+  }, [comprasPorProveedor]);
+
+  const handleRefreshDashboard = async () => {
+    if (!isDateRangeValid) {
+      toast.error("La fecha inicial no puede ser mayor que la fecha final.");
+      return;
+    }
+
+    try {
+      await Promise.all([loadResumen(true), loadCharts(true)]);
+      toast.success("Dashboard actualizado");
+    } catch {
+      //
+    }
+  };
+
   if (loading && !resumen) {
     return <DashboardSkeleton />;
   }
@@ -603,8 +834,8 @@ export default function Dashboard() {
           <div>
             <h2 className="text-gray-900 text-xl font-semibold">Dashboard</h2>
             <p className="text-gray-600 mt-1">
-              Resumen ejecutivo y operativo del sistema según la bodega
-              seleccionada.
+              Resumen ejecutivo, operativo y analítico del sistema según la
+              bodega y el rango de fechas seleccionados.
             </p>
 
             <div className="flex flex-wrap items-center gap-2 mt-4">
@@ -618,12 +849,12 @@ export default function Dashboard() {
                   "Todas las bodegas"}
               </Badge>
 
-              {resumen?.periodo?.etiqueta ? (
+              {resumen?.periodo?.fecha_inicio && resumen?.periodo?.fecha_fin ? (
                 <Badge
                   variant="outline"
                   className="bg-blue-50 text-blue-700 border-blue-200"
                 >
-                  {resumen.periodo.etiqueta}
+                  {resumen.periodo.fecha_inicio} al {resumen.periodo.fecha_fin}
                 </Badge>
               ) : null}
 
@@ -633,28 +864,86 @@ export default function Dashboard() {
                   variant="outline"
                   className="bg-emerald-50 text-emerald-700 border-emerald-200"
                 >
-                  {formatNumber(resumen?.bodega?.total_bodegas ?? 0)} bodegas en vista
+                  {formatNumber(resumen?.bodega?.total_bodegas ?? 0)} bodegas en
+                  vista
                 </Badge>
               ) : null}
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-2">
+            <div className="flex flex-col sm:flex-row items-start sm:items-end gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Desde</label>
+                <input
+                  type="date"
+                  value={fechaInicio}
+                  max={fechaFin && fechaFin < maxSelectableDate ? fechaFin : maxSelectableDate}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (!value) {
+                      setFechaInicio(value);
+                      return;
+                    }
+
+                    const maxDate =
+                      fechaFin && fechaFin < maxSelectableDate ? fechaFin : maxSelectableDate;
+
+                    if (value <= maxDate) {
+                      setFechaInicio(value);
+                    }
+                  }}
+                  className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Hasta</label>
+                <input
+                  type="date"
+                  value={fechaFin}
+                  min={fechaInicio || undefined}
+                  max={maxSelectableDate}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (!value) {
+                      setFechaFin(value);
+                      return;
+                    }
+
+                    if (value <= maxSelectableDate && (!fechaInicio || value >= fechaInicio)) {
+                      setFechaFin(value);
+                    }
+                  }}
+                  className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm"
+                />
+              </div>
+            </div>
             <Button
               variant="outline"
-              onClick={() => void loadResumen(true)}
-              disabled={refreshing}
+              onClick={handleRefreshDashboard}
+              disabled={refreshing || chartsRefreshing}
               className="border-gray-200"
             >
               <RefreshCw
                 size={16}
-                className={`mr-2 ${refreshing ? "animate-spin" : ""}`}
+                className={`mr-2 ${refreshing || chartsRefreshing ? "animate-spin" : ""
+                  }`}
               />
               Actualizar
             </Button>
           </div>
         </div>
       </div>
+
+      {!isDateRangeValid ? (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-4">
+          <p className="font-medium">Rango de fechas inválido</p>
+          <p className="text-sm mt-1">
+            La fecha inicial no puede ser mayor que la fecha final.
+          </p>
+        </div>
+      ) : null}
 
       {errorMessage ? (
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-4 flex items-center justify-between gap-3">
@@ -679,6 +968,156 @@ export default function Dashboard() {
             <MainStatCard key={card.title} {...card} />
           ))}
         </div>
+      ) : null}
+
+      {canCharts ? (
+        <>
+          {chartsErrorMessage ? (
+            <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="font-medium">No se pudieron cargar las gráficas</p>
+                <p className="text-sm mt-1">{chartsErrorMessage}</p>
+              </div>
+
+              <Button
+                variant="outline"
+                onClick={() => void loadCharts(true)}
+                className="border-red-200"
+              >
+                Reintentar
+              </Button>
+            </div>
+          ) : null}
+
+          <AnalyticChartCard
+            title="Evolución de ventas y compras"
+            subtitle="Comportamiento comparativo del rango seleccionado."
+            loading={chartsLoading}
+          >
+            {seriesChartData.length === 0 ? (
+              <EmptyChart
+                title="Sin datos en el rango seleccionado"
+                subtitle="No hay ventas ni compras para construir la serie."
+              />
+            ) : (
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={seriesChartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" />
+                    <YAxis tickFormatter={(value) => formatNumber(value)} />
+                    <Tooltip content={<MoneyTooltip />} />
+                    <Legend />
+                    <Line
+                      type="monotone"
+                      dataKey="ventas"
+                      name="Ventas"
+                      stroke="#2563EB"
+                      strokeWidth={3}
+                      dot={{ r: 3 }}
+                      activeDot={{ r: 5 }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="compras"
+                      name="Compras"
+                      stroke="#F97316"
+                      strokeWidth={3}
+                      dot={{ r: 3 }}
+                      activeDot={{ r: 5 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </AnalyticChartCard>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <AnalyticChartCard
+              title="Ventas por categoría"
+              subtitle="Top categorías de productos vendidas en el rango."
+              loading={chartsLoading}
+            >
+              {ventasPorCategoriaChartData.length === 0 ? (
+                <EmptyChart
+                  title="Sin ventas por categoría"
+                  subtitle="No hay facturación suficiente para agrupar por categoría."
+                />
+              ) : (
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={ventasPorCategoriaChartData}
+                      layout="vertical"
+                      margin={{ top: 8, right: 16, left: 16, bottom: 8 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis
+                        type="number"
+                        tickFormatter={(value) => formatNumber(value)}
+                      />
+                      <YAxis
+                        type="category"
+                        dataKey="label"
+                        width={140}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <Tooltip content={<MoneyTooltip />} />
+                      <Bar
+                        dataKey="total"
+                        name="Ventas"
+                        fill="#2563EB"
+                        radius={[0, 8, 8, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </AnalyticChartCard>
+
+            <AnalyticChartCard
+              title="Compras por proveedor"
+              subtitle="Top proveedores por monto comprado en el rango."
+              loading={chartsLoading}
+            >
+              {comprasPorProveedorChartData.length === 0 ? (
+                <EmptyChart
+                  title="Sin compras por proveedor"
+                  subtitle="No hay compras suficientes para construir el ranking."
+                />
+              ) : (
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={comprasPorProveedorChartData}
+                      layout="vertical"
+                      margin={{ top: 8, right: 16, left: 16, bottom: 8 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis
+                        type="number"
+                        tickFormatter={(value) => formatNumber(value)}
+                      />
+                      <YAxis
+                        type="category"
+                        dataKey="label"
+                        width={140}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <Tooltip content={<MoneyTooltip />} />
+                      <Bar
+                        dataKey="total"
+                        name="Compras"
+                        fill="#F97316"
+                        radius={[0, 8, 8, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </AnalyticChartCard>
+          </div>
+        </>
       ) : null}
 
       <SectionBlock
