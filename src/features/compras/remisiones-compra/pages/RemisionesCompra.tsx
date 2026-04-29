@@ -174,6 +174,14 @@ const buildEmptyForm = (): FormState => ({
   idFactura: "",
 });
 
+const MAX_OBSERVACIONES_LENGTH = 255;
+const MAX_LOTE_LENGTH = 50;
+const MAX_CODIGO_BARRAS_LENGTH = 80;
+const MAX_NOTA_ITEM_LENGTH = 255;
+
+const loteRegex = /^[a-zA-Z0-9\s._-]+$/;
+const codigoBarrasRegex = /^[a-zA-Z0-9._-]+$/;
+
 const safeJsonParse = (value: string) => {
   try {
     return JSON.parse(value);
@@ -863,79 +871,144 @@ export default function RemisionesCompra() {
     }
   };
 
-  const handleAddItem = () => {
-    if (!selectedCompra) {
-      toast.error("Primero debes seleccionar una orden de compra");
-      return;
-    }
+  const validateTextLimits = () => {
+  if (formData.observaciones.trim().length > MAX_OBSERVACIONES_LENGTH) {
+    toast.error(`Las observaciones no pueden superar ${MAX_OBSERVACIONES_LENGTH} caracteres`);
+    return false;
+  }
 
-    if (
-      !currentProducto ||
-      !currentNumeroLote ||
-      !currentCantidad ||
-      !currentFechaVencimiento
-    ) {
-      toast.error("Completa producto, lote, cantidad y fecha de vencimiento");
-      return;
-    }
+  // ID Factura es opcional.
+  // Si viene vacío, pasa.
+  // Si viene lleno, debe ser número entero mayor a 0.
+  if (formData.idFactura.trim()) {
+    const factura = Number(formData.idFactura);
 
-    const compraItem = selectedCompra.items.find(
-      (item) => String(item.idProducto) === currentProducto
+    if (!Number.isInteger(factura) || factura <= 0) {
+      toast.error("El ID de factura debe ser un número entero mayor a 0");
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const validateCurrentItemFields = () => {
+  const lote = currentNumeroLote.trim();
+  const nota = currentNota.trim();
+  const barras = codigoBarras.trim();
+
+  if (lote.length > MAX_LOTE_LENGTH) {
+    toast.error(`El lote no puede superar ${MAX_LOTE_LENGTH} caracteres`);
+    return false;
+  }
+
+  if (!loteRegex.test(lote)) {
+    toast.error("El lote solo permite letras, números, espacios, punto, guion y guion bajo");
+    return false;
+  }
+
+  if (barras.length > MAX_CODIGO_BARRAS_LENGTH) {
+    toast.error(`El código de barras no puede superar ${MAX_CODIGO_BARRAS_LENGTH} caracteres`);
+    return false;
+  }
+
+  if (barras && !codigoBarrasRegex.test(barras)) {
+    toast.error("El código de barras solo permite letras, números, punto, guion y guion bajo");
+    return false;
+  }
+
+  if (nota.length > MAX_NOTA_ITEM_LENGTH) {
+    toast.error(`La nota del ítem no puede superar ${MAX_NOTA_ITEM_LENGTH} caracteres`);
+    return false;
+  }
+
+  return true;
+};
+
+const handleAddItem = () => {
+  if (!selectedCompra) {
+    toast.error("Primero debes seleccionar una orden de compra");
+    return;
+  }
+
+  if (
+    !currentProducto ||
+    !currentNumeroLote.trim() ||
+    !currentCantidad.trim() ||
+    !currentFechaVencimiento
+  ) {
+    toast.error("Completa producto, lote, cantidad y fecha de vencimiento");
+    return;
+  }
+
+  if (!validateCurrentItemFields()) return;
+
+  const today = new Date().toISOString().split("T")[0];
+
+  if (currentFechaVencimiento < today) {
+    toast.error("La fecha de vencimiento del producto no puede ser anterior a hoy");
+    return;
+  }
+
+  const compraItem = selectedCompra.items.find(
+    (item) => String(item.idProducto) === currentProducto
+  );
+
+  if (!compraItem) {
+    toast.error("El producto seleccionado no pertenece a la compra");
+    return;
+  }
+
+  const cantidad = Number(currentCantidad);
+
+  if (!Number.isFinite(cantidad) || cantidad <= 0) {
+    toast.error("La cantidad debe ser mayor a 0");
+    return;
+  }
+
+  const cantidadYaAgregada = items
+    .filter((i) => i.id_producto === compraItem.idProducto)
+    .reduce((acc, item) => acc + Number(item.cantidad || 0), 0);
+
+  const cantidadDisponible = compraItem.cantidad - cantidadYaAgregada;
+
+  if (cantidad > cantidadDisponible) {
+    toast.error(
+      `La cantidad supera lo disponible en la compra. Máximo disponible: ${cantidadDisponible}`
     );
+    return;
+  }
 
-    if (!compraItem) {
-      toast.error("El producto seleccionado no pertenece a la compra");
-      return;
-    }
+  const duplicado = items.some(
+    (item) =>
+      item.id_producto === compraItem.idProducto &&
+      normalizeText(item.lote) === normalizeText(currentNumeroLote) &&
+      item.fecha_vencimiento === currentFechaVencimiento
+  );
 
-    const cantidad = Number(currentCantidad);
-    if (!Number.isFinite(cantidad) || cantidad <= 0) {
-      toast.error("La cantidad debe ser mayor a 0");
-      return;
-    }
+  if (duplicado) {
+    toast.error("Ya agregaste ese producto con el mismo lote y vencimiento");
+    return;
+  }
 
-    const cantidadYaAgregada = items
-      .filter((i) => i.id_producto === compraItem.idProducto)
-      .reduce((acc, item) => acc + Number(item.cantidad || 0), 0);
-
-    const cantidadDisponible = compraItem.cantidad - cantidadYaAgregada;
-    if (cantidad > cantidadDisponible) {
-      toast.error(
-        `La cantidad supera lo disponible en la compra. Máximo disponible: ${cantidadDisponible}`
-      );
-      return;
-    }
-
-    const duplicado = items.some(
-      (item) =>
-        item.id_producto === compraItem.idProducto &&
-        normalizeText(item.lote) === normalizeText(currentNumeroLote) &&
-        item.fecha_vencimiento === currentFechaVencimiento
-    );
-
-    if (duplicado) {
-      toast.error("Ya agregaste ese producto con el mismo lote y vencimiento");
-      return;
-    }
-
-    const nuevoItem: ItemForm = {
-      localId: makeLocalId(),
-      id_producto: compraItem.idProducto,
-      productoNombre: compraItem.productoNombre,
-      cantidad: String(cantidad),
-      precio_unitario: compraItem.precioUnitario,
-      id_iva: compraItem.idIva,
-      ivaPorcentaje: compraItem.ivaPorcentaje,
-      lote: currentNumeroLote.trim(),
-      fecha_vencimiento: currentFechaVencimiento,
-      codigo_barras: codigoBarras.trim(),
-      nota: currentNota.trim(),
-    };
-
-    setItems((prev) => [...prev, nuevoItem]);
-    resetItemBuilder();
-    toast.success("Producto agregado a la remisión");
+  const nuevoItem: ItemForm = {
+    localId: makeLocalId(),
+    id_producto: compraItem.idProducto,
+    productoNombre: compraItem.productoNombre,
+    cantidad: String(cantidad),
+    precio_unitario: compraItem.precioUnitario,
+    id_iva: compraItem.idIva,
+    ivaPorcentaje: compraItem.ivaPorcentaje,
+    lote: currentNumeroLote.trim(),
+    fecha_vencimiento: currentFechaVencimiento,
+    codigo_barras: codigoBarras.trim(),
+    nota: currentNota.trim(),
   };
+
+  setItems((prev) => [...prev, nuevoItem]);
+  resetItemBuilder();
+  toast.success("Producto agregado a la remisión");
+};
 
   const handleRemoveItem = (localId: string) => {
     setItems((prev) => prev.filter((item) => item.localId !== localId));
@@ -964,18 +1037,15 @@ const validateBeforeSubmit = () => {
     return false;
   }
 
-  if (
-    Number(formData.id_proveedor) <= 0 ||
-    Number(formData.id_bodega) <= 0
-  ) {
+  if (Number(formData.id_proveedor) <= 0 || Number(formData.id_bodega) <= 0) {
     toast.error("La compra seleccionada no tiene proveedor o bodega válidos");
     return false;
   }
 
+  if (!validateTextLimits()) return false;
+
   if (formData.fechaVencimiento && formData.fechaVencimiento < today) {
-    toast.error(
-      "La fecha de vencimiento de la remisión no puede ser anterior a hoy"
-    );
+    toast.error("La fecha de vencimiento de la remisión no puede ser anterior a hoy");
     return false;
   }
 
@@ -985,10 +1055,25 @@ const validateBeforeSubmit = () => {
   }
 
   for (const item of items) {
-    if (item.fecha_vencimiento && item.fecha_vencimiento < today) {
+    if (!item.lote.trim()) {
+      toast.error(`El producto "${item.productoNombre}" debe tener lote`);
+      return false;
+    }
+
+    if (!item.fecha_vencimiento) {
+      toast.error(`El producto "${item.productoNombre}" debe tener fecha de vencimiento`);
+      return false;
+    }
+
+    if (item.fecha_vencimiento < today) {
       toast.error(
         `La fecha de vencimiento del producto "${item.productoNombre}" no puede ser anterior a hoy`
       );
+      return false;
+    }
+
+    if (!Number.isFinite(Number(item.cantidad)) || Number(item.cantidad) <= 0) {
+      toast.error(`La cantidad del producto "${item.productoNombre}" debe ser mayor a 0`);
       return false;
     }
   }
@@ -2000,12 +2085,13 @@ const validateBeforeSubmit = () => {
         <Label htmlFor="idFactura">ID Factura</Label>
         <Input
           id="idFactura"
-          type="number"
-          min="1"
+          type="text"
+          inputMode="numeric"
           value={formData.idFactura}
-          onChange={(e) =>
-            setFormData((prev) => ({ ...prev, idFactura: e.target.value }))
-          }
+          onChange={(e) => {
+            const value = e.target.value.replace(/\D/g, "");
+            setFormData((prev) => ({ ...prev, idFactura: value }));
+          }}
           placeholder="Opcional"
           className="h-11"
         />
@@ -2017,12 +2103,19 @@ const validateBeforeSubmit = () => {
       <Input
         id="observaciones"
         value={formData.observaciones}
-        onChange={(e) =>
+        onChange={(e) => {
+          const value = e.target.value;
+
+          if (value.length > MAX_OBSERVACIONES_LENGTH) {
+            toast.error(`Máximo ${MAX_OBSERVACIONES_LENGTH} caracteres en observaciones`);
+            return;
+          }
+
           setFormData((prev) => ({
             ...prev,
-            observaciones: e.target.value,
-          }))
-        }
+            observaciones: value,
+          }));
+        }}
         placeholder="Notas adicionales..."
         className="h-11"
       />
@@ -2106,7 +2199,16 @@ const validateBeforeSubmit = () => {
           id="codigoBarras"
           ref={barcodeInputRef}
           value={codigoBarras}
-          onChange={(e) => setCodigoBarras(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value;
+
+            if (value.length > MAX_CODIGO_BARRAS_LENGTH) {
+              toast.error(`Máximo ${MAX_CODIGO_BARRAS_LENGTH} caracteres para código de barras`);
+              return;
+            }
+
+            setCodigoBarras(value);
+          }}
           onKeyDown={handleBarcodeKeyDown}
           placeholder="Escanee o escriba el código de barras del lote/ítem..."
           className="h-11 pr-10 bg-white border-blue-300 focus:border-blue-500"
@@ -2151,7 +2253,16 @@ const validateBeforeSubmit = () => {
           <Input
             id="numeroLote"
             value={currentNumeroLote}
-            onChange={(e) => setCurrentNumeroLote(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+
+              if (value.length > MAX_LOTE_LENGTH) {
+                toast.error(`Máximo ${MAX_LOTE_LENGTH} caracteres para el lote`);
+                return;
+              }
+
+              setCurrentNumeroLote(value);
+            }}
             placeholder="Ej: AL-2026-001"
             className="h-11"
           />
@@ -2161,12 +2272,18 @@ const validateBeforeSubmit = () => {
           <Label htmlFor="cantidad">Cantidad *</Label>
           <Input
             id="cantidad"
-            type="number"
+            type="text"
+            inputMode="decimal"
             value={currentCantidad}
-            onChange={(e) => setCurrentCantidad(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value.replace(",", ".").replace(/[^\d.]/g, "");
+
+              const partes = value.split(".");
+              if (partes.length > 2) return;
+
+              setCurrentCantidad(value);
+            }}
             placeholder="0"
-            min="0.01"
-            step="0.01"
             className="h-11"
           />
         </div>
@@ -2190,7 +2307,16 @@ const validateBeforeSubmit = () => {
           <Input
             id="notaItem"
             value={currentNota}
-            onChange={(e) => setCurrentNota(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+
+              if (value.length > MAX_NOTA_ITEM_LENGTH) {
+                toast.error(`Máximo ${MAX_NOTA_ITEM_LENGTH} caracteres para la nota`);
+                return;
+              }
+
+              setCurrentNota(value);
+            }}
             placeholder="Opcional"
             className="h-11"
           />
@@ -2389,12 +2515,13 @@ const validateBeforeSubmit = () => {
                   <Label htmlFor="edit-idFactura">ID Factura</Label>
                   <Input
                     id="edit-idFactura"
-                    type="number"
-                    min="1"
+                    type="text"
+                    inputMode="numeric"
                     value={formData.idFactura}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, idFactura: e.target.value }))
-                    }
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, "");
+                      setFormData((prev) => ({ ...prev, idFactura: value }));
+                    }}
                     placeholder="Opcional"
                   />
                 </div>
@@ -2404,12 +2531,19 @@ const validateBeforeSubmit = () => {
                   <Input
                     id="edit-observaciones"
                     value={formData.observaciones}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const value = e.target.value;
+
+                      if (value.length > MAX_OBSERVACIONES_LENGTH) {
+                        toast.error(`Máximo ${MAX_OBSERVACIONES_LENGTH} caracteres en observaciones`);
+                        return;
+                      }
+
                       setFormData((prev) => ({
                         ...prev,
-                        observaciones: e.target.value,
-                      }))
-                    }
+                        observaciones: value,
+                      }));
+                    }}
                   />
                 </div>
               </div>
@@ -2487,7 +2621,16 @@ const validateBeforeSubmit = () => {
                         <Input
                           id="edit-codigoBarrasItem"
                           value={codigoBarras}
-                          onChange={(e) => setCodigoBarras(e.target.value)}
+                          onChange={(e) => {
+                            const value = e.target.value;
+
+                            if (value.length > MAX_CODIGO_BARRAS_LENGTH) {
+                              toast.error(`Máximo ${MAX_CODIGO_BARRAS_LENGTH} caracteres para código de barras`);
+                              return;
+                            }
+
+                            setCodigoBarras(value);
+                          }}
                           onKeyDown={handleBarcodeKeyDown}
                           placeholder="Escanee o escriba el código de barras..."
                           className="pr-10"
@@ -2504,7 +2647,16 @@ const validateBeforeSubmit = () => {
                       <Input
                         id="edit-numeroLote"
                         value={currentNumeroLote}
-                        onChange={(e) => setCurrentNumeroLote(e.target.value)}
+                        onChange={(e) => {
+                          const value = e.target.value;
+
+                          if (value.length > MAX_LOTE_LENGTH) {
+                            toast.error(`Máximo ${MAX_LOTE_LENGTH} caracteres para el lote`);
+                            return;
+                          }
+
+                          setCurrentNumeroLote(value);
+                        }}
                         placeholder="Ej: AL-2026-001"
                       />
                     </div>
@@ -2513,12 +2665,18 @@ const validateBeforeSubmit = () => {
                       <Label htmlFor="edit-cantidad">Cantidad *</Label>
                       <Input
                         id="edit-cantidad"
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         value={currentCantidad}
-                        onChange={(e) => setCurrentCantidad(e.target.value)}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(",", ".").replace(/[^\d.]/g, "");
+
+                          const partes = value.split(".");
+                          if (partes.length > 2) return;
+
+                          setCurrentCantidad(value);
+                        }}
                         placeholder="0"
-                        min="0.01"
-                        step="0.01"
                       />
                     </div>
 
@@ -2540,7 +2698,16 @@ const validateBeforeSubmit = () => {
                       <Input
                         id="edit-notaItem"
                         value={currentNota}
-                        onChange={(e) => setCurrentNota(e.target.value)}
+                        onChange={(e) => {
+                          const value = e.target.value;
+
+                          if (value.length > MAX_NOTA_ITEM_LENGTH) {
+                            toast.error(`Máximo ${MAX_NOTA_ITEM_LENGTH} caracteres para la nota`);
+                            return;
+                          }
+
+                          setCurrentNota(value);
+                        }}
                         placeholder="Opcional"
                       />
                     </div>

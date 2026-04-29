@@ -1297,38 +1297,49 @@ const generateCompraPDF = async (
     );
   };
 
-const confirmCreate = async () => {
-  if (isSaving) return;
-
+const validateCompraForm = () => {
   if (!formData.bodegaId) {
     toast.error("Debes seleccionar una bodega");
-    return;
+    return false;
   }
 
   if (!formData.proveedorId) {
     toast.error("Debes seleccionar un proveedor");
-    return;
+    return false;
   }
 
   if (!formData.terminoPagoId) {
     toast.error("Debes seleccionar un término de pago");
-    return;
+    return false;
   }
 
   if (!formData.fechaEntrega) {
     toast.error("Debes ingresar la fecha de entrega");
-    return;
+    return false;
   }
 
   if (formData.fechaEntrega < getFechaActual()) {
     toast.error("La fecha de entrega no puede ser anterior a hoy");
-    return;
+    return false;
+  }
+
+  if (formData.observaciones.trim().length > MAX_OBSERVACIONES_LENGTH) {
+    toast.error(`Las observaciones no pueden superar ${MAX_OBSERVACIONES_LENGTH} caracteres`);
+    return false;
   }
 
   if (productosOrden.length === 0) {
     toast.error("Debes agregar al menos un producto");
-    return;
+    return false;
   }
+
+  return true;
+};
+
+const confirmCreate = async () => {
+  if (isSaving) return;
+
+  if (!validateCompraForm()) return;
 
   try {
     setIsSaving(true);
@@ -1344,15 +1355,10 @@ const confirmCreate = async () => {
   } finally {
     setIsSaving(false);
   }
-};  
+};
 
 const confirmEdit = async () => {
   if (!compraDetalle || isSaving) return;
-
-  if (!formData.bodegaId) {
-    toast.error("Debes seleccionar una bodega");
-    return;
-  }
 
   if (compraDetalle.estado === "Anulada") {
     toast.error("No puedes editar una orden anulada");
@@ -1364,30 +1370,7 @@ const confirmEdit = async () => {
     return;
   }
 
-  if (!formData.proveedorId) {
-    toast.error("Debes seleccionar un proveedor");
-    return;
-  }
-
-  if (!formData.terminoPagoId) {
-    toast.error("Debes seleccionar un término de pago");
-    return;
-  }
-
-  if (!formData.fechaEntrega) {
-    toast.error("Debes ingresar la fecha de entrega");
-    return;
-  }
-
-  if (formData.fechaEntrega < getFechaActual()) {
-    toast.error("La fecha de entrega no puede ser anterior a hoy");
-    return;
-  }
-
-  if (productosOrden.length === 0) {
-    toast.error("Debes agregar al menos un producto");
-    return;
-  }
+  if (!validateCompraForm()) return;
 
   try {
     setIsSaving(true);
@@ -1441,6 +1424,8 @@ const confirmEdit = async () => {
 
   const fieldClass =
     "h-11 rounded-lg border-gray-300 bg-white shadow-none focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:border-blue-500";
+
+  const MAX_OBSERVACIONES_LENGTH = 255;
 
   const readonlyFieldClass =
     "h-11 rounded-lg border-gray-200 bg-gray-100 cursor-not-allowed shadow-none";
@@ -2133,16 +2118,26 @@ const confirmEdit = async () => {
                   <Textarea
                     id="observaciones"
                     value={formData.observaciones}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const value = e.target.value;
+
+                      if (value.length > MAX_OBSERVACIONES_LENGTH) {
+                        toast.error(`Máximo ${MAX_OBSERVACIONES_LENGTH} caracteres en observaciones`);
+                        return;
+                      }
+
                       setFormData({
                         ...formData,
-                        observaciones: e.target.value,
-                      })
-                    }
+                        observaciones: value,
+                      });
+                    }}
                     placeholder="Escribe cualquier observación sobre la orden de compra..."
                     rows={4}
                     className="rounded-lg border-gray-300 resize-none shadow-none focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:border-blue-500"
                   />
+                  <p className="text-xs text-gray-500 text-right">
+                    {formData.observaciones.length}/{MAX_OBSERVACIONES_LENGTH}
+                  </p>
                 </div>
               </div>
             </div>
@@ -2622,13 +2617,13 @@ const confirmEdit = async () => {
                     <Label htmlFor="edit-cantidad">Cantidad</Label>
                     <Input
                       id="edit-cantidad"
-                      type="number"
-                      value={cantidadProducto}
-                      onChange={(e) =>
-                        setCantidadProducto(parseInt(e.target.value) || 1)
-                      }
-                      min="1"
-                      className="h-12"
+                      type="text"
+                      inputMode="numeric"
+                      value={cantidadProductoInput}
+                      onChange={(e) => handleCantidadProductoChange(e.target.value)}
+                      onBlur={handleCantidadProductoBlur}
+                      placeholder="Ej: 50"
+                      className={numberFieldClass}
                     />
                   </div>
 
@@ -2756,15 +2751,25 @@ const confirmEdit = async () => {
                 <Textarea
                   id="edit-observaciones"
                   value={formData.observaciones}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const value = e.target.value;
+
+                    if (value.length > MAX_OBSERVACIONES_LENGTH) {
+                      toast.error(`Máximo ${MAX_OBSERVACIONES_LENGTH} caracteres en observaciones`);
+                      return;
+                    }
+
                     setFormData({
                       ...formData,
-                      observaciones: e.target.value,
-                    })
-                  }
+                      observaciones: value,
+                    });
+                  }}
                   placeholder="Escribe cualquier observación sobre la orden de compra..."
                   rows={3}
                 />
+                  <p className="text-xs text-gray-500 text-right">
+                    {formData.observaciones.length}/{MAX_OBSERVACIONES_LENGTH}
+                  </p>
               </div>
             </div>
           )}

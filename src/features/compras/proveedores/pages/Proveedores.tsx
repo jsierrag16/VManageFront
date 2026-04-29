@@ -149,16 +149,18 @@ const validators: Record<keyof FormState, (value: string) => string> = {
     return "";
   },
 
+  // 🔥 AHORA OBLIGATORIO
   email: (value) => {
-    if (!value.trim()) return "";
+    if (!value.trim()) return "El email es requerido";
     if (value.trim().length > 100) return "Máximo 100 caracteres";
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(value.trim())) return "Formato de email inválido";
     return "";
   },
 
+  // 🔥 AHORA OBLIGATORIO
   telefono: (value) => {
-    if (!value.trim()) return "";
+    if (!value.trim()) return "El teléfono es requerido";
     if (value.trim().length > 20) return "Máximo 20 caracteres";
     if (!/^[0-9+\-\s()]+$/.test(value.trim())) {
       return "Solo se permiten números, espacios, +, -, y paréntesis";
@@ -176,8 +178,9 @@ const validators: Record<keyof FormState, (value: string) => string> = {
 
   tipoProveedorId: (value) => (!value ? "El tipo de proveedor es requerido" : ""),
 
+  // 🔥 AHORA OBLIGATORIO
   contacto: (value) => {
-    if (!value.trim()) return "";
+    if (!value.trim()) return "El contacto es requerido";
     if (value.trim().length > 255) return "Máximo 255 caracteres";
     return "";
   },
@@ -344,17 +347,17 @@ export default function Proveedores() {
     return true;
   };
 
-  const buildPayload = (): SaveProveedorPayload => ({
-    num_documento: form.numeroDoc.trim(),
-    nombre_empresa: form.nombre.trim(),
-    email: form.email.trim() || undefined,
-    telefono: form.telefono.trim() || undefined,
-    direccion: form.direccion.trim() || undefined,
-    nombre_contacto: form.contacto.trim() || undefined,
-    id_tipo_proveedor: Number(form.tipoProveedorId),
-    id_tipo_doc: Number(form.tipoDocId),
-    id_municipio: Number(form.municipioId),
-  });
+const buildPayload = (): SaveProveedorPayload => ({
+  num_documento: form.numeroDoc.trim(),
+  nombre_empresa: form.nombre.trim(),
+  email: form.email.trim(),
+  telefono: form.telefono.trim(),
+  direccion: form.direccion.trim() || undefined,
+  nombre_contacto: form.contacto.trim(),
+  id_tipo_proveedor: Number(form.tipoProveedorId),
+  id_tipo_doc: Number(form.tipoDocId),
+  id_municipio: Number(form.municipioId),
+});
 
   const getSearchFilters = useCallback((term: string) => {
     const normalized = term.trim().toLowerCase();
@@ -1065,7 +1068,7 @@ export default function Proveedores() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="create-email">Email</Label>
+                <Label htmlFor="create-email">Email *</Label>
                 <Input
                   id="create-email"
                   type="email"
@@ -1081,7 +1084,7 @@ export default function Proveedores() {
               </div>
 
               <div>
-                <Label htmlFor="create-telefono">Teléfono</Label>
+                <Label htmlFor="create-telefono">Teléfono *</Label>
                 <Input
                   id="create-telefono"
                   value={form.telefono}
@@ -1141,7 +1144,7 @@ export default function Proveedores() {
               </div>
 
               <div>
-                <Label htmlFor="create-contacto">Contacto Principal</Label>
+                <Label htmlFor="create-contacto">Contacto Principal *</Label>
                 <Input
                   id="create-contacto"
                   value={form.contacto}
