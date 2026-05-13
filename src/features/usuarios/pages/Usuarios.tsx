@@ -19,6 +19,7 @@ import {
   Building2,
   CheckCircle,
   Filter,
+  FileSpreadsheet,
 } from "lucide-react";
 import { Button } from "../../../shared/components/ui/button";
 import { Input } from "../../../shared/components/ui/input";
@@ -64,6 +65,7 @@ import {
   quitarBodegaAUsuario,
   type Usuario,
 } from "@/features/usuarios/services/usuarios.services";
+import * as XLSX from "xlsx";
 
 type OpcionCatalogo = {
   id: number;
@@ -151,6 +153,7 @@ export default function Usuarios() {
     nombre: "",
     apellido: "",
     fechaNacimiento: "",
+    genero: "",
     email: "",
     telefono: "",
     bodegas: "",
@@ -161,8 +164,9 @@ export default function Usuarios() {
     tipoDoc: false,
     numeroDoc: false,
     nombre: false,
-    fechaNacimiento: false,
     apellido: false,
+    fechaNacimiento: false,
+    genero: false,
     email: false,
     telefono: false,
     bodegas: false,
@@ -303,6 +307,7 @@ export default function Usuarios() {
       telefono: "",
       bodegas: "",
       rol: "",
+      genero: "",
     });
 
     setTouched({
@@ -315,6 +320,7 @@ export default function Usuarios() {
       telefono: false,
       bodegas: false,
       rol: false,
+      genero: false,
     });
   }, [isEditar, usuarioSeleccionado]);
 
@@ -342,6 +348,7 @@ export default function Usuarios() {
       telefono: "",
       bodegas: "",
       rol: "",
+      genero: "",
     });
 
     setTouched({
@@ -354,6 +361,7 @@ export default function Usuarios() {
       telefono: false,
       bodegas: false,
       rol: false,
+      genero: false,
     });
   }, [isCrear]);
 
@@ -365,60 +373,71 @@ export default function Usuarios() {
   // Validaciones y helpers
   // =========================================================
   const validateTipoDocField = (value: number | "") => {
-    if (!value) {
-      return "El tipo de documento es requerido";
-    }
+    if (!value) return "Debes seleccionar un tipo de documento";
     return "";
   };
 
   const validateNumeroDocumento = (value: string) => {
-    if (!value.trim()) {
-      return "El número de documento es requerido";
+    const documento = value.trim();
+
+    if (!documento) return "El número de documento es requerido";
+
+    if (!/^[0-9]+$/.test(documento)) {
+      return "El número de documento solo permite números";
     }
-    const soloNumeros = /^[0-9]+$/;
-    if (!soloNumeros.test(value)) {
-      return "Solo se permiten números";
+
+    if (Number(documento) <= 0) {
+      return "El número de documento debe ser mayor a 0";
     }
-    if (value.length < 6) {
-      return "Mínimo 6 dígitos";
+
+    if (documento.length < 6) {
+      return "El número de documento debe tener mínimo 6 dígitos";
     }
-    if (value.length > 15) {
-      return "Máximo 15 dígitos";
+
+    if (documento.length > 15) {
+      return "El número de documento debe tener máximo 15 dígitos";
     }
+
     return "";
   };
 
   const validateNombre = (value: string) => {
-    if (!value.trim()) {
-      return "El nombre es requerido";
+    const nombre = value.trim();
+
+    if (!nombre) return "El nombre es requerido";
+
+    if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/.test(nombre)) {
+      return "El nombre solo permite letras";
     }
-    const soloLetras = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/;
-    if (!soloLetras.test(value)) {
-      return "Solo se permiten letras";
+
+    if (nombre.length < 3) {
+      return "El nombre debe tener mínimo 3 caracteres";
     }
-    if (value.trim().length < 2) {
-      return "Mínimo 2 caracteres";
+
+    if (nombre.length > 30) {
+      return "El nombre debe tener máximo 30 caracteres";
     }
-    if (value.trim().length > 50) {
-      return "Máximo 50 caracteres";
-    }
+
     return "";
   };
 
   const validateApellido = (value: string) => {
-    if (!value.trim()) {
-      return "El apellido es requerido";
+    const apellido = value.trim();
+
+    if (!apellido) return "El apellido es requerido";
+
+    if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/.test(apellido)) {
+      return "El apellido solo permite letras";
     }
-    const soloLetras = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/;
-    if (!soloLetras.test(value)) {
-      return "Solo se permiten letras";
+
+    if (apellido.length < 3) {
+      return "El apellido debe tener mínimo 3 caracteres";
     }
-    if (value.trim().length < 2) {
-      return "Mínimo 2 caracteres";
+
+    if (apellido.length > 30) {
+      return "El apellido debe tener máximo 30 caracteres";
     }
-    if (value.trim().length > 50) {
-      return "Máximo 50 caracteres";
-    }
+
     return "";
   };
 
@@ -430,38 +449,60 @@ export default function Usuarios() {
   };
 
   const validateFechaNacimientoField = (value: string) => {
-    if (!value) return "";
+    if (!value.trim()) {
+      return "La fecha de nacimiento es requerida";
+    }
 
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
+    const fecha = new Date(value);
+
+    if (Number.isNaN(fecha.getTime())) {
       return "La fecha de nacimiento no es válida";
     }
 
+    const hoy = new Date();
+
+    fecha.setHours(0, 0, 0, 0);
+    hoy.setHours(0, 0, 0, 0);
+
+    if (fecha > hoy) {
+      return "La fecha de nacimiento no puede ser futura";
+    }
+
+    return "";
+  };
+
+  const validateGeneroField = (value: number | "") => {
+    if (!value) return "Debes seleccionar un género";
     return "";
   };
 
   const validateEmailField = (value: string) => {
-    if (!value.trim()) {
-      return "El email es requerido";
-    }
-    if (!value.includes("@")) {
-      return "El email debe contener un @";
-    }
+    const email = value.trim();
+
+    if (!email) return "El email es requerido";
+
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(value)) {
-      return "Formato de email inválido";
+
+    if (!emailRegex.test(email)) {
+      return "El formato del email no es válido";
     }
+
     return "";
   };
 
   const validateTelefonoField = (value: string) => {
-    if (!value.trim()) {
-      return "El teléfono es requerido";
+    const telefono = value.trim();
+
+    if (!telefono) return "El teléfono es requerido";
+
+    if (!/^[0-9]+$/.test(telefono)) {
+      return "El teléfono solo permite números";
     }
-    const diezNumeros = /^[0-9]{10}$/;
-    if (!diezNumeros.test(value)) {
-      return "Debe tener exactamente 10 números";
+
+    if (telefono.length !== 10) {
+      return "El teléfono debe tener exactamente 10 dígitos";
     }
+
     return "";
   };
 
@@ -469,13 +510,12 @@ export default function Usuarios() {
     if (value.length === 0) {
       return "Debes seleccionar al menos una bodega";
     }
+
     return "";
   };
 
   const validateRolField = (value: number | "") => {
-    if (!value) {
-      return "El rol es requerido";
-    }
+    if (!value) return "Debes seleccionar un rol";
     return "";
   };
 
@@ -486,6 +526,7 @@ export default function Usuarios() {
       nombre: true,
       apellido: true,
       fechaNacimiento: true,
+      genero: true,
       email: true,
       telefono: true,
       bodegas: true,
@@ -497,6 +538,7 @@ export default function Usuarios() {
     const nombreError = validateNombre(formNombre);
     const apellidoError = validateApellido(formApellido);
     const fechaNacimientoError = validateFechaNacimientoField(formFechaNacimiento);
+    const generoError = validateGeneroField(formGeneroId);
     const emailError = validateEmailField(formEmail);
     const telefonoError = validateTelefonoField(formTelefono);
     const bodegasError = validateBodegasField(formBodegasIds);
@@ -508,6 +550,7 @@ export default function Usuarios() {
       nombre: nombreError,
       apellido: apellidoError,
       fechaNacimiento: fechaNacimientoError,
+      genero: generoError,
       email: emailError,
       telefono: telefonoError,
       bodegas: bodegasError,
@@ -520,6 +563,7 @@ export default function Usuarios() {
       nombreError ||
       apellidoError ||
       fechaNacimientoError ||
+      generoError ||
       emailError ||
       telefonoError ||
       bodegasError ||
@@ -553,68 +597,110 @@ export default function Usuarios() {
   // Handlers de formulario
   // =========================================================
   const handleNumeroDocChange = (value: string) => {
-    const limpio = value.replace(/\D/g, "").slice(0, 15);
-    setFormNumeroDoc(limpio);
+    setFormNumeroDoc(value);
 
     if (touched.numeroDoc) {
-      setErrors({ ...errors, numeroDoc: validateNumeroDocumento(limpio) });
+      setErrors((prev) => ({
+        ...prev,
+        numeroDoc: validateNumeroDocumento(value),
+      }));
     }
   };
 
   const handleNombreChange = (value: string) => {
-    const limpio = value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, "").slice(0, 50);
-    setFormNombre(limpio);
+    setFormNombre(value);
 
     if (touched.nombre) {
-      setErrors({ ...errors, nombre: validateNombre(limpio) });
+      setErrors((prev) => ({
+        ...prev,
+        nombre: validateNombre(value),
+      }));
     }
   };
 
   const handleApellidoChange = (value: string) => {
-    const limpio = value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, "").slice(0, 50);
-    setFormApellido(limpio);
+    setFormApellido(value);
 
     if (touched.apellido) {
-      setErrors({ ...errors, apellido: validateApellido(limpio) });
+      setErrors((prev) => ({
+        ...prev,
+        apellido: validateApellido(value),
+      }));
     }
   };
 
   const handleFechaNacimientoChange = (value: string) => {
     setFormFechaNacimiento(value);
+
     if (touched.fechaNacimiento) {
-      setErrors({
-        ...errors,
+      setErrors((prev) => ({
+        ...prev,
         fechaNacimiento: validateFechaNacimientoField(value),
-      });
+      }));
+    }
+  };
+
+  const handleGeneroChange = (value: number | "") => {
+    setFormGeneroId(value);
+
+    if (touched.genero) {
+      setErrors((prev) => ({
+        ...prev,
+        genero: validateGeneroField(value),
+      }));
     }
   };
 
   const handleEmailChange = (value: string) => {
     setFormEmail(value);
+
     if (touched.email) {
-      setErrors({ ...errors, email: validateEmailField(value) });
+      setErrors((prev) => ({
+        ...prev,
+        email: validateEmailField(value),
+      }));
     }
   };
 
   const handleTelefonoChange = (value: string) => {
     setFormTelefono(value);
+
     if (touched.telefono) {
-      setErrors({ ...errors, telefono: validateTelefonoField(value) });
+      setErrors((prev) => ({
+        ...prev,
+        telefono: validateTelefonoField(value),
+      }));
     }
   };
 
   const handleRolChange = (value: number | "") => {
     setFormRolId(value);
+
     if (touched.rol) {
-      setErrors({ ...errors, rol: validateRolField(value) });
+      setErrors((prev) => ({
+        ...prev,
+        rol: validateRolField(value),
+      }));
     }
   };
 
   const handleTipoDocChange = (value: number | "") => {
     setFormTipoDocId(value);
+
     if (touched.tipoDoc) {
-      setErrors({ ...errors, tipoDoc: validateTipoDocField(value) });
+      setErrors((prev) => ({
+        ...prev,
+        tipoDoc: validateTipoDocField(value),
+      }));
     }
+  };
+
+  const handleGeneroBlur = () => {
+    setTouched((prev) => ({ ...prev, genero: true }));
+    setErrors((prev) => ({
+      ...prev,
+      genero: validateGeneroField(formGeneroId),
+    }));
   };
 
   const handleNumeroDocBlur = () => {
@@ -692,6 +778,7 @@ export default function Usuarios() {
     setFormTelefono("");
     setFormBodegasIds([]);
     setFormRolId("");
+    setFormGeneroId("");
 
     setErrors({
       tipoDoc: "",
@@ -703,6 +790,7 @@ export default function Usuarios() {
       telefono: "",
       bodegas: "",
       rol: "",
+      genero: "",
     });
 
     setTouched({
@@ -715,14 +803,15 @@ export default function Usuarios() {
       telefono: false,
       bodegas: false,
       rol: false,
+      genero: false,
     });
 
     navigate("/app/usuarios/crear");
   };
 
   const handleEdit = (u: Usuario) => {
-    if (!canCreateUsuarios) {
-      toast.error("No tienes permiso para crear usuarios");
+    if (!canEditUsuarios) {
+      toast.error("No tienes permiso para editar usuarios");
       return;
     }
     navigate(`/app/usuarios/${u.id}/editar`);
@@ -1082,6 +1171,57 @@ export default function Usuarios() {
     });
   };
 
+  const handleExportUsuariosExcel = () => {
+    const usuariosAExportar = filteredUsuarios;
+
+    if (usuariosAExportar.length === 0) {
+      toast.error("No hay usuarios para exportar");
+      return;
+    }
+
+    const data = usuariosAExportar.map((u, index) => ({
+      "#": index + 1,
+      "Tipo Documento": u.tipoDocumento || "No registrado",
+      "Número Documento": u.numeroDocumento || "No registrado",
+      Nombre: u.nombre || "No registrado",
+      Apellido: u.apellido || "No registrado",
+      "Fecha de Nacimiento": formatFechaDisplay(u.fechaNacimiento),
+      Género: u.genero || "No definido",
+      Email: u.email || "No registrado",
+      Teléfono: u.telefono || "No registrado",
+      "Bodegas Asignadas": Array.isArray(u.bodegas)
+        ? u.bodegas.join(", ")
+        : "No registradas",
+      Rol: u.rol || "No registrado",
+      Estado: u.estado ? "Activo" : "Inactivo",
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+
+    worksheet["!cols"] = [
+      { wch: 6 },
+      { wch: 18 },
+      { wch: 20 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 22 },
+      { wch: 16 },
+      { wch: 28 },
+      { wch: 16 },
+      { wch: 35 },
+      { wch: 24 },
+      { wch: 14 },
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Usuarios");
+
+    const fecha = new Date().toISOString().split("T")[0];
+    XLSX.writeFile(workbook, `reporte_usuarios_${fecha}.xlsx`);
+
+    toast.success("Reporte de usuarios descargado correctamente");
+  };
+
   const getUsuarioFoto = (u: any) => {
     return u?.avatarUrl || u?.imgUrl || u?.img_url || u?.raw?.img_url || "";
   };
@@ -1168,7 +1308,18 @@ export default function Usuarios() {
             <Plus size={18} className="mr-2" />
             Nuevo Usuario
           </Button>
+
         )}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleExportUsuariosExcel}
+          disabled={isLoadingUsuarios || filteredUsuarios.length === 0}
+          className="h-9 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+        >
+          <FileSpreadsheet size={16} className="mr-2" />
+          Excel
+        </Button>
       </div>
 
       {/* Table */}
@@ -1723,24 +1874,41 @@ export default function Usuarios() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="create-fecha-nacimiento">Fecha de Nacimiento</Label>
+                  <Label htmlFor="create-fecha-nacimiento">Fecha de Nacimiento *</Label>
                   <Input
                     id="create-fecha-nacimiento"
                     type="date"
                     value={formFechaNacimiento}
-                    onChange={(e) => setFormFechaNacimiento(e.target.value)}
+                    onChange={(e) => handleFechaNacimientoChange(e.target.value)}
+                    onBlur={handleFechaNacimientoBlur}
+                    disabled={isCreatingUsuario || isLoadingCatalogos}
+                    className={
+                      errors.fechaNacimiento && touched.fechaNacimiento ? "border-red-500" : ""
+                    }
                   />
+                  {errors.fechaNacimiento && touched.fechaNacimiento && (
+                    <p className="text-red-500 text-sm mt-1">{errors.fechaNacimiento}</p>
+                  )}
                 </div>
 
                 <div>
-                  <Label htmlFor="create-genero">Género</Label>
+                  <Label htmlFor="create-genero">Género *</Label>
                   <Select
                     value={formGeneroId === "" ? "" : String(formGeneroId)}
-                    onValueChange={(value) =>
-                      setFormGeneroId(value ? Number(value) : "")
-                    }
+                    onValueChange={(value) => {
+                      const parsed = value ? Number(value) : "";
+                      handleGeneroChange(parsed);
+                      setTouched((prev) => ({ ...prev, genero: true }));
+                    }}
+                    onOpenChange={(open) => {
+                      if (!open) handleGeneroBlur();
+                    }}
+                    disabled={isCreatingUsuario || isLoadingCatalogos}
                   >
-                    <SelectTrigger id="create-genero">
+                    <SelectTrigger
+                      id="create-genero"
+                      className={errors.genero && touched.genero ? "border-red-500" : ""}
+                    >
                       <SelectValue placeholder="Selecciona un género" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1751,6 +1919,9 @@ export default function Usuarios() {
                       ))}
                     </SelectContent>
                   </Select>
+                  {errors.genero && touched.genero && (
+                    <p className="text-red-500 text-sm mt-1">{errors.genero}</p>
+                  )}
                 </div>
               </div>
 
@@ -1779,7 +1950,7 @@ export default function Usuarios() {
                     value={formTelefono}
                     onChange={(e) => handleTelefonoChange(e.target.value)}
                     onBlur={handleTelefonoBlur}
-                    maxLength={10}
+                    maxLength={15}
                     placeholder="3001234567"
                     disabled={isCreatingUsuario || isLoadingCatalogos}
                     className={errors.telefono && touched.telefono ? "border-red-500" : ""}
@@ -1985,27 +2156,44 @@ export default function Usuarios() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="edit-fecha-nacimiento">Fecha de Nacimiento</Label>
+                <Label htmlFor="edit-fecha-nacimiento">Fecha de Nacimiento *</Label>
                 <Input
                   id="edit-fecha-nacimiento"
                   type="date"
                   value={formFechaNacimiento}
                   onChange={(e) => handleFechaNacimientoChange(e.target.value)}
                   onBlur={handleFechaNacimientoBlur}
+                  className={
+                    errors.fechaNacimiento && touched.fechaNacimiento ? "border-red-500" : ""
+                  }
                 />
+                {errors.fechaNacimiento && touched.fechaNacimiento && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.fechaNacimiento}
+                  </p>
+                )}
               </div>
 
               <div>
-                <Label htmlFor="edit-genero">Género</Label>
+                <Label htmlFor="edit-genero">Género *</Label>
                 <Select
                   value={formGeneroId === "" ? "" : String(formGeneroId)}
-                  onValueChange={(value) =>
-                    setFormGeneroId(value ? Number(value) : "")
-                  }
+                  onValueChange={(value) => {
+                    const parsed = value ? Number(value) : "";
+                    handleGeneroChange(parsed);
+                    setTouched((prev) => ({ ...prev, genero: true }));
+                  }}
+                  onOpenChange={(open) => {
+                    if (!open) handleGeneroBlur();
+                  }}
                 >
-                  <SelectTrigger id="edit-genero">
+                  <SelectTrigger
+                    id="edit-genero"
+                    className={errors.genero && touched.genero ? "border-red-500" : ""}
+                  >
                     <SelectValue placeholder="Selecciona un género" />
                   </SelectTrigger>
+
                   <SelectContent>
                     {generosCatalogo.map((item) => (
                       <SelectItem key={item.id} value={String(item.id)}>
@@ -2014,6 +2202,10 @@ export default function Usuarios() {
                     ))}
                   </SelectContent>
                 </Select>
+
+                {errors.genero && touched.genero && (
+                  <p className="text-red-500 text-sm mt-1">{errors.genero}</p>
+                )}
               </div>
             </div>
 
@@ -2041,7 +2233,7 @@ export default function Usuarios() {
                   value={formTelefono}
                   onChange={(e) => handleTelefonoChange(e.target.value)}
                   onBlur={handleTelefonoBlur}
-                  maxLength={10}
+                  maxLength={15}
                   placeholder="3001234567"
                   className={errors.telefono && touched.telefono ? "border-red-500" : ""}
                 />
@@ -2076,30 +2268,38 @@ export default function Usuarios() {
                 )}
               </div>
 
-              <Select
-                value={formRolId === "" ? "" : String(formRolId)}
-                onValueChange={(value) => {
-                  const parsed = value ? Number(value) : "";
-                  handleRolChange(parsed);
-                  setTouched((prev) => ({ ...prev, rol: true }));
-                }}
-                disabled={isSelfEdit}
-              >
-                <SelectTrigger
-                  id="edit-rol"
-                  className={`${errors.rol && touched.rol && !isSelfEdit ? "border-red-500" : ""} ${isSelfEdit ? "opacity-60 cursor-not-allowed" : ""
-                    }`}
+              <div>
+                <Label htmlFor="edit-rol">Rol *</Label>
+                <Select
+                  value={formRolId === "" ? "" : String(formRolId)}
+                  onValueChange={(value) => {
+                    const parsed = value ? Number(value) : "";
+                    handleRolChange(parsed);
+                    setTouched((prev) => ({ ...prev, rol: true }));
+                  }}
+                  disabled={isSelfEdit}
                 >
-                  <SelectValue placeholder="Selecciona un rol" />
-                </SelectTrigger>
-                <SelectContent>
-                  {rolesCatalogo.map((item) => (
-                    <SelectItem key={item.id} value={String(item.id)}>
-                      {item.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                  <SelectTrigger
+                    id="edit-rol"
+                    className={`${errors.rol && touched.rol && !isSelfEdit ? "border-red-500" : ""} ${isSelfEdit ? "opacity-60 cursor-not-allowed" : ""
+                      }`}
+                  >
+                    <SelectValue placeholder="Selecciona un rol" />
+                  </SelectTrigger>
+
+                  <SelectContent>
+                    {rolesCatalogo.map((item) => (
+                      <SelectItem key={item.id} value={String(item.id)}>
+                        {item.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {errors.rol && touched.rol && !isSelfEdit && (
+                  <p className="text-red-500 text-sm mt-1">{errors.rol}</p>
+                )}
+              </div>
             </div>
           </div>
 

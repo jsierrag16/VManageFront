@@ -594,8 +594,22 @@ export default function Traslados({
     return flujo[estadoActual];
   };
 
+  const isLoteVencido = (fechaVencimiento?: string) => {
+    if (!fechaVencimiento) return false;
+
+    const fecha = new Date(fechaVencimiento);
+    if (Number.isNaN(fecha.getTime())) return false;
+
+    const hoy = new Date();
+
+    fecha.setHours(0, 0, 0, 0);
+    hoy.setHours(0, 0, 0, 0);
+
+    return fecha < hoy;
+  };
+
   const validateBodegaOrigen = (value: number | "") => {
-    if (!value) return "La bodega de origen es requerida";
+    if (!value) return "Debes seleccionar una bodega de origen";
     return "";
   };
 
@@ -603,47 +617,73 @@ export default function Traslados({
     value: number | "",
     bodegaOrigenId: number | ""
   ) => {
-    if (!value) return "La bodega de destino es requerida";
+    if (!value) return "Debes seleccionar una bodega de destino";
+
     if (value === bodegaOrigenId) {
-      return "La bodega de destino debe ser diferente a la de origen";
+      return "La bodega de destino debe ser diferente a la bodega de origen";
     }
+
     return "";
   };
 
   const validateObservaciones = (value: string) => {
-    if (!value.trim()) return "";
-    if (value.trim().length > 255) return "Máximo 255 caracteres";
+    const observaciones = value.trim();
+
+    // Campo opcional
+    if (!observaciones) return "";
+
+    if (observaciones.length > 100) {
+      return "Las observaciones no pueden superar los 100 caracteres";
+    }
 
     const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s.,;:()\-¿?¡!]+$/;
-    if (!validPattern.test(value)) {
-      return "Solo se permiten letras, números, espacios y puntuación básica";
+    if (!validPattern.test(observaciones)) {
+      return "Las observaciones contienen caracteres no permitidos";
     }
 
     return "";
   };
 
   const validateCurrentProducto = (value: number | "") => {
-    if (!value) return "El producto es requerido";
+    if (!value) return "Debes seleccionar un producto";
     return "";
   };
 
-  const validateCurrentLote = (value: number | "") => {
-    if (!value) return "El lote es requerido";
+  const validateCurrentLote = (
+    value: number | "",
+    existencia?: ExistenciaDisponibleUI | null
+  ) => {
+    if (!value) return "Debes seleccionar un lote";
+
+    if (!existencia) {
+      return "Debes seleccionar un lote válido";
+    }
+
+    if (isLoteVencido(existencia.fechaVencimiento)) {
+      return "No puedes seleccionar un lote vencido";
+    }
+
     return "";
   };
 
   const validateCurrentCantidad = (value: string, maxCantidad: number) => {
-    if (!value.trim()) return "La cantidad es requerida";
+    const cantidadTexto = value.trim();
 
-    const soloNumeros = /^[0-9]+(\.[0-9]{1,2})?$/;
-    if (!soloNumeros.test(value)) {
-      return "Solo se permiten números válidos";
+    if (!cantidadTexto) return "La cantidad es requerida";
+
+    const soloEnterosPositivos = /^[0-9]+$/;
+    if (!soloEnterosPositivos.test(cantidadTexto)) {
+      return "La cantidad debe ser un número entero positivo";
     }
 
-    const cantidad = Number(value);
-    if (cantidad <= 0) return "La cantidad debe ser mayor a 0";
+    const cantidad = Number(cantidadTexto);
+
+    if (cantidad <= 0) {
+      return "La cantidad debe ser mayor a 0";
+    }
+
     if (cantidad > maxCantidad) {
-      return `Máximo ${maxCantidad} unidades disponibles`;
+      return `La cantidad no puede superar el stock disponible: ${maxCantidad}`;
     }
 
     return "";
@@ -740,6 +780,12 @@ export default function Traslados({
   const handleCurrentLoteChange = (value: string) => {
     const parsed = value ? Number(value) : "";
 
+    const existencia = parsed
+      ? lotesDisponibles.find(
+        (item) => item.idExistencia === Number(parsed)
+      ) ?? null
+      : null;
+
     setCurrentExistenciaId(parsed);
     setCurrentCantidad("");
 
@@ -747,7 +793,7 @@ export default function Traslados({
 
     setErrors((prev) => ({
       ...prev,
-      currentLote: validateCurrentLote(parsed),
+      currentLote: validateCurrentLote(parsed, existencia),
       currentCantidad: "",
     }));
   };
@@ -869,7 +915,10 @@ export default function Traslados({
   // =========================================================
   const handleAddItem = () => {
     const productoError = validateCurrentProducto(currentProductoId);
-    const loteError = validateCurrentLote(currentExistenciaId);
+    const loteError = validateCurrentLote(
+      currentExistenciaId,
+      existenciaSeleccionada
+    );
     const cantidadError = validateCurrentCantidad(currentCantidad, cantidadMaxima);
 
     setTouched((prev) => ({

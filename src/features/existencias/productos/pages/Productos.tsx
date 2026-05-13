@@ -79,7 +79,7 @@ export default function Productos({
   triggerCreate,
   onNavigateToTraslados,
 }: ProductosProps) {
-  
+
   // =========================================================
   // Contexto, navegación y permisos
   // =========================================================
@@ -380,13 +380,21 @@ export default function Productos({
   // Validaciones y helpers
   // =========================================================
   const validateNombre = (value: string) => {
-    if (!value.trim()) return "El nombre del producto es requerido";
-    if (value.trim().length < 3) return "Mínimo 3 caracteres";
-    if (value.trim().length > 150) return "Máximo 150 caracteres";
+    const nombre = value.trim();
 
-    const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s().,%+\-/]+$/;
-    if (!validPattern.test(value)) {
-      return "El nombre contiene caracteres no permitidos";
+    if (!nombre) return "El nombre del producto es requerido";
+    if (nombre.length < 3) return "El nombre debe tener mínimo 3 caracteres";
+    if (nombre.length > 30) return "El nombre debe tener máximo 30 caracteres";
+
+    // No permite solo números
+    if (/^[0-9]+$/.test(nombre)) {
+      return "El nombre no puede contener solo números";
+    }
+
+    // Solo letras, números y espacios
+    const validPattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s]+$/;
+    if (!validPattern.test(nombre)) {
+      return "El nombre solo permite letras, números y espacios";
     }
 
     return "";
@@ -398,13 +406,11 @@ export default function Productos({
   };
 
   const validateDescripcion = (value: string) => {
-    if (!value.trim()) return "La descripción es requerida";
-    if (value.trim().length < 10) return "Mínimo 10 caracteres";
-    if (value.trim().length > 255) return "Máximo 255 caracteres";
+    const descripcion = value.trim();
 
-    if (/[<>{}[\]\\]/.test(value)) {
-      return "La descripción contiene caracteres no permitidos";
-    }
+    if (!descripcion) return "La descripción es requerida";
+    if (descripcion.length < 10) return "La descripción debe tener mínimo 10 caracteres";
+    if (descripcion.length > 50) return "La descripción debe tener máximo 50 caracteres";
 
     return "";
   };
