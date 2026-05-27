@@ -287,6 +287,19 @@ export default function Roles() {
     return "";
   };
 
+  const validatePermisos = () => {
+    const idsPermisosSeleccionados = permisosFrontendToIds(
+      formPermisos,
+      catalogoPermisos
+    );
+
+    if (idsPermisosSeleccionados.length === 0) {
+      return "Debes asignar al menos un permiso al rol";
+    }
+
+    return "";
+  };
+
   const validateForm = () => {
     setTouched({
       nombre: true,
@@ -295,6 +308,7 @@ export default function Roles() {
 
     const nombreError = validateNombre(formNombre);
     const descripcionError = validateDescripcion(formDescripcion);
+    const permisosError = validatePermisos();
 
     setErrors({
       nombre: nombreError,
@@ -303,6 +317,11 @@ export default function Roles() {
 
     if (nombreError || descripcionError) {
       toast.error("Por favor corrige los errores en el formulario");
+      return false;
+    }
+
+    if (permisosError) {
+      toast.error(permisosError);
       return false;
     }
 
@@ -651,6 +670,11 @@ export default function Roles() {
 
       const ids_permisos = permisosFrontendToIds(formPermisos, catalogoPermisos);
 
+      if (ids_permisos.length === 0) {
+        toast.error("Debes asignar al menos un permiso al rol");
+        return;
+      }
+
       await createRol({
         nombre_rol: formNombre.trim(),
         descripcion: formDescripcion.trim(),
@@ -687,6 +711,11 @@ export default function Roles() {
       setIsUpdatingRol(true);
 
       const ids_permisos = permisosFrontendToIds(formPermisos, catalogoPermisos);
+
+      if (ids_permisos.length === 0) {
+        toast.error("Debes asignar al menos un permiso al rol");
+        return;
+      }
 
       await updateRol(rolSeleccionado.id, {
         nombre_rol: formNombre.trim(),

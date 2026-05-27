@@ -118,6 +118,75 @@ function getClienteNombre(cliente?: CatalogoCliente) {
   return cliente?.nombre_cliente || cliente?.nombre || "Sin cliente";
 }
 
+function getTipoDocumentoClienteTexto(cliente?: CatalogoCliente | null) {
+  if (!cliente) return "";
+
+  const clienteAny = cliente as any;
+  const tipoDocumento = clienteAny?.tipo_documento;
+
+  const tipoDocumentoTexto =
+    clienteAny?.tipoDocumento ??
+    clienteAny?.tipo_doc ??
+    clienteAny?.tipoDoc ??
+    clienteAny?.nombre_tipo_doc ??
+    clienteAny?.nombre_tipo_documento ??
+    clienteAny?.codigo_tipo_documento ??
+    clienteAny?.codigo_documento ??
+    "";
+
+  if (tipoDocumentoTexto && typeof tipoDocumentoTexto !== "object") {
+    return String(tipoDocumentoTexto).trim();
+  }
+
+  if (tipoDocumento && typeof tipoDocumento === "object") {
+    return (
+      tipoDocumento.nombre_tipo_doc ??
+      tipoDocumento.nombre_tipo_documento ??
+      tipoDocumento.nombre_tipo_documento_cliente ??
+      tipoDocumento.nombre ??
+      tipoDocumento.codigo ??
+      tipoDocumento.sigla ??
+      tipoDocumento.abreviatura ??
+      ""
+    )
+      .toString()
+      .trim();
+  }
+
+  if (tipoDocumento && typeof tipoDocumento !== "object") {
+    return String(tipoDocumento).trim();
+  }
+
+  return "";
+}
+
+function getDocumentoClienteTexto(cliente?: CatalogoCliente | null) {
+  if (!cliente) return "No registrado";
+
+  const clienteAny = cliente as any;
+
+  const numeroDocumento =
+    clienteAny?.num_documento ??
+    clienteAny?.numeroDocumento ??
+    clienteAny?.numero_documento ??
+    clienteAny?.documento ??
+    "";
+
+  if (!numeroDocumento) return "No registrado";
+
+  const numeroDocumentoTexto = String(numeroDocumento).trim();
+
+  const tipoDocumentoDetectado = getTipoDocumentoClienteTexto(cliente);
+
+  const tipoDocumento =
+    tipoDocumentoDetectado ||
+    (numeroDocumentoTexto.startsWith("9") || numeroDocumentoTexto.startsWith("8")
+      ? "NIT"
+      : "CC");
+
+  return `${tipoDocumento}: ${numeroDocumentoTexto}`;
+}
+
 function getProductoNombre(producto?: CatalogoProducto) {
   return producto?.nombre_producto || producto?.nombre || "Producto";
 }
@@ -132,10 +201,6 @@ function getEstadoNombre(estado?: CatalogoEstadoOrdenVenta) {
 
 function getBodegaNombre(bodega?: OrdenVentaApi["bodega"]) {
   return bodega?.nombre_bodega || bodega?.nombre || "—";
-}
-
-function getPrecioProductoCatalogo(producto?: CatalogoProducto) {
-  return Number(producto?.precio_venta ?? producto?.precio ?? 0);
 }
 
 function getPrecioMinimoProductoCatalogo(producto?: CatalogoProducto) {
@@ -178,12 +243,6 @@ function mapDetalleCotizacionToForm(detalles?: DetalleCotizacionApi[]): Producto
       iva,
     };
   });
-}
-
-function getTotalOrden(orden: OrdenVentaApi) {
-  return (orden.detalle_orden_venta || []).reduce((acc, item) => {
-    return acc + Number(item.cantidad || 0) * Number(item.precio_unitario || 0);
-  }, 0);
 }
 
 function getItemsOrden(orden: OrdenVentaApi) {
@@ -481,6 +540,9 @@ export default function OrdenesVenta() {
         orden.codigo_orden_venta || String(orden.id_orden_venta)
       );
       const cliente = normalizarTexto(getClienteNombre(orden.cliente));
+      const documentoCliente = normalizarTexto(
+        getDocumentoClienteTexto(orden.cliente)
+      );
       const estado = normalizarTexto(getEstadoNombre(orden.estado_orden_venta));
       const bodega = normalizarTexto(getBodegaNombre(orden.bodega));
       const items = String(getItemsOrden(orden));
@@ -489,6 +551,7 @@ export default function OrdenesVenta() {
         !term ||
         codigo.includes(term) ||
         cliente.includes(term) ||
+        documentoCliente.includes(term) ||
         estado.includes(term) ||
         bodega.includes(term) ||
         items.includes(term)
@@ -578,7 +641,7 @@ export default function OrdenesVenta() {
 
   const resetForm = () => {
     const hoy = new Date().toISOString().slice(0, 10);
-  
+
     setFormData({
       id_cliente: "",
       fecha_creacion: hoy,
@@ -757,46 +820,46 @@ export default function OrdenesVenta() {
       toast.error("Selecciona un producto");
       return;
     }
-  
+
     const cantidad = Number(cantidadProducto);
     const precio = Number(precioProducto);
-  
+
     if (!cantidadProducto || cantidad <= 0) {
       toast.error("La cantidad debe ser mayor a cero");
       return;
     }
-  
+
     if (!precioProducto || precio <= 0) {
       toast.error("El precio unitario debe ser mayor a cero");
       return;
     }
-  
+
     const producto = productos.find(
       (item) => Number(item.id_producto) === Number(selectedProductoId)
     );
-  
+
     if (!producto) {
       toast.error("No se encontró el producto");
       return;
     }
-  
+
     const precioMinimoPermitido = getPrecioMinimoProductoCatalogo(producto);
-  
+
     if (precioMinimoPermitido > 0 && precio < precioMinimoPermitido) {
       setPrecioTouched(true);
       toast.error("Precio menor al permitido");
       return;
     }
-  
+
     const yaExiste = productosOrden.some(
       (item) => Number(item.id_producto) === Number(selectedProductoId)
     );
-  
+
     if (yaExiste) {
       toast.error("Ese producto ya está agregado");
       return;
     }
-  
+
     setProductosOrden((prev) => [
       ...prev,
       {
@@ -808,7 +871,7 @@ export default function OrdenesVenta() {
         iva: Number(producto.iva?.porcentaje ?? 0),
       },
     ]);
-  
+
     setSelectedProductoId("");
     setCantidadProducto("");
     setPrecioProducto("");
@@ -1121,9 +1184,8 @@ export default function OrdenesVenta() {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8.7);
     doc.text(
-      `Código: ${
-        orden.codigo_orden_venta ||
-        `OV-${String(orden.id_orden_venta).padStart(4, "0")}`
+      `Código: ${orden.codigo_orden_venta ||
+      `OV-${String(orden.id_orden_venta).padStart(4, "0")}`
       }`,
       rightX,
       11.5,
@@ -1154,17 +1216,14 @@ export default function OrdenesVenta() {
     const clienteNombre = getClienteNombre(orden.cliente);
     const clienteLines = doc.splitTextToSize(clienteNombre, 68);
 
-    const numeroDocumento =
-      orden.cliente?.num_documento ||
-      orden.cliente?.email ||
-      orden.cliente?.telefono ||
-      "-";
+    const documentoCliente = getDocumentoClienteTexto(orden.cliente);
+    const documentoClienteLines = doc.splitTextToSize(documentoCliente, 68);
 
     doc.text("Cliente:", marginX + 4, 56);
     doc.text(clienteLines, marginX + 22, 56);
 
-    doc.text("Documento / Ref.:", marginX + 4, 66);
-    doc.text(String(numeroDocumento), marginX + 32, 66);
+    doc.text("Documento / NIT:", marginX + 4, 66);
+    doc.text(documentoClienteLines, marginX + 34, 66);
 
     doc.text("Bodega:", 112, 56);
     doc.text(getBodegaNombre(orden.bodega), 128, 56);
@@ -1192,12 +1251,12 @@ export default function OrdenesVenta() {
       head: [["Producto", "Cantidad", "IVA", "Precio Unit.", "Subtotal"]],
       body: detalle.length
         ? detalle.map((item) => [
-            item.producto,
-            String(item.cantidad),
-            `${item.ivaPorcentaje.toFixed(2)}%`,
-            formatPdfMoney(item.precio),
-            formatPdfMoney(item.subtotal),
-          ])
+          item.producto,
+          String(item.cantidad),
+          `${item.ivaPorcentaje.toFixed(2)}%`,
+          formatPdfMoney(item.precio),
+          formatPdfMoney(item.subtotal),
+        ])
         : [["Sin productos", "-", "-", "-", "-"]],
       theme: "grid",
       headStyles: {
@@ -1334,9 +1393,8 @@ export default function OrdenesVenta() {
     }
 
     doc.save(
-      `Orden_Venta_${
-        orden.codigo_orden_venta ||
-        `OV-${String(orden.id_orden_venta).padStart(4, "0")}`
+      `Orden_Venta_${orden.codigo_orden_venta ||
+      `OV-${String(orden.id_orden_venta).padStart(4, "0")}`
       }.pdf`
     );
   };
@@ -1428,7 +1486,7 @@ export default function OrdenesVenta() {
             size={20}
           />
           <Input
-            placeholder="Buscar por número de orden, cliente, estado o número de items..."
+            placeholder="Buscar por número de orden, cliente, documento/NIT, estado o número de items..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
@@ -1449,6 +1507,7 @@ export default function OrdenesVenta() {
                 <TableHead className="w-16">#</TableHead>
                 <TableHead>N° Orden</TableHead>
                 <TableHead>Cliente</TableHead>
+                <TableHead>Documento / NIT</TableHead>
                 <TableHead>Fecha</TableHead>
                 <TableHead>Vencimiento</TableHead>
                 <TableHead>Items</TableHead>
@@ -1461,7 +1520,7 @@ export default function OrdenesVenta() {
               {filteredOrdenes.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={8}
+                    colSpan={9}
                     className="text-center py-8 text-gray-500"
                   >
                     <Package size={48} className="mx-auto mb-2 text-gray-300" />
@@ -1493,6 +1552,8 @@ export default function OrdenesVenta() {
 
                       <TableCell>{getClienteNombre(orden.cliente)}</TableCell>
 
+                      <TableCell>{getDocumentoClienteTexto(orden.cliente)}</TableCell>
+
                       <TableCell>{formatDateDisplay(orden.fecha_creacion)}</TableCell>
 
                       <TableCell>{formatDateDisplay(orden.fecha_vencimiento)}</TableCell>
@@ -1505,20 +1566,19 @@ export default function OrdenesVenta() {
                           size="sm"
                           onClick={() => handleToggleEstado(orden)}
                           disabled={isCancelada}
-                          className={`h-7 ${
-                            estadoKey.includes("pendiente")
-                              ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                              : estadoKey.includes("procesando") ||
-                                  estadoKey.includes("aprobada") ||
-                                  estadoKey.includes("aprobado")
-                                ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
-                                : estadoKey.includes("enviada")
-                                  ? "bg-purple-100 text-purple-800 hover:bg-purple-200"
-                                  : estadoKey.includes("entregada") ||
-                                      estadoKey.includes("aplicada")
-                                    ? "bg-green-100 text-green-800 hover:bg-green-200"
-                                    : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
-                          }`}
+                          className={`h-7 ${estadoKey.includes("pendiente")
+                            ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                            : estadoKey.includes("procesando") ||
+                              estadoKey.includes("aprobada") ||
+                              estadoKey.includes("aprobado")
+                              ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
+                              : estadoKey.includes("enviada")
+                                ? "bg-purple-100 text-purple-800 hover:bg-purple-200"
+                                : estadoKey.includes("entregada") ||
+                                  estadoKey.includes("aplicada")
+                                  ? "bg-green-100 text-green-800 hover:bg-green-200"
+                                  : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
+                            }`}
                         >
                           {estadoNombre}
                         </Button>
@@ -1677,15 +1737,28 @@ export default function OrdenesVenta() {
                     }
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecciona un cliente" />
+                      {clienteSeleccionado ? (
+                        <span className="truncate">
+                          {getClienteNombre(clienteSeleccionado)}
+                        </span>
+                      ) : (
+                        <SelectValue placeholder="Selecciona un cliente" />
+                      )}
                     </SelectTrigger>
+
                     <SelectContent>
                       {clientes.map((cliente) => (
                         <SelectItem
                           key={cliente.id_cliente}
                           value={String(cliente.id_cliente)}
+                          textValue={getClienteNombre(cliente)}
                         >
-                          {getClienteNombre(cliente)}
+                          <div className="flex flex-col">
+                            <span>{getClienteNombre(cliente)}</span>
+                            <span className="text-xs text-gray-500">
+                              {getDocumentoClienteTexto(cliente)}
+                            </span>
+                          </div>
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1693,9 +1766,9 @@ export default function OrdenesVenta() {
                 </div>
 
                 <div>
-                  <Label>Número de documento</Label>
+                  <Label>Documento / NIT</Label>
                   <Input
-                    value={clienteSeleccionado?.num_documento ?? ""}
+                    value={getDocumentoClienteTexto(clienteSeleccionado)}
                     readOnly
                     disabled
                     placeholder="Se completa al seleccionar cliente"
@@ -1739,18 +1812,18 @@ export default function OrdenesVenta() {
                   value={
                     formMode === "create"
                       ? getEstadoNombre(
-                          estados.find(
-                            (estado) =>
-                              estado.id_estado_orden_venta === estadoPendienteId
-                          )
+                        estados.find(
+                          (estado) =>
+                            estado.id_estado_orden_venta === estadoPendienteId
                         )
+                      )
                       : getEstadoNombre(
-                          estados.find(
-                            (estado) =>
-                              String(estado.id_estado_orden_venta) ===
-                              String(formData.id_estado_orden_venta)
-                          )
+                        estados.find(
+                          (estado) =>
+                            String(estado.id_estado_orden_venta) ===
+                            String(formData.id_estado_orden_venta)
                         )
+                      )
                   }
                   readOnly
                   disabled
@@ -1909,11 +1982,10 @@ export default function OrdenesVenta() {
                         if (!precioTouched) setPrecioTouched(true);
                       }}
                       onBlur={() => setPrecioTouched(true)}
-                      className={`placeholder:text-gray-400 ${
-                        precioTouched && precioEsMenorAlMinimo
-                          ? "border-red-500 bg-red-50 text-red-700 focus-visible:ring-red-500"
-                          : ""
-                      }`}
+                      className={`placeholder:text-gray-400 ${precioTouched && precioEsMenorAlMinimo
+                        ? "border-red-500 bg-red-50 text-red-700 focus-visible:ring-red-500"
+                        : ""
+                        }`}
                     />
 
                     {precioMinimoProductoSeleccionado > 0 && (
@@ -1942,14 +2014,14 @@ export default function OrdenesVenta() {
                 </div> */}
 
                 <div className="flex items-end md:col-span-2">
-                <Button
-                  type="button"
-                  onClick={handleAgregarProducto}
-                  disabled={precioTouched && precioEsMenorAlMinimo}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Agregar
-                </Button>
+                  <Button
+                    type="button"
+                    onClick={handleAgregarProducto}
+                    disabled={precioTouched && precioEsMenorAlMinimo}
+                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Agregar
+                  </Button>
                 </div>
               </div>
 
@@ -2002,7 +2074,7 @@ export default function OrdenesVenta() {
               </div>
 
               <div className="mt-4 flex justify-end">
-                <div className="rounded-lg bg-gray-50 px-4 py-3 text-right min-w-[280px]">
+                <div className="rounded-lg bg-gray-50 px-4 py-3 text-right min-w-70">
                   <p className="text-sm text-gray-500">
                     Items: {productosOrden.length}
                   </p>
@@ -2080,6 +2152,13 @@ export default function OrdenesVenta() {
                   <p className="text-sm text-gray-500">Cliente</p>
                   <p className="font-semibold">
                     {getClienteNombre(selectedOrden.cliente)}
+                  </p>
+                </div>
+
+                <div className="rounded-lg border p-4">
+                  <p className="text-sm text-gray-500">Documento / NIT</p>
+                  <p className="font-semibold">
+                    {getDocumentoClienteTexto(selectedOrden.cliente)}
                   </p>
                 </div>
 
@@ -2164,7 +2243,7 @@ export default function OrdenesVenta() {
 
                   return (
                     <div className="mt-4 flex justify-end">
-                      <div className="min-w-[300px] rounded-lg border border-blue-200 bg-blue-50 p-4">
+                      <div className="min-w-75 rounded-lg border border-blue-200 bg-blue-50 p-4">
                         <div className="space-y-2">
                           <div className="flex justify-between text-sm">
                             <span className="text-gray-600">Subtotal sin IVA:</span>
@@ -2228,10 +2307,9 @@ export default function OrdenesVenta() {
 
           <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             {selectedOrden
-              ? `Vas a anular la orden ${
-                  selectedOrden.codigo_orden_venta ||
-                  `OV-${selectedOrden.id_orden_venta}`
-                }.`
+              ? `Vas a anular la orden ${selectedOrden.codigo_orden_venta ||
+              `OV-${selectedOrden.id_orden_venta}`
+              }.`
               : "No hay orden seleccionada."}
           </div>
 

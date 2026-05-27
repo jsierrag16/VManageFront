@@ -52,8 +52,11 @@ import {
   DialogDescription,
 } from "../../../../shared/components/ui/dialog";
 import { toast } from "sonner";
-import type { Cliente } from "../../../../data/clientes";
-import { type Producto } from "../../../../data/productos";
+import type {
+  ClienteCotizacion,
+  ProductoCotizacion,
+  ProductoOrdenCotizacion,
+} from "@/features/ventas/cotizaciones/types/cotizaciones.types";
 import type { AppOutletContext } from "../../../../layouts/MainLayout";
 import { clientesService } from "@/features/ventas/clientes/services/clientes.service";
 import { mapClienteApiToUi } from "@/features/ventas/clientes/services/clientes.mapper";
@@ -95,11 +98,11 @@ export default function Cotizaciones() {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [productosCatalogo, setProductosCatalogo] = useState<Producto[]>([]);
+  const [clientes, setClientes] = useState<ClienteCotizacion[]>([]);
+  const [productosCatalogo, setProductosCatalogo] = useState<ProductoCotizacion[]>([]);
   const [precioMinimoPorProducto, setPrecioMinimoPorProducto] = useState<
-  Record<string, number>
->({});
+    Record<string, number>
+  >({});
 
   const [isPdfOptionsModalOpen, setIsPdfOptionsModalOpen] = useState(false);
   const [cotizacionParaPdf, setCotizacionParaPdf] =
@@ -171,15 +174,7 @@ export default function Cotizaciones() {
   const [selectedProductoId, setSelectedProductoId] = useState("");
   const [cantidadProducto, setCantidadProducto] = useState("0");
   const [precioProducto, setPrecioProducto] = useState<string>("");
-  const [productosOrden, setProductosOrden] = useState<
-    Array<{
-      producto: Producto;
-      cantidad: number;
-      precio: number;
-      subtotal: number;
-      idIva?: number;
-    }>
-  >([]);
+  const [productosOrden, setProductosOrden] = useState<ProductoOrdenCotizacion[]>([]);
 
   const productosActivos = useMemo(() => {
     return productosCatalogo.filter((p) => p.estado);
@@ -323,10 +318,42 @@ export default function Cotizaciones() {
   const clientesActivos = useMemo(() => {
     return clientes.filter((c) => c.estado === "Activo");
   }, [clientes]);
-  
+
   const clienteSeleccionadoForm = useMemo(() => {
     return clientesActivos.find((cliente) => cliente.id === formData.idCliente) ?? null;
   }, [clientesActivos, formData.idCliente]);
+
+  const getDocumentoClienteTexto = (cliente?: ClienteCotizacion | null) => {
+    if (!cliente) return "";
+
+    const tipoDocumento = cliente.tipoDocumento?.trim() || "Documento";
+    const numeroDocumento = cliente.numeroDocumento?.trim() || "";
+
+    if (!numeroDocumento) return "No registrado";
+
+    return `${tipoDocumento}: ${numeroDocumento}`;
+  };
+
+  const getClienteDeCotizacion = (cotizacion?: Cotizacion | null) => {
+    if (!cotizacion?.idCliente) return null;
+
+    return (
+      clientes.find((cliente) => cliente.id === String(cotizacion.idCliente)) ??
+      null
+    );
+  };
+
+  const getDocumentoClienteCotizacion = (cotizacion?: Cotizacion | null) => {
+    if (!cotizacion) return "No registrado";
+
+    const cliente = getClienteDeCotizacion(cotizacion);
+
+    if (cliente) {
+      return getDocumentoClienteTexto(cliente);
+    }
+
+    return "No registrado";
+  };
 
   const filteredCotizaciones = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -334,14 +361,18 @@ export default function Cotizaciones() {
     if (!term) return cotizaciones;
 
     return cotizaciones.filter((cotizacion) => {
+      const documentoCliente = getDocumentoClienteCotizacion(cotizacion)
+        .toLowerCase();
+
       return (
         cotizacion.numeroCotizacion.toLowerCase().includes(term) ||
         cotizacion.cliente.toLowerCase().includes(term) ||
+        documentoCliente.includes(term) ||
         cotizacion.estado.toLowerCase().includes(term) ||
         cotizacion.items.toString().includes(term)
       );
     });
-  }, [cotizaciones, searchTerm]);
+  }, [cotizaciones, searchTerm, clientes]);
 
   const totalPages = Math.ceil(filteredCotizaciones.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -785,6 +816,7 @@ export default function Cotizaciones() {
     incluirPrecios: boolean = true
   ) => {
     const doc = new jsPDF();
+    const documentoCliente = getDocumentoClienteCotizacion(cotizacion);
 
     doc.setFontSize(20);
     doc.setFont("helvetica", "bold");
@@ -795,13 +827,15 @@ export default function Cotizaciones() {
 
     doc.text(`N° Cotización: ${cotizacion.numeroCotizacion}`, 20, 40);
     doc.text(`Cliente: ${cotizacion.cliente}`, 20, 46);
-    doc.text(`Bodega: ${cotizacion.bodega}`, 20, 52);
+    doc.text(`Documento/NIT: ${documentoCliente}`, 20, 52);
+    doc.text(`Bodega: ${cotizacion.bodega}`, 20, 58);
 
     doc.text(
       `Fecha: ${new Date(cotizacion.fecha).toLocaleDateString("es-CO")}`,
       120,
       40
     );
+
     doc.text(
       `Fecha Vencimiento: ${new Date(
         cotizacion.fechaVencimiento
@@ -809,10 +843,11 @@ export default function Cotizaciones() {
       120,
       46
     );
+
     doc.text(`Estado: ${cotizacion.estado}`, 120, 52);
 
     doc.setLineWidth(0.5);
-    doc.line(20, 58, 190, 58);
+    doc.line(20, 64, 190, 64);
 
     if (cotizacion.productos && cotizacion.productos.length > 0) {
       let tableData;
@@ -831,9 +866,11 @@ export default function Cotizaciones() {
             minimumFractionDigits: 2,
           })}`,
         ]);
+
         tableHeaders = [
           ["Producto", "Cantidad", "Precio Unit.", "IVA%", "Subtotal"],
         ];
+
         columnStyles = {
           0: { cellWidth: 65 },
           1: { cellWidth: 25, halign: "center" },
@@ -846,7 +883,9 @@ export default function Cotizaciones() {
           item.producto.nombre,
           item.cantidad.toString(),
         ]);
+
         tableHeaders = [["Producto", "Cantidad"]];
+
         columnStyles = {
           0: { cellWidth: 130 },
           1: { cellWidth: 30, halign: "center" },
@@ -854,7 +893,7 @@ export default function Cotizaciones() {
       }
 
       autoTable(doc, {
-        startY: 65,
+        startY: 71,
         head: tableHeaders,
         body: tableData,
         theme: "grid",
@@ -872,12 +911,13 @@ export default function Cotizaciones() {
       });
     }
 
-    const finalY = (doc as any).lastAutoTable?.finalY || 65;
+    const finalY = (doc as any).lastAutoTable?.finalY || 71;
     let totalesY = finalY + 10;
 
     if (incluirPrecios) {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(10);
+
       doc.text("Subtotal:", 130, totalesY);
       doc.text(
         `$${cotizacion.subtotal.toLocaleString("es-CO", {
@@ -894,6 +934,7 @@ export default function Cotizaciones() {
       );
 
       totalesY += 6;
+
       porcentajesOrdenados.forEach(([porcentaje, monto]) => {
         doc.text(`Total IVA ${porcentaje}%:`, 130, totalesY);
         doc.text(
@@ -910,6 +951,7 @@ export default function Cotizaciones() {
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
+
       doc.text("Total:", 130, totalesY + 4);
       doc.text(
         `$${cotizacion.total.toLocaleString("es-CO", {
@@ -924,18 +966,24 @@ export default function Cotizaciones() {
     if (cotizacion.observaciones) {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(10);
+
       const obsY = incluirPrecios ? totalesY + 20 : totalesY + 10;
+
       doc.text("Observaciones:", 20, obsY);
+
       const splitObservaciones = doc.splitTextToSize(
         cotizacion.observaciones,
         170
       );
+
       doc.text(splitObservaciones, 20, obsY + 6);
     }
 
     const pageHeight = doc.internal.pageSize.height;
+
     doc.setFontSize(8);
     doc.setFont("helvetica", "italic");
+
     doc.text(
       `Generado el ${new Date().toLocaleString("es-CO")}`,
       105,
@@ -946,7 +994,9 @@ export default function Cotizaciones() {
     );
 
     const suffix = incluirPrecios ? "" : "_SinPrecios";
+
     doc.save(`Cotizacion_${cotizacion.numeroCotizacion}${suffix}.pdf`);
+
     toast.success("PDF descargado exitosamente");
   };
 
@@ -1043,7 +1093,7 @@ export default function Cotizaciones() {
             size={20}
           />
           <Input
-            placeholder="Buscar por número de cotización, cliente, estado o número de items..."
+            placeholder="Buscar por número de cotización, cliente, documento/NIT, estado o número de items..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
@@ -1064,6 +1114,7 @@ export default function Cotizaciones() {
                 <TableHead className="w-16">#</TableHead>
                 <TableHead>N° Cotización</TableHead>
                 <TableHead>Cliente</TableHead>
+                <TableHead>Documento / NIT</TableHead>
                 <TableHead>Fecha</TableHead>
                 <TableHead>Vencimiento</TableHead>
                 <TableHead>Items</TableHead>
@@ -1075,7 +1126,7 @@ export default function Cotizaciones() {
             <TableBody>
               {filteredCotizaciones.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-gray-500">
+                  <TableCell colSpan={9} className="py-8 text-center text-gray-500">
                     <Package size={48} className="mx-auto mb-2 text-gray-300" />
                     <p>No se encontraron cotizaciones</p>
                   </TableCell>
@@ -1090,6 +1141,11 @@ export default function Cotizaciones() {
                       {cotizacion.numeroCotizacion}
                     </TableCell>
                     <TableCell>{cotizacion.cliente}</TableCell>
+
+                    <TableCell>
+                      {getDocumentoClienteCotizacion(cotizacion)}
+                    </TableCell>
+
                     <TableCell>
                       {new Date(cotizacion.fecha).toLocaleDateString("es-CO")}
                     </TableCell>
@@ -1305,7 +1361,11 @@ export default function Cotizaciones() {
                     }}
                   >
                     <SelectTrigger id="cliente" className="flex-1">
-                      <SelectValue placeholder="Selecciona un cliente" />
+                      {formData.cliente ? (
+                        <span className="truncate">{formData.cliente}</span>
+                      ) : (
+                        <SelectValue placeholder="Selecciona un cliente" />
+                      )}
                     </SelectTrigger>
 
                     <SelectContent>
@@ -1315,8 +1375,17 @@ export default function Cotizaciones() {
                         </div>
                       ) : (
                         clientesActivos.map((cliente) => (
-                          <SelectItem key={cliente.id} value={cliente.id}>
-                            {cliente.nombre}
+                          <SelectItem
+                            key={cliente.id}
+                            value={cliente.id}
+                            textValue={cliente.nombre}
+                          >
+                            <div className="flex flex-col">
+                              <span>{cliente.nombre}</span>
+                              <span className="text-xs text-gray-500">
+                                {getDocumentoClienteTexto(cliente)}
+                              </span>
+                            </div>
                           </SelectItem>
                         ))
                       )}
@@ -1336,10 +1405,12 @@ export default function Cotizaciones() {
               </div>
 
               <div>
-                <Label htmlFor="numeroDocumentoCliente">Número de documento</Label>
+                <Label htmlFor="numeroDocumentoCliente">
+                  Documento / NIT del cliente
+                </Label>
                 <Input
                   id="numeroDocumentoCliente"
-                  value={clienteSeleccionadoForm?.numeroDocumento ?? ""}
+                  value={getDocumentoClienteTexto(clienteSeleccionadoForm)}
                   readOnly
                   disabled
                   placeholder="Se completa al seleccionar cliente"
@@ -1442,7 +1513,7 @@ export default function Cotizaciones() {
                   />
                 </div>
 
-                 <div className="col-span-3">
+                <div className="col-span-3">
                   <Label htmlFor="precio">Precio Unit.</Label>
                   <Input
                     id="precio"
@@ -1695,24 +1766,45 @@ export default function Cotizaciones() {
                   }}
                 >
                   <SelectTrigger id="clienteEdit">
-                    <SelectValue placeholder="Selecciona un cliente" />
+                    {formData.cliente ? (
+                      <span className="truncate">{formData.cliente}</span>
+                    ) : (
+                      <SelectValue placeholder="Selecciona un cliente" />
+                    )}
                   </SelectTrigger>
 
                   <SelectContent>
-                    {clientesActivos.map((cliente) => (
-                      <SelectItem key={cliente.id} value={cliente.id}>
-                        {cliente.nombre}
-                      </SelectItem>
-                    ))}
+                    {clientesActivos.length === 0 ? (
+                      <div className="px-2 py-2 text-sm text-gray-500">
+                        No hay clientes activos disponibles
+                      </div>
+                    ) : (
+                      clientesActivos.map((cliente) => (
+                        <SelectItem
+                          key={cliente.id}
+                          value={cliente.id}
+                          textValue={cliente.nombre}
+                        >
+                          <div className="flex flex-col">
+                            <span>{cliente.nombre}</span>
+                            <span className="text-xs text-gray-500">
+                              {getDocumentoClienteTexto(cliente)}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
 
               <div>
-                <Label htmlFor="numeroDocumentoClienteEdit">Número de documento</Label>
+                <Label htmlFor="numeroDocumentoClienteEdit">
+                  Documento / NIT del cliente
+                </Label>
                 <Input
                   id="numeroDocumentoClienteEdit"
-                  value={clienteSeleccionadoForm?.numeroDocumento ?? ""}
+                  value={getDocumentoClienteTexto(clienteSeleccionadoForm)}
                   readOnly
                   disabled
                   placeholder="Se completa al seleccionar cliente"
@@ -2044,6 +2136,13 @@ export default function Cotizaciones() {
                 </div>
 
                 <div>
+                  <p className="text-sm text-gray-600">Documento / NIT</p>
+                  <p className="font-medium">
+                    {getDocumentoClienteCotizacion(cotizacionSeleccionada)}
+                  </p>
+                </div>
+
+                <div>
                   <p className="text-sm text-gray-600">Bodega</p>
                   <p className="font-medium">{cotizacionSeleccionada.bodega}</p>
                 </div>
@@ -2051,18 +2150,16 @@ export default function Cotizaciones() {
                 <div>
                   <p className="text-sm text-gray-600">Fecha</p>
                   <p className="font-medium">
-                    {new Date(cotizacionSeleccionada.fecha).toLocaleDateString(
-                      "es-CO"
-                    )}
+                    {new Date(cotizacionSeleccionada.fecha).toLocaleDateString("es-CO")}
                   </p>
                 </div>
 
                 <div>
                   <p className="text-sm text-gray-600">Fecha de Vencimiento</p>
                   <p className="font-medium">
-                    {new Date(
-                      cotizacionSeleccionada.fechaVencimiento
-                    ).toLocaleDateString("es-CO")}
+                    {new Date(cotizacionSeleccionada.fechaVencimiento).toLocaleDateString(
+                      "es-CO"
+                    )}
                   </p>
                 </div>
               </div>

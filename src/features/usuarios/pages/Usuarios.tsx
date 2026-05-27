@@ -377,6 +377,22 @@ export default function Usuarios() {
     return "";
   };
 
+  const getFechaHoyInput = () => {
+    const hoy = new Date();
+    const year = hoy.getFullYear();
+    const month = String(hoy.getMonth() + 1).padStart(2, "0");
+    const day = String(hoy.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  };
+
+  const getFechaMinimaNacimientoInput = () => {
+    const hoy = new Date();
+    const year = hoy.getFullYear() - 120;
+
+    return `${year}-01-01`;
+  };
+
   const validateNumeroDocumento = (value: string) => {
     const documento = value.trim();
 
@@ -448,24 +464,94 @@ export default function Usuarios() {
     return date.toISOString().split("T")[0];
   };
 
-  const validateFechaNacimientoField = (value: string) => {
-    if (!value.trim()) {
+  const normalizarTipoDocumento = (value: string) => {
+    return value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\./g, "")
+      .trim()
+      .toLowerCase();
+  };
+
+  const getTipoDocumentoSeleccionado = (
+    tipoDocId: number | "" = formTipoDocId
+  ) => {
+    if (!tipoDocId) return "";
+
+    const nombreTipoDocumento =
+      tiposDocumento.find((item) => item.id === tipoDocId)?.nombre || "";
+
+    return normalizarTipoDocumento(nombreTipoDocumento);
+  };
+
+  const validateFechaNacimientoField = (
+    value: string,
+    tipoDocId: number | "" = formTipoDocId
+  ) => {
+    const fechaTexto = value.trim();
+
+    if (!fechaTexto) {
       return "La fecha de nacimiento es requerida";
     }
 
-    const fecha = new Date(value);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaTexto)) {
+      return "La fecha de nacimiento debe tener un formato válido";
+    }
 
-    if (Number.isNaN(fecha.getTime())) {
+    const [year, month, day] = fechaTexto.split("-").map(Number);
+
+    const fechaNacimiento = new Date(year, month - 1, day);
+    fechaNacimiento.setHours(0, 0, 0, 0);
+
+    if (
+      fechaNacimiento.getFullYear() !== year ||
+      fechaNacimiento.getMonth() !== month - 1 ||
+      fechaNacimiento.getDate() !== day
+    ) {
       return "La fecha de nacimiento no es válida";
     }
 
     const hoy = new Date();
-
-    fecha.setHours(0, 0, 0, 0);
     hoy.setHours(0, 0, 0, 0);
 
-    if (fecha > hoy) {
+    if (fechaNacimiento > hoy) {
       return "La fecha de nacimiento no puede ser futura";
+    }
+
+    let edad = hoy.getFullYear() - fechaNacimiento.getFullYear();
+
+    const noHaCumplidoEsteAnio =
+      hoy.getMonth() < fechaNacimiento.getMonth() ||
+      (hoy.getMonth() === fechaNacimiento.getMonth() &&
+        hoy.getDate() < fechaNacimiento.getDate());
+
+    if (noHaCumplidoEsteAnio) {
+      edad--;
+    }
+
+    if (edad > 120) {
+      return "La fecha de nacimiento no puede superar los 120 años";
+    }
+
+    const tipoDocumentoSeleccionado = getTipoDocumentoSeleccionado(tipoDocId);
+
+    const esTarjetaIdentidad =
+      tipoDocumentoSeleccionado === "ti" ||
+      tipoDocumentoSeleccionado.includes("tarjeta de identidad");
+
+    const esDocumentoMayorEdad =
+      tipoDocumentoSeleccionado === "cc" ||
+      tipoDocumentoSeleccionado === "ce" ||
+      tipoDocumentoSeleccionado === "pasaporte" ||
+      tipoDocumentoSeleccionado.includes("cedula de ciudadania") ||
+      tipoDocumentoSeleccionado.includes("cedula extranjeria");
+
+    if (esTarjetaIdentidad && edad >= 18) {
+      return "Para Tarjeta de Identidad, el usuario debe ser menor de 18 años";
+    }
+
+    if (esDocumentoMayorEdad && edad < 18) {
+      return "Para este tipo de documento, el usuario debe ser mayor de edad";
     }
 
     return "";
@@ -687,12 +773,14 @@ export default function Usuarios() {
   const handleTipoDocChange = (value: number | "") => {
     setFormTipoDocId(value);
 
-    if (touched.tipoDoc) {
-      setErrors((prev) => ({
-        ...prev,
-        tipoDoc: validateTipoDocField(value),
-      }));
-    }
+    setErrors((prev) => ({
+      ...prev,
+      tipoDoc: touched.tipoDoc ? validateTipoDocField(value) : prev.tipoDoc,
+      fechaNacimiento:
+        formFechaNacimiento && touched.fechaNacimiento
+          ? validateFechaNacimientoField(formFechaNacimiento, value)
+          : prev.fechaNacimiento,
+    }));
   };
 
   const handleGeneroBlur = () => {
@@ -1881,6 +1969,8 @@ export default function Usuarios() {
                     value={formFechaNacimiento}
                     onChange={(e) => handleFechaNacimientoChange(e.target.value)}
                     onBlur={handleFechaNacimientoBlur}
+                    max={getFechaHoyInput()}
+                    min={getFechaMinimaNacimientoInput()}
                     disabled={isCreatingUsuario || isLoadingCatalogos}
                     className={
                       errors.fechaNacimiento && touched.fechaNacimiento ? "border-red-500" : ""
@@ -2163,6 +2253,8 @@ export default function Usuarios() {
                   value={formFechaNacimiento}
                   onChange={(e) => handleFechaNacimientoChange(e.target.value)}
                   onBlur={handleFechaNacimientoBlur}
+                  max={getFechaHoyInput()}
+                  min={getFechaMinimaNacimientoInput()}
                   className={
                     errors.fechaNacimiento && touched.fechaNacimiento ? "border-red-500" : ""
                   }

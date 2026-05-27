@@ -180,17 +180,17 @@ const mapBasicOption = (raw: RawRecord): BasicOption => {
   return {
     id: toNumber(
       raw?.id ??
-        raw?.id_producto ??
-        raw?.id_bodega ??
-        raw?.id_termino_pago ??
-        raw?.id_proveedor
+      raw?.id_producto ??
+      raw?.id_bodega ??
+      raw?.id_termino_pago ??
+      raw?.id_proveedor
     ),
     nombre: toStringSafe(
       raw?.nombre ??
-        raw?.nombre_producto ??
-        raw?.nombre_bodega ??
-        raw?.nombre_termino ??
-        raw?.nombre_empresa
+      raw?.nombre_producto ??
+      raw?.nombre_bodega ??
+      raw?.nombre_termino ??
+      raw?.nombre_empresa
     ),
     estado: toBooleanSafe(raw?.estado, true),
   };
@@ -213,12 +213,18 @@ const mapProveedorOption = (raw: RawRecord): ProveedorOption => {
 };
 
 const mapIvaOption = (raw: RawRecord): IvaOption => {
+  const porcentaje = toNumber(raw?.porcentaje);
+
   return {
     id: toNumber(raw?.id_iva ?? raw?.id),
-    nombre: toStringSafe(raw?.nombre_iva ?? raw?.nombre),
-    porcentaje: toNumber(raw?.porcentaje),
+    nombre: `IVA ${porcentaje}%`,
+    porcentaje,
     estado: toBooleanSafe(raw?.estado, true),
   };
+};
+
+export type CreateIvaPayload = {
+  porcentaje: number;
 };
 
 const mapProductoOrden = (raw: RawRecord): ProductoOrden => {
@@ -298,6 +304,18 @@ type CatalogosResponse = {
 };
 
 export const comprasService = {
+
+  async createIva(payload: CreateIvaPayload): Promise<IvaOption> {
+    const raw = await postRequestFirstSuccess([
+      {
+        url: "/iva",
+        data: payload,
+      },
+    ]);
+
+    return mapIvaOption(raw);
+  },
+
   async getAll(selectedBodegaId?: number): Promise<Compra[]> {
     const params = buildBodegaParams(selectedBodegaId);
 
@@ -344,6 +362,8 @@ export const comprasService = {
 
     return mapCompra(raw);
   },
+
+
 
   async aprobar(id: number) {
     return patchRequestFirstSuccess([

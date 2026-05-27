@@ -169,11 +169,12 @@ export default function Login() {
   return (
     <AuthLayout>
       <form onSubmit={handleLogin} className="space-y-6">
-        <div className="flex items-center justify-center gap-3 text-sm text-gray-600 text-center">
-          <span className="flex h-9 w-9 items-center justify-center rounded-full text-blue-600 shrink-0">
+        <div className="flex w-full flex-nowrap items-center justify-center gap-3 text-sm text-gray-600">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-blue-600">
             <ShieldCheck size={22} />
           </span>
-          <span className="font">
+
+          <span className="whitespace-nowrap">
             Ingrese sus datos para ingresar al panel administrativo
           </span>
         </div>

@@ -71,6 +71,7 @@ type RemisionListadoUi = {
   numeroRemision: string;
   ordenVenta: string;
   cliente: string;
+  documentoCliente: string;
   fecha: string;
   estado: EstadoUi;
   items: number;
@@ -105,6 +106,8 @@ type FormProductoState = {
   cantidad_orden: number;
   cantidad_remitida: number;
   cantidad_pendiente: number;
+  cantidad_actual_remision: number;
+  cantidad_maxima_editable: number;
   lotes: FormLoteState[];
 };
 
@@ -124,6 +127,39 @@ function normalizeDate(value?: string | null) {
 function toNumber(value: unknown) {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getDocumentoClienteTexto(cliente?: any | null) {
+  if (!cliente) return "No registrado";
+
+  const numeroDocumento =
+    cliente?.num_documento ??
+    cliente?.numeroDocumento ??
+    cliente?.numero_documento ??
+    cliente?.documento ??
+    "";
+
+  if (!numeroDocumento) return "No registrado";
+
+  const tipoDocumentoApi =
+    cliente?.tipo_documento?.nombre_tipo_doc ??
+    cliente?.tipo_documento?.nombre ??
+    cliente?.tipoDocumento ??
+    cliente?.tipo_documento ??
+    cliente?.tipo_doc ??
+    cliente?.tipoDoc ??
+    cliente?.nombre_tipo_doc ??
+    "";
+
+  const numeroDocumentoTexto = String(numeroDocumento).trim();
+
+  const tipoDocumento =
+    String(tipoDocumentoApi).trim() ||
+    (numeroDocumentoTexto.startsWith("9") || numeroDocumentoTexto.startsWith("8")
+      ? "NIT"
+      : "CC");
+
+  return `${tipoDocumento}: ${numeroDocumentoTexto}`;
 }
 
 function calcularTotalesConIva(
@@ -188,6 +224,7 @@ function buildRemisionUi(item: RemisionVentaApi): RemisionListadoUi {
       item.orden_venta?.codigo_orden_venta ||
       `OV-${String(item.id_orden_venta).padStart(4, "0")}`,
     cliente: item.cliente?.nombre_cliente ?? "Cliente",
+    documentoCliente: getDocumentoClienteTexto(item.cliente),
     fecha: normalizeDate(item.fecha_creacion),
     estado: mapEstado(item.estado_remision_venta?.nombre_estado),
     items: detalle.length,
@@ -202,7 +239,7 @@ function buildRemisionUi(item: RemisionVentaApi): RemisionListadoUi {
 }
 
 const puedeEditarRemision = (estado: EstadoUi) =>
-  estado !== "Entregado" && estado !== "Facturada" && estado !== "Anulada";
+  estado === "Pendiente" || estado === "Despachado";
 
 const puedeAnularRemision = (estado: EstadoUi) =>
   estado !== "Entregado" && estado !== "Anulada" && estado !== "Facturada";
@@ -313,6 +350,7 @@ export default function RemisionesVenta() {
   const [formFecha, setFormFecha] = useState("");
   const [formObservaciones, setFormObservaciones] = useState("");
   const [formOrdenId, setFormOrdenId] = useState("");
+  const [formOrdenOriginalId, setFormOrdenOriginalId] = useState("");
   const [formEstadoId, setFormEstadoId] = useState("");
   const [formCliente, setFormCliente] = useState("");
   const [formProductos, setFormProductos] = useState<FormProductoState[]>([]);
@@ -395,6 +433,7 @@ export default function RemisionesVenta() {
     setFormFecha(new Date().toISOString().split("T")[0]);
     setFormObservaciones("");
     setFormOrdenId("");
+    setFormOrdenOriginalId("");
     setFormEstadoId(String(estadoPendienteId || ""));
     setFormCliente("");
     setFormProductos([]);
@@ -412,6 +451,16 @@ export default function RemisionesVenta() {
           remisionesVentaService.getCatalogos(selectedBodegaId, idRemision),
           remisionesVentaService.getOne(idRemision),
         ]);
+
+        const estadoActualRemision = mapEstado(
+          remision.estado_remision_venta?.nombre_estado
+        );
+
+        if (!puedeEditarRemision(estadoActualRemision)) {
+          toast.error(`No se puede editar una remisión en estado ${estadoActualRemision}`);
+          navigate("/app/remisiones-venta");
+          return;
+        }
 
         setOrdenesDisponibles(catalogos.ordenes);
         setEstados(catalogos.estados);
@@ -459,6 +508,7 @@ export default function RemisionesVenta() {
         );
         setFormObservaciones(remision.observaciones ?? "");
         setFormOrdenId(String(remision.id_orden_venta));
+        setFormOrdenOriginalId(String(remision.id_orden_venta));
         setFormEstadoId(String(remision.id_estado_remision_venta));
         setFormCliente(
           remision.cliente?.nombre_cliente ?? orden.cliente?.nombre_cliente ?? ""
@@ -468,15 +518,38 @@ export default function RemisionesVenta() {
           const seleccionados =
             cantidadesPorProductoYLote.get(detalle.id_producto) ??
             new Map<number, number>();
-        
+
+          const cantidadOrden = toNumber(detalle.cantidad_orden);
+          const cantidadRemitidaBackend = toNumber(detalle.cantidad_remitida);
+
+          const cantidadActualRemision = Array.from(seleccionados.values()).reduce(
+            (acc, cantidad) => acc + toNumber(cantidad),
+            0
+          );
+
+          const cantidadRemitidaVisible = Math.max(
+            cantidadRemitidaBackend,
+            cantidadActualRemision
+          );
+
+          const cantidadPendienteVisible = Math.max(
+            cantidadOrden - cantidadRemitidaVisible,
+            0
+          );
+
+          const cantidadMaximaEditable =
+            cantidadPendienteVisible + cantidadActualRemision;
+
           return {
             id_producto: detalle.id_producto,
             nombre: detalle.producto?.nombre_producto ?? "Producto",
             precio_unitario: toNumber(detalle.precio_unitario),
             iva: toNumber(detalle.producto?.iva?.porcentaje),
-            cantidad_orden: toNumber(detalle.cantidad_orden),
-            cantidad_remitida: toNumber(detalle.cantidad_remitida),
-            cantidad_pendiente: toNumber(detalle.cantidad_pendiente),
+            cantidad_orden: cantidadOrden,
+            cantidad_remitida: cantidadRemitidaVisible,
+            cantidad_pendiente: cantidadPendienteVisible,
+            cantidad_actual_remision: cantidadActualRemision,
+            cantidad_maxima_editable: cantidadMaximaEditable,
             lotes: (detalle.existencias_disponibles ?? []).map((lote) => ({
               id_existencia: lote.id_existencia,
               lote: lote.lote ?? "",
@@ -541,9 +614,20 @@ export default function RemisionesVenta() {
     if (!id) return null;
     return ordenesDisponibles.find((o) => o.id_orden_venta === id) ?? null;
   }, [formOrdenId, ordenesDisponibles]);
-  
-  const numeroDocumentoClienteSeleccionado = useMemo(() => {
-    return ordenSeleccionada?.cliente?.num_documento ?? "";
+
+  const estadoFormularioActual = useMemo<EstadoUi>(() => {
+    const estado = estados.find(
+      (item) => String(item.id_estado_remision_venta) === formEstadoId
+    );
+
+    return mapEstado(estado?.nombre_estado);
+  }, [estados, formEstadoId]);
+
+  const puedeCambiarOrdenFormulario =
+    !isEditar || estadoFormularioActual === "Pendiente";
+
+  const documentoClienteSeleccionado = useMemo(() => {
+    return getDocumentoClienteTexto(ordenSeleccionada?.cliente);
   }, [ordenSeleccionada]);
 
   const bodegaFormularioNombre = useMemo(() => {
@@ -560,13 +644,13 @@ export default function RemisionesVenta() {
         (sum, lote) => sum + toNumber(lote.cantidad) * producto.precio_unitario,
         0
       );
-  
+
       return {
         subtotal,
         iva: producto.iva,
       };
     });
-  
+
     return calcularTotalesConIva(items);
   }, [formProductos]);
 
@@ -696,6 +780,10 @@ export default function RemisionesVenta() {
   };
 
   const handleOrdenChange = (ordenId: string) => {
+    if (!puedeCambiarOrdenFormulario) {
+      toast.info("No puedes cambiar la orden asociada cuando la remisión ya fue despachada");
+      return;
+    }
     setFormOrdenId(ordenId);
 
     const orden = ordenesDisponibles.find(
@@ -710,23 +798,29 @@ export default function RemisionesVenta() {
 
     setFormCliente(orden.cliente?.nombre_cliente ?? "");
 
-    const productos = (orden.detalle ?? []).map((detalle) => ({
-      id_producto: detalle.id_producto,
-      nombre: detalle.producto?.nombre_producto ?? "Producto",
-      precio_unitario: toNumber(detalle.precio_unitario),
-      iva: toNumber(detalle.producto?.iva?.porcentaje),
-      cantidad_orden: toNumber(detalle.cantidad_orden),
-      cantidad_remitida: toNumber(detalle.cantidad_remitida),
-      cantidad_pendiente: toNumber(detalle.cantidad_pendiente),
-      lotes: (detalle.existencias_disponibles ?? []).map((lote) => ({
-        id_existencia: lote.id_existencia,
-        lote: lote.lote ?? "",
-        codigo_barras: lote.codigo_barras ?? "",
-        fecha_vencimiento: normalizeDate(lote.fecha_vencimiento),
-        cantidad_disponible: toNumber(lote.cantidad_disponible),
-        cantidad: "",
-      })),
-    }));
+    const productos = (orden.detalle ?? []).map((detalle) => {
+      const cantidadPendiente = toNumber(detalle.cantidad_pendiente);
+
+      return {
+        id_producto: detalle.id_producto,
+        nombre: detalle.producto?.nombre_producto ?? "Producto",
+        precio_unitario: toNumber(detalle.precio_unitario),
+        iva: toNumber(detalle.producto?.iva?.porcentaje),
+        cantidad_orden: toNumber(detalle.cantidad_orden),
+        cantidad_remitida: toNumber(detalle.cantidad_remitida),
+        cantidad_pendiente: cantidadPendiente,
+        cantidad_actual_remision: 0,
+        cantidad_maxima_editable: cantidadPendiente,
+        lotes: (detalle.existencias_disponibles ?? []).map((lote) => ({
+          id_existencia: lote.id_existencia,
+          lote: lote.lote ?? "",
+          codigo_barras: lote.codigo_barras ?? "",
+          fecha_vencimiento: normalizeDate(lote.fecha_vencimiento),
+          cantidad_disponible: toNumber(lote.cantidad_disponible),
+          cantidad: "",
+        })),
+      };
+    });
 
     setFormProductos(productos);
   };
@@ -784,9 +878,9 @@ export default function RemisionesVenta() {
     }
 
     for (const producto of detalleConCantidad) {
-      if (producto.cantidadSolicitada > producto.cantidad_pendiente) {
+      if (producto.cantidadSolicitada > producto.cantidad_maxima_editable) {
         toast.error(
-          `La cantidad solicitada de ${producto.nombre} supera lo pendiente de la orden`
+          `La cantidad solicitada de ${producto.nombre} supera lo disponible para editar`
         );
         return false;
       }
@@ -808,11 +902,16 @@ export default function RemisionesVenta() {
   const handleGuardar = async () => {
     if (!validarFormulario()) return;
 
+    const idOrdenVentaParaGuardar =
+      isEditar && !puedeCambiarOrdenFormulario && formOrdenOriginalId
+        ? Number(formOrdenOriginalId)
+        : Number(formOrdenId);
+
     const payload: CreateRemisionVentaPayload | UpdateRemisionVentaPayload = {
       fecha_creacion: formFecha,
       fecha_vencimiento: null,
-      observaciones: formObservaciones || null,
-      id_orden_venta: Number(formOrdenId),
+      observaciones: formObservaciones.trim() || null,
+      id_orden_venta: idOrdenVentaParaGuardar,
       id_estado_remision_venta: Number(formEstadoId),
       id_usuario_creador: currentUserId,
       detalle: formProductos
@@ -952,309 +1051,325 @@ export default function RemisionesVenta() {
     }
   };
 
-const generarPDF = async (remision: RemisionListadoUi) => {
-  const doc = new jsPDF({
-    orientation: "portrait",
-    unit: "mm",
-    format: "a4",
-  });
+  const generarPDF = async (remision: RemisionListadoUi) => {
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+    });
 
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const marginX = 14;
-  const rightX = pageWidth - marginX;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const marginX = 14;
+    const rightX = pageWidth - marginX;
 
-  const COLORS = {
-    primary: [14, 116, 217] as const,
-    primarySoft: [239, 246, 255] as const,
-    primaryLine: [191, 219, 254] as const,
-    text: [51, 65, 85] as const,
-    muted: [100, 116, 139] as const,
-    card: [248, 250, 252] as const,
-    successBg: [220, 252, 231] as const,
-    successText: [22, 101, 52] as const,
-    dangerBg: [254, 226, 226] as const,
-    dangerText: [153, 27, 27] as const,
-    warningBg: [255, 247, 237] as const,
-    warningText: [180, 83, 9] as const,
-    infoBg: [219, 234, 254] as const,
-    infoText: [30, 64, 175] as const,
-    border: [226, 232, 240] as const,
-  };
-
-  const formatMoneyPdf = (value: number) =>
-    `$${Number(value || 0).toLocaleString("es-CO", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
-
-  const formatDatePdf = (value?: string | null) =>
-    value ? new Date(value).toLocaleDateString("es-CO") : "-";
-
-  const getEstadoStyle = (estado: EstadoUi) => {
-    if (estado === "Entregado" || estado === "Facturada") {
-      return {
-        bg: COLORS.successBg,
-        text: COLORS.successText,
-        label: estado,
-      };
-    }
-
-    if (estado === "Despachado") {
-      return {
-        bg: COLORS.infoBg,
-        text: COLORS.infoText,
-        label: estado,
-      };
-    }
-
-    if (estado === "Anulada") {
-      return {
-        bg: COLORS.dangerBg,
-        text: COLORS.dangerText,
-        label: estado,
-      };
-    }
-
-    return {
-      bg: COLORS.warningBg,
-      text: COLORS.warningText,
-      label: estado || "Pendiente",
+    const COLORS = {
+      primary: [14, 116, 217] as const,
+      primarySoft: [239, 246, 255] as const,
+      primaryLine: [191, 219, 254] as const,
+      text: [51, 65, 85] as const,
+      muted: [100, 116, 139] as const,
+      card: [248, 250, 252] as const,
+      successBg: [220, 252, 231] as const,
+      successText: [22, 101, 52] as const,
+      dangerBg: [254, 226, 226] as const,
+      dangerText: [153, 27, 27] as const,
+      warningBg: [255, 247, 237] as const,
+      warningText: [180, 83, 9] as const,
+      infoBg: [219, 234, 254] as const,
+      infoText: [30, 64, 175] as const,
+      border: [226, 232, 240] as const,
     };
-  };
 
-  let logo: PdfImageInfo | null = null;
-  try {
-    logo = await loadImageInfoAsDataUrl(logoVmanage);
-  } catch (error) {
-    console.warn("No se pudo cargar el logo para el PDF:", error);
-  }
+    const formatMoneyPdf = (value: number) =>
+      `$${Number(value || 0).toLocaleString("es-CO", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`;
 
-  // Header
-  doc.setFillColor(...COLORS.primary);
-  doc.rect(0, 0, pageWidth, 34, "F");
+    const formatDatePdf = (value?: string | null) =>
+      value ? new Date(value).toLocaleDateString("es-CO") : "-";
 
-  doc.setFillColor(9, 92, 181);
-  doc.rect(0, 34, pageWidth, 1.2, "F");
+    const getEstadoStyle = (estado: EstadoUi) => {
+      if (estado === "Entregado" || estado === "Facturada") {
+        return {
+          bg: COLORS.successBg,
+          text: COLORS.successText,
+          label: estado,
+        };
+      }
 
-  // Logo
-  if (logo) {
-    const maxLogoWidth = 22;
-    const maxLogoHeight = 14;
-    const scale = Math.min(
-      maxLogoWidth / logo.width,
-      maxLogoHeight / logo.height
-    );
+      if (estado === "Despachado") {
+        return {
+          bg: COLORS.infoBg,
+          text: COLORS.infoText,
+          label: estado,
+        };
+      }
 
-    const drawWidth = logo.width * scale;
-    const drawHeight = logo.height * scale;
-    const logoX = marginX;
-    const logoY = (34 - drawHeight) / 2;
+      if (estado === "Anulada") {
+        return {
+          bg: COLORS.dangerBg,
+          text: COLORS.dangerText,
+          label: estado,
+        };
+      }
 
-    doc.addImage(logo.dataUrl, "PNG", logoX, logoY, drawWidth, drawHeight);
-  }
+      return {
+        bg: COLORS.warningBg,
+        text: COLORS.warningText,
+        label: estado || "Pendiente",
+      };
+    };
 
-  // Título
-  doc.setTextColor(255, 255, 255);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
-  doc.text("REMISIÓN DE VENTA", pageWidth / 2, 14.8, { align: "center" });
+    let logo: PdfImageInfo | null = null;
+    try {
+      logo = await loadImageInfoAsDataUrl(logoVmanage);
+    } catch (error) {
+      console.warn("No se pudo cargar el logo para el PDF:", error);
+    }
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.text("VManage • Gestión empresarial", pageWidth / 2, 21.8, {
-    align: "center",
-  });
+    // Header
+    doc.setFillColor(...COLORS.primary);
+    doc.rect(0, 0, pageWidth, 34, "F");
 
-  // Datos derecha
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.7);
-  doc.text(`Código: ${remision.numeroRemision || "-"}`, rightX, 11.5, {
-    align: "right",
-  });
-  doc.text(`Fecha: ${formatDatePdf(remision.fecha)}`, rightX, 17.8, {
-    align: "right",
-  });
-  doc.text(`Bodega: ${remision.bodega || "-"}`, rightX, 24.1, {
-    align: "right",
-  });
+    doc.setFillColor(9, 92, 181);
+    doc.rect(0, 34, pageWidth, 1.2, "F");
 
-  // Tarjeta información general
-  doc.setFillColor(...COLORS.card);
-  doc.roundedRect(marginX, 42, pageWidth - marginX * 2, 34, 3, 3, "F");
+    // Logo
+    if (logo) {
+      const maxLogoWidth = 22;
+      const maxLogoHeight = 14;
+      const scale = Math.min(
+        maxLogoWidth / logo.width,
+        maxLogoHeight / logo.height
+      );
 
-  doc.setTextColor(...COLORS.text);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10.5);
-  doc.text("Información general", marginX + 4, 49);
+      const drawWidth = logo.width * scale;
+      const drawHeight = logo.height * scale;
+      const logoX = marginX;
+      const logoY = (34 - drawHeight) / 2;
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9.2);
+      doc.addImage(logo.dataUrl, "PNG", logoX, logoY, drawWidth, drawHeight);
+    }
 
-  const clienteLines = doc.splitTextToSize(remision.cliente || "-", 70);
+    // Título
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.text("REMISIÓN DE VENTA", pageWidth / 2, 14.8, { align: "center" });
 
-  doc.text("Cliente:", marginX + 4, 56);
-  doc.text(clienteLines, marginX + 24, 56);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text("VManage • Gestión empresarial", pageWidth / 2, 21.8, {
+      align: "center",
+    });
 
-  doc.text("Orden venta:", marginX + 4, 65);
-  doc.text(remision.ordenVenta || "-", marginX + 24, 65);
+    // Datos derecha
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.7);
+    doc.text(`Código: ${remision.numeroRemision || "-"}`, rightX, 11.5, {
+      align: "right",
+    });
+    doc.text(`Fecha: ${formatDatePdf(remision.fecha)}`, rightX, 17.8, {
+      align: "right",
+    });
+    doc.text(`Bodega: ${remision.bodega || "-"}`, rightX, 24.1, {
+      align: "right",
+    });
 
-  doc.text("Items:", 112, 56);
-  doc.text(String(remision.items || 0), 126, 56);
+    // Tarjeta información general
+    doc.setFillColor(...COLORS.card);
+    doc.roundedRect(marginX, 42, pageWidth - marginX * 2, 34, 3, 3, "F");
 
-  const estadoStyle = getEstadoStyle(remision.estado);
-  doc.setFillColor(estadoStyle.bg[0], estadoStyle.bg[1], estadoStyle.bg[2]);
-  doc.roundedRect(112, 60, 44, 9.5, 3, 3, "F");
+    doc.setTextColor(...COLORS.text);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.5);
+    doc.text("Información general", marginX + 4, 49);
 
-  doc.setTextColor(estadoStyle.text[0], estadoStyle.text[1], estadoStyle.text[2]);
-  doc.setFont("helvetica", "bold");
-  doc.text(`Estado: ${estadoStyle.label}`, 134, 66.4, { align: "center" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.2);
 
-  // Línea separadora
-  doc.setDrawColor(...COLORS.primaryLine);
-  doc.setLineWidth(0.6);
-  doc.line(marginX, 82, rightX, 82);
+    const clienteLines = doc.splitTextToSize(remision.cliente || "-", 70);
+    const documentoCliente = remision.documentoCliente || "No registrado";
+    const documentoLines = doc.splitTextToSize(documentoCliente, 70);
 
-  // Tabla
-  autoTable(doc, {
-    startY: 88,
-    margin: { left: marginX, right: marginX },
-    head: [["Producto", "Lote", "Cantidad", "Precio Unit.", "Subtotal"]],
-    body: remision.detalle.length
-      ? remision.detalle.map((item) => [
+    doc.text("Cliente:", marginX + 4, 56);
+    doc.text(clienteLines, marginX + 28, 56);
+
+    doc.text("Documento:", marginX + 4, 63);
+    doc.text(documentoLines, marginX + 28, 63);
+
+    doc.text("Orden venta:", marginX + 4, 70);
+    doc.text(remision.ordenVenta || "-", marginX + 28, 70);
+
+    doc.text("Items:", 112, 56);
+    doc.text(String(remision.items || 0), 126, 56);
+
+    const estadoStyle = getEstadoStyle(remision.estado);
+    doc.setFillColor(estadoStyle.bg[0], estadoStyle.bg[1], estadoStyle.bg[2]);
+    doc.roundedRect(112, 60, 44, 9.5, 3, 3, "F");
+
+    doc.setTextColor(estadoStyle.text[0], estadoStyle.text[1], estadoStyle.text[2]);
+    doc.setFont("helvetica", "bold");
+    doc.text(`Estado: ${estadoStyle.label}`, 134, 66.4, { align: "center" });
+
+    // Línea separadora
+    doc.setDrawColor(...COLORS.primaryLine);
+    doc.setLineWidth(0.6);
+    doc.line(marginX, 86, rightX, 86);
+
+    // Tabla
+    autoTable(doc, {
+      startY: 92,
+      margin: { left: marginX, right: marginX },
+      head: [["Producto", "Lote", "Cantidad", "Precio Unit.", "Subtotal"]],
+      body: remision.detalle.length
+        ? remision.detalle.map((item) => [
           item.producto || "-",
           item.lote || "-",
           String(item.cantidad ?? 0),
           formatMoneyPdf(item.precio || 0),
           formatMoneyPdf(item.subtotal || 0),
         ])
-      : [["Sin productos", "-", "-", "-", "-"]],
-    theme: "grid",
-    headStyles: {
-      fillColor: [...COLORS.primary],
-      textColor: [255, 255, 255],
-      fontStyle: "bold",
-      fontSize: 9,
-      halign: "center",
-      valign: "middle",
-      lineColor: [...COLORS.primary],
-      lineWidth: 0.1,
-    },
-    bodyStyles: {
-      fontSize: 8.5,
-      textColor: [...COLORS.text],
-      lineColor: [...COLORS.border],
-      lineWidth: 0.1,
-      valign: "middle",
-    },
-    alternateRowStyles: {
-      fillColor: [...COLORS.primarySoft],
-    },
-    styles: {
-      cellPadding: 3.2,
-      overflow: "linebreak",
-    },
-    columnStyles: {
-      0: { cellWidth: 72 },
-      1: { cellWidth: 30, halign: "center" },
-      2: { cellWidth: 22, halign: "center" },
-      3: { cellWidth: 30, halign: "right" },
-      4: { cellWidth: 30, halign: "right" },
-    },
-  });
-
-  let currentY = ((doc as any).lastAutoTable?.finalY || 88) + 8;
-
-  const observacionesLines = remision.observaciones
-    ? doc.splitTextToSize(remision.observaciones, 95)
-    : [];
-
-  const observacionesHeight = remision.observaciones
-    ? Math.max(24, 12 + observacionesLines.length * 4.5)
-    : 0;
-
-  const totalsHeight = 24;
-  const blockHeight = Math.max(observacionesHeight, totalsHeight);
-
-  if (currentY + blockHeight > pageHeight - 24) {
-    doc.addPage();
-    currentY = 20;
-  }
-
-  // Observaciones
-  if (remision.observaciones) {
-    doc.setFillColor(255, 251, 235);
-    doc.roundedRect(marginX, currentY, 108, observacionesHeight, 3, 3, "F");
-
-    doc.setTextColor(146, 64, 14);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.text("Observaciones", marginX + 4, currentY + 7);
-
-    doc.setTextColor(87, 83, 78);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.7);
-    doc.text(observacionesLines, marginX + 4, currentY + 13);
-  }
-
-  // Total
-  const totalsX = remision.observaciones ? 128 : 124;
-  const totalsWidth = remision.observaciones ? 68 : 72;
-
-  doc.setFillColor(...COLORS.card);
-  doc.roundedRect(totalsX, currentY, totalsWidth, totalsHeight, 3, 3, "F");
-
-  doc.setFillColor(...COLORS.primary);
-  doc.roundedRect(totalsX + 2, currentY + 7, totalsWidth - 4, 9, 2, 2, "F");
-
-  doc.setTextColor(255, 255, 255);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10.5);
-  doc.text("TOTAL", totalsX + 5, currentY + 13.5);
-  doc.text(
-    formatMoneyPdf(remision.total || 0),
-    totalsX + totalsWidth - 4,
-    currentY + 13.5,
-    { align: "right" }
-  );
-
-  // Footer
-  const generatedAt = new Date().toLocaleString("es-CO");
-  const totalPages = doc.getNumberOfPages();
-
-  for (let page = 1; page <= totalPages; page++) {
-    doc.setPage(page);
-
-    doc.setDrawColor(...COLORS.border);
-    doc.setLineWidth(0.3);
-    doc.line(marginX, pageHeight - 14, rightX, pageHeight - 14);
-
-    doc.setFont("helvetica", "italic");
-    doc.setFontSize(8);
-    doc.setTextColor(...COLORS.muted);
-    doc.text(`Generado el ${generatedAt} • VManage`, marginX, pageHeight - 8);
-    doc.text(`Página ${page} de ${totalPages}`, rightX, pageHeight - 8, {
-      align: "right",
+        : [["Sin productos", "-", "-", "-", "-"]],
+      theme: "grid",
+      headStyles: {
+        fillColor: [...COLORS.primary],
+        textColor: [255, 255, 255],
+        fontStyle: "bold",
+        fontSize: 9,
+        halign: "center",
+        valign: "middle",
+        lineColor: [...COLORS.primary],
+        lineWidth: 0.1,
+      },
+      bodyStyles: {
+        fontSize: 8.5,
+        textColor: [...COLORS.text],
+        lineColor: [...COLORS.border],
+        lineWidth: 0.1,
+        valign: "middle",
+      },
+      alternateRowStyles: {
+        fillColor: [...COLORS.primarySoft],
+      },
+      styles: {
+        cellPadding: 3.2,
+        overflow: "linebreak",
+      },
+      columnStyles: {
+        0: { cellWidth: 72 },
+        1: { cellWidth: 30, halign: "center" },
+        2: { cellWidth: 22, halign: "center" },
+        3: { cellWidth: 30, halign: "right" },
+        4: { cellWidth: 30, halign: "right" },
+      },
     });
-  }
 
-  doc.save(`Remision_Venta_${remision.numeroRemision}.pdf`);
-};
+    let currentY = ((doc as any).lastAutoTable?.finalY || 92) + 8;
 
-const handleDescargarPDF = async (remision: RemisionListadoUi) => {
-  try {
-    const detalle =
-      remision.detalle.length > 0
-        ? remision
-        : buildRemisionUi(await remisionesVentaService.getOne(remision.id));
+    const observacionesLines = remision.observaciones
+      ? doc.splitTextToSize(remision.observaciones, 95)
+      : [];
 
-    await generarPDF(detalle);
-    toast.success(`PDF de la remisión ${detalle.numeroRemision} descargado exitosamente`);
-  } catch (error: any) {
-    console.error(error);
-    toast.error(error?.message || "No se pudo generar el PDF");
-  }
-};
+    const observacionesHeight = remision.observaciones
+      ? Math.max(24, 12 + observacionesLines.length * 4.5)
+      : 0;
+
+    const totalsHeight = 24;
+    const blockHeight = Math.max(observacionesHeight, totalsHeight);
+
+    if (currentY + blockHeight > pageHeight - 24) {
+      doc.addPage();
+      currentY = 20;
+    }
+
+    // Observaciones
+    if (remision.observaciones) {
+      doc.setFillColor(255, 251, 235);
+      doc.roundedRect(marginX, currentY, 108, observacionesHeight, 3, 3, "F");
+
+      doc.setTextColor(146, 64, 14);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text("Observaciones", marginX + 4, currentY + 7);
+
+      doc.setTextColor(87, 83, 78);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.7);
+      doc.text(observacionesLines, marginX + 4, currentY + 13);
+    }
+
+    // Total
+    const totalsX = remision.observaciones ? 128 : 124;
+    const totalsWidth = remision.observaciones ? 68 : 72;
+
+    doc.setFillColor(...COLORS.card);
+    doc.roundedRect(totalsX, currentY, totalsWidth, totalsHeight, 3, 3, "F");
+
+    doc.setFillColor(...COLORS.primary);
+    doc.roundedRect(totalsX + 2, currentY + 7, totalsWidth - 4, 9, 2, 2, "F");
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.5);
+    doc.text("TOTAL", totalsX + 5, currentY + 13.5);
+    doc.text(
+      formatMoneyPdf(remision.total || 0),
+      totalsX + totalsWidth - 4,
+      currentY + 13.5,
+      { align: "right" }
+    );
+
+    // Footer
+    const generatedAt = new Date().toLocaleString("es-CO");
+    const totalPages = doc.getNumberOfPages();
+
+    for (let page = 1; page <= totalPages; page++) {
+      doc.setPage(page);
+
+      doc.setDrawColor(...COLORS.border);
+      doc.setLineWidth(0.3);
+      doc.line(marginX, pageHeight - 14, rightX, pageHeight - 14);
+
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(8);
+      doc.setTextColor(...COLORS.muted);
+      doc.text(`Generado el ${generatedAt} • VManage`, marginX, pageHeight - 8);
+      doc.text(`Página ${page} de ${totalPages}`, rightX, pageHeight - 8, {
+        align: "right",
+      });
+    }
+
+    doc.save(`Remision_Venta_${remision.numeroRemision}.pdf`);
+  };
+
+  const handleDescargarPDF = async (remision: RemisionListadoUi) => {
+    try {
+      const detalle =
+        remision.detalle.length > 0
+          ? remision
+          : buildRemisionUi(await remisionesVentaService.getOne(remision.id));
+
+      await generarPDF(detalle);
+      toast.success(`PDF de la remisión ${detalle.numeroRemision} descargado exitosamente`);
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error?.message || "No se pudo generar el PDF");
+    }
+  };
+
+  const getPendienteOrdenOption = (orden: OrdenVentaCatalogoApi) => {
+    if (isEditar && String(orden.id_orden_venta) === formOrdenId) {
+      return formProductos.reduce(
+        (acc, producto) => acc + toNumber(producto.cantidad_pendiente),
+        0
+      );
+    }
+
+    return orden.cantidad_pendiente_total;
+  };
 
   return (
     <div className="space-y-6">
@@ -1341,6 +1456,7 @@ const handleDescargarPDF = async (remision: RemisionListadoUi) => {
                 <TableHead>N° Remisión</TableHead>
                 <TableHead>Orden de Venta</TableHead>
                 <TableHead>Cliente</TableHead>
+                <TableHead>Documento / NIT</TableHead>
                 <TableHead>Fecha</TableHead>
                 <TableHead>Items</TableHead>
                 <TableHead className="text-center">Estado</TableHead>
@@ -1370,6 +1486,7 @@ const handleDescargarPDF = async (remision: RemisionListadoUi) => {
                     </TableCell>
                     <TableCell>{remision.ordenVenta}</TableCell>
                     <TableCell>{remision.cliente}</TableCell>
+                    <TableCell>{remision.documentoCliente}</TableCell>
                     <TableCell>{remision.fecha}</TableCell>
                     <TableCell>{remision.items}</TableCell>
 
@@ -1430,7 +1547,9 @@ const handleDescargarPDF = async (remision: RemisionListadoUi) => {
                                 ? "No se puede editar una remisión facturada"
                                 : remision.estado === "Anulada"
                                   ? "No se puede editar una remisión anulada"
-                                  : "Editar"
+                                  : remision.estado === "Despachado"
+                                    ? "Editar cantidades remitidas"
+                                    : "Editar"
                           }
                         >
                           <Edit size={16} className="text-amber-600" />
@@ -1526,7 +1645,7 @@ const handleDescargarPDF = async (remision: RemisionListadoUi) => {
                 </h3>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <Label>N° Remisión</Label>
                   <Input value={formNumeroRemision} disabled />
@@ -1548,12 +1667,15 @@ const handleDescargarPDF = async (remision: RemisionListadoUi) => {
                   <Input value={bodegaFormularioNombre} disabled />
                 </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2">
+                <div className="md:col-span-3">
                   <Label>Orden de Venta Aprobada</Label>
                   <select
-                    className="w-full h-10 rounded-md border border-gray-300 px-3 bg-white"
+                    className={`w-full h-10 rounded-md border border-gray-300 px-3 ${puedeCambiarOrdenFormulario
+                      ? "bg-white"
+                      : "bg-gray-100 text-gray-500 cursor-not-allowed"
+                      }`}
                     value={formOrdenId}
+                    disabled={!puedeCambiarOrdenFormulario}
                     onChange={(e) => handleOrdenChange(e.target.value)}
                   >
                     <option value="">Selecciona una orden</option>
@@ -1564,30 +1686,33 @@ const handleDescargarPDF = async (remision: RemisionListadoUi) => {
                       >
                         {orden.codigo_orden_venta} -{" "}
                         {orden.cliente?.nombre_cliente ?? "Cliente"} - Pendiente:{" "}
-                        {orden.cantidad_pendiente_total}
+                        {getPendienteOrdenOption(orden)}
                       </option>
                     ))}
                   </select>
+
+                  {!puedeCambiarOrdenFormulario && (
+                    <p className="mt-1 text-xs text-amber-600">
+                      La orden asociada no se puede cambiar cuando la remisión está en estado{" "}
+                      {estadoFormularioActual}.
+                    </p>
+                  )}
                 </div>
 
                 <div>
-                  <Label>Cliente</Label>
-                  <Input value={formCliente} disabled />
+                  <p className="text-sm text-gray-600">Cliente</p>
+                  <p className="font-medium text-gray-900 truncate">
+                    {formCliente || "Se completa al seleccionar la orden"}
+                  </p>
                 </div>
 
                 <div>
-                  <Label>Número de documento</Label>
-                  <Input
-                    value={numeroDocumentoClienteSeleccionado}
-                    disabled
-                    readOnly
-                    placeholder="Se completa al seleccionar la orden"
-                    className="bg-gray-100"
-                  />
+                  <p className="text-sm text-gray-600">Documento / NIT</p>
+                  <p className="font-medium text-gray-900">
+                    {documentoClienteSeleccionado || "Se completa al seleccionar la orden"}
+                  </p>
                 </div>
-              </div>
 
-            </div>
                 <div>
                   <Label>Estado inicial</Label>
                   <Input
@@ -1602,16 +1727,17 @@ const handleDescargarPDF = async (remision: RemisionListadoUi) => {
                 </div>
               </div>
             </div>
+          </div>
 
-            <div className="rounded-xl border border-gray-200 p-4">
-              <div className="flex items-center gap-2 mb-4">
-                <ShoppingCart size={18} className="text-blue-600" />
-                <h3 className="font-semibold text-gray-900">
-                  Orden asociada
-                </h3>
-              </div>
+          <div className="rounded-xl border border-gray-200 p-4">
+            <div className="flex items-center gap-2 mb-4">
+              <ShoppingCart size={18} className="text-blue-600" />
+              <h3 className="font-semibold text-gray-900">
+                Orden asociada
+              </h3>
+            </div>
 
- 
+
 
             <div className="rounded-xl border border-gray-200 p-4">
               <div className="flex items-center gap-2 mb-4">
@@ -1808,55 +1934,64 @@ const handleDescargarPDF = async (remision: RemisionListadoUi) => {
                   <Label>Cliente</Label>
                   <Input value={remisionSeleccionada.cliente} disabled />
                 </div>
+
+                <div>
+                  <Label>Documento / NIT</Label>
+                  <Input
+                    value={remisionSeleccionada.documentoCliente || "No registrado"}
+                    disabled
+                  />
+                </div>
+
                 <div>
                   <Label>Estado</Label>
                   <Input value={remisionSeleccionada.estado} disabled />
                 </div>
               </div>
 
-            <div className="overflow-x-auto rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Producto</TableHead>
-                    <TableHead>Lote</TableHead>
-                    <TableHead>Cantidad</TableHead>
-                    <TableHead>Precio</TableHead>
-                    <TableHead>IVA %</TableHead>
-                    <TableHead>Subtotal</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {remisionSeleccionada.detalle.map((item, index) => (
-                    <TableRow key={`${item.producto}-${index}`}>
-                      <TableCell>{item.producto}</TableCell>
-                      <TableCell>{item.lote || "-"}</TableCell>
-                      <TableCell>{item.cantidad}</TableCell>
-                      <TableCell>
-                        $
-                        {item.precio.toLocaleString("es-CO", {
-                          minimumFractionDigits: 2,
-                        })}
-                      </TableCell>
-                      <TableCell>{item.iva}%</TableCell>
-                      <TableCell>
-                        $
-                        {item.subtotal.toLocaleString("es-CO", {
-                          minimumFractionDigits: 2,
-                        })}
-                      </TableCell>
+              <div className="overflow-x-auto rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Producto</TableHead>
+                      <TableHead>Lote</TableHead>
+                      <TableHead>Cantidad</TableHead>
+                      <TableHead>Precio</TableHead>
+                      <TableHead>IVA %</TableHead>
+                      <TableHead>Subtotal</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {remisionSeleccionada.detalle.map((item, index) => (
+                      <TableRow key={`${item.producto}-${index}`}>
+                        <TableCell>{item.producto}</TableCell>
+                        <TableCell>{item.lote || "-"}</TableCell>
+                        <TableCell>{item.cantidad}</TableCell>
+                        <TableCell>
+                          $
+                          {item.precio.toLocaleString("es-CO", {
+                            minimumFractionDigits: 2,
+                          })}
+                        </TableCell>
+                        <TableCell>{item.iva}%</TableCell>
+                        <TableCell>
+                          $
+                          {item.subtotal.toLocaleString("es-CO", {
+                            minimumFractionDigits: 2,
+                          })}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
 
               {remisionSeleccionada.observaciones && (
                 <div>
                   <Label>Observaciones</Label>
                   <textarea
-                    className="w-full min-h-22.5 rounded-md border border-gray-300 px-3 py-2"
-                    value={remisionSeleccionada.observaciones}
+                    className="w-full min-h-22.5 rounded-md border border-gray-300 px-3 py-2 bg-gray-50"
+                    value={remisionSeleccionada.observaciones || "Sin observaciones"}
                     disabled
                   />
                 </div>

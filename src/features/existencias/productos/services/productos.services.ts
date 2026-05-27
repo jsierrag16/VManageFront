@@ -146,25 +146,6 @@ export const cambiarEstadoProducto = async (
     return nuevoEstado ? enableProducto(id) : disableProducto(id);
 };
 
-// export type ProductoVistaBackend = {
-//     id_producto: number;
-//     nombre_producto: string;
-//     descripcion?: string | null;
-//     id_categoria_producto: number;
-//     id_iva: number;
-//     estado: boolean;
-//     categoria_producto?: CategoriaProductoBackend | null;
-//     iva?: IvaBackend | null;
-//     stock_total: number;
-//     lotes: {
-//         id_existencia: number;
-//         lote: string;
-//         cantidad: number;
-//         fecha_vencimiento: string | null;
-//         id_bodega: number;
-//         nombre_bodega: string;
-//     }[];
-// };
 
 export type ProductoVistaBackend = {
     id_producto: number;

@@ -1,5 +1,5 @@
 import api from "@/shared/services/api";
-import type { Producto } from "@/data/productos";
+import type { ProductoCotizacion } from "@/features/ventas/cotizaciones/types/cotizaciones.types";
 
 export type EstadoCotizacionUI =
   | "Pendiente"
@@ -109,7 +109,7 @@ type CotizacionesListResponse =
     };
 
 export type CotizacionProductoUI = {
-  producto: Producto;
+  producto: ProductoCotizacion;
   cantidad: number;
   precio: number;
   subtotal: number;
@@ -182,7 +182,7 @@ function extractCotizacionesArray(
 function mapProductoApiToUi(
   producto?: ProductoApi | null,
   ivaPorcentaje?: number
-): Producto {
+): ProductoCotizacion {
   return {
     id: String(producto?.id_producto ?? ""),
     nombre: producto?.nombre_producto ?? "Producto",

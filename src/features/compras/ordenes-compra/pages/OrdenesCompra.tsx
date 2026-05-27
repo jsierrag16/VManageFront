@@ -268,6 +268,9 @@ export default function Compras() {
   const [productosCatalogo, setProductosCatalogo] = useState<BasicOption[]>([]);
   const [terminosPago, setTerminosPago] = useState<BasicOption[]>([]);
   const [ivas, setIvas] = useState<IvaOption[]>([]);
+  const [showNuevoIvaModal, setShowNuevoIvaModal] = useState(false);
+  const [nuevoIvaPorcentaje, setNuevoIvaPorcentaje] = useState("");
+  const [isSavingIva, setIsSavingIva] = useState(false);
   const [bodegas, setBodegas] = useState<BasicOption[]>([]);
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -313,7 +316,7 @@ export default function Compras() {
   useEffect(() => {
     const contextIsTodas =
       normalizeText(outletSelectedBodegaNombre) ===
-        normalizeText("Todas las bodegas") ||
+      normalizeText("Todas las bodegas") ||
       normalizeText(outletSelectedBodegaNombre) === normalizeText("Todas");
 
     const contextId = extractNumberFromUnknown(outletSelectedBodegaId);
@@ -346,7 +349,7 @@ export default function Compras() {
 
   const isTodasLasBodegas =
     normalizeText(effectiveSelectedBodegaNombre) ===
-      normalizeText("Todas las bodegas") ||
+    normalizeText("Todas las bodegas") ||
     normalizeText(effectiveSelectedBodegaNombre) === normalizeText("Todas");
 
   const effectiveSelectedBodegaId = isTodasLasBodegas
@@ -360,7 +363,7 @@ export default function Compras() {
 
   const badgeBodegaLabel =
     !effectiveSelectedBodegaNombre ||
-    normalizeText(effectiveSelectedBodegaNombre) === normalizeText("Todas")
+      normalizeText(effectiveSelectedBodegaNombre) === normalizeText("Todas")
       ? "Todas las bodegas"
       : effectiveSelectedBodegaNombre;
 
@@ -410,12 +413,63 @@ export default function Compras() {
     navigate(`/app/ordenes-compra/${c.id}/anular`);
   };
 
+  const handleCrearIva = async () => {
+    const porcentaje = Number(nuevoIvaPorcentaje.replace(",", "."));
+
+    if (!nuevoIvaPorcentaje.trim() || Number.isNaN(porcentaje)) {
+      toast.error("El porcentaje del IVA es obligatorio");
+      return;
+    }
+
+    if (porcentaje < 0 || porcentaje > 100) {
+      toast.error("El porcentaje del IVA debe estar entre 0 y 100");
+      return;
+    }
+
+    const ivaDuplicado = ivas.some(
+      (iva) => Number(iva.porcentaje) === porcentaje
+    );
+
+    if (ivaDuplicado) {
+      toast.error(`Ya existe un IVA del ${formatIvaPorcentaje(porcentaje)}%`);
+      return;
+    }
+
+    try {
+      setIsSavingIva(true);
+
+      const nuevoIva = await comprasService.createIva({
+        porcentaje,
+      });
+
+      setIvas((prev) =>
+        [...prev, nuevoIva].sort(
+          (a, b) => Number(a.porcentaje) - Number(b.porcentaje)
+        )
+      );
+
+      setSelectedIvaId(String(nuevoIva.id));
+
+      toast.success("IVA creado correctamente");
+      resetNuevoIvaForm();
+      setShowNuevoIvaModal(false);
+    } catch (error: any) {
+      console.error("Error creando IVA:", error);
+      toast.error(
+        error?.response?.data?.message ||
+        error?.message ||
+        "No se pudo crear el IVA"
+      );
+    } finally {
+      setIsSavingIva(false);
+    }
+  };
+
   const handleCantidadProductoChange = (value: string) => {
     const limpio = value.replace(/\D/g, "");
 
     if (limpio === "") {
       setCantidadProductoInput("");
-      setCantidadProducto(0);
       return;
     }
 
@@ -424,13 +478,11 @@ export default function Compras() {
     if (numero > 1000) return;
 
     setCantidadProductoInput(String(numero));
-    setCantidadProducto(numero);
   };
 
   const handleCantidadProductoBlur = () => {
     if (!cantidadProductoInput.trim()) {
       setCantidadProductoInput("");
-      setCantidadProducto(0);
       return;
     }
 
@@ -438,12 +490,10 @@ export default function Compras() {
 
     if (Number.isNaN(numero) || numero <= 0) {
       setCantidadProductoInput("");
-      setCantidadProducto(0);
       return;
     }
 
     setCantidadProductoInput(String(numero));
-    setCantidadProducto(numero);
   };
 
   const handlePrecioProductoChange = (value: string) => {
@@ -482,7 +532,6 @@ export default function Compras() {
 
   const [selectedProductoId, setSelectedProductoId] = useState("");
   const [selectedIvaId, setSelectedIvaId] = useState("");
-  const [cantidadProducto, setCantidadProducto] = useState(0);
   const [cantidadProductoInput, setCantidadProductoInput] = useState("");
   const [precioProducto, setPrecioProducto] = useState<string>("");
   const [productosOrden, setProductosOrden] = useState<ProductoOrden[]>([]);
@@ -708,374 +757,373 @@ export default function Compras() {
     });
   };
 
-const generateCompraPDF = async (
-  compra: Compra,
-  includePrices: boolean = true
-) => {
-  const doc = new jsPDF({
-    orientation: "portrait",
-    unit: "mm",
-    format: "a4",
-  });
+  const generateCompraPDF = async (
+    compra: Compra,
+    includePrices: boolean = true
+  ) => {
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+    });
 
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const marginX = 14;
-  const rightX = pageWidth - marginX;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const marginX = 14;
+    const rightX = pageWidth - marginX;
 
-  const COLORS = {
-    primary: [14, 116, 217] as const,
-    primarySoft: [239, 246, 255] as const,
-    primaryLine: [191, 219, 254] as const,
-    text: [51, 65, 85] as const,
-    muted: [100, 116, 139] as const,
-    card: [248, 250, 252] as const,
-    successBg: [220, 252, 231] as const,
-    successText: [22, 101, 52] as const,
-    dangerBg: [254, 226, 226] as const,
-    dangerText: [153, 27, 27] as const,
-    warningBg: [255, 247, 237] as const,
-    warningText: [180, 83, 9] as const,
-    border: [226, 232, 240] as const,
-  };
-
-  const formatMoneyPdf = (value: number) =>
-    `$${Number(value || 0).toLocaleString("es-CO", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
-
-  const formatDatePdf = (value?: string | Date | null) => {
-    if (!value) return "-";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "-";
-    return date.toLocaleDateString("es-CO");
-  };
-
-  const safeText = (value: unknown, fallback = "-") => {
-    const text = String(value ?? "").trim();
-    return text || fallback;
-  };
-
-  const getEstadoStyle = (estado: string) => {
-    const normalized = (estado || "").toLowerCase();
-
-    if (normalized.includes("aprobad")) {
-      return {
-        bg: [...COLORS.successBg] as const,
-        text: [...COLORS.successText] as const,
-        label: estado || "Aprobada",
-      };
-    }
-
-    if (normalized.includes("anulad")) {
-      return {
-        bg: [...COLORS.dangerBg] as const,
-        text: [...COLORS.dangerText] as const,
-        label: estado || "Anulada",
-      };
-    }
-
-    return {
-      bg: [...COLORS.warningBg] as const,
-      text: [...COLORS.warningText] as const,
-      label: estado || "Pendiente",
+    const COLORS = {
+      primary: [14, 116, 217] as const,
+      primarySoft: [239, 246, 255] as const,
+      primaryLine: [191, 219, 254] as const,
+      text: [51, 65, 85] as const,
+      muted: [100, 116, 139] as const,
+      card: [248, 250, 252] as const,
+      successBg: [220, 252, 231] as const,
+      successText: [22, 101, 52] as const,
+      dangerBg: [254, 226, 226] as const,
+      dangerText: [153, 27, 27] as const,
+      warningBg: [255, 247, 237] as const,
+      warningText: [180, 83, 9] as const,
+      border: [226, 232, 240] as const,
     };
-  };
 
-  let logo: PdfImageInfo | null = null;
-  try {
-    logo = await loadImageInfoAsDataUrl(logoVmanage);
-  } catch (error) {
-    console.warn("No se pudo cargar el logo para el PDF:", error);
-  }
+    const formatMoneyPdf = (value: number) =>
+      `COP$${Number(value || 0).toLocaleString("es-CO", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`;
 
-  const subtotalGeneral = Number(compra.subtotal || 0);
-  const ivaGeneral = Number(compra.impuestos || 0);
-  const totalGeneral = Number(compra.total || 0);
+    const formatDatePdf = (value?: string | Date | null) => {
+      if (!value) return "-";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "-";
+      return date.toLocaleDateString("es-CO");
+    };
 
-  // Header
-  doc.setFillColor(...COLORS.primary);
-  doc.rect(0, 0, pageWidth, 34, "F");
+    const safeText = (value: unknown, fallback = "-") => {
+      const text = String(value ?? "").trim();
+      return text || fallback;
+    };
 
-  doc.setFillColor(9, 92, 181);
-  doc.rect(0, 34, pageWidth, 1.2, "F");
+    const getEstadoStyle = (estado: string) => {
+      const normalized = (estado || "").toLowerCase();
 
-  // Logo
-  if (logo) {
-    const maxLogoWidth = 22;
-    const maxLogoHeight = 14;
-    const scale = Math.min(
-      maxLogoWidth / logo.width,
-      maxLogoHeight / logo.height
+      if (normalized.includes("aprobad")) {
+        return {
+          bg: [...COLORS.successBg] as const,
+          text: [...COLORS.successText] as const,
+          label: estado || "Aprobada",
+        };
+      }
+
+      if (normalized.includes("anulad")) {
+        return {
+          bg: [...COLORS.dangerBg] as const,
+          text: [...COLORS.dangerText] as const,
+          label: estado || "Anulada",
+        };
+      }
+
+      return {
+        bg: [...COLORS.warningBg] as const,
+        text: [...COLORS.warningText] as const,
+        label: estado || "Pendiente",
+      };
+    };
+
+    let logo: PdfImageInfo | null = null;
+    try {
+      logo = await loadImageInfoAsDataUrl(logoVmanage);
+    } catch (error) {
+      console.warn("No se pudo cargar el logo para el PDF:", error);
+    }
+
+    const subtotalGeneral = Number(compra.subtotal || 0);
+    const ivaGeneral = Number(compra.impuestos || 0);
+    const totalGeneral = Number(compra.total || 0);
+
+    // Header
+    doc.setFillColor(...COLORS.primary);
+    doc.rect(0, 0, pageWidth, 34, "F");
+
+    doc.setFillColor(9, 92, 181);
+    doc.rect(0, 34, pageWidth, 1.2, "F");
+
+    // Logo
+    if (logo) {
+      const maxLogoWidth = 22;
+      const maxLogoHeight = 14;
+      const scale = Math.min(
+        maxLogoWidth / logo.width,
+        maxLogoHeight / logo.height
+      );
+
+      const drawWidth = logo.width * scale;
+      const drawHeight = logo.height * scale;
+      const logoX = marginX;
+      const logoY = (34 - drawHeight) / 2;
+
+      doc.addImage(logo.dataUrl, "PNG", logoX, logoY, drawWidth, drawHeight);
+    }
+
+    // Título
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.text("ORDEN DE COMPRA", pageWidth / 2, 14.8, { align: "center" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text("VManage • Gestión empresarial", pageWidth / 2, 21.8, {
+      align: "center",
+    });
+
+    // Datos derecha
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.7);
+    doc.text(`Código: ${safeText(compra.numeroOrden)}`, rightX, 11.5, {
+      align: "right",
+    });
+    doc.text(`Fecha: ${formatDatePdf(compra.fecha)}`, rightX, 17.8, {
+      align: "right",
+    });
+    doc.text(
+      `Entrega: ${formatDatePdf(compra.fechaEntrega)}`,
+      rightX,
+      24.1,
+      { align: "right" }
     );
 
-    const drawWidth = logo.width * scale;
-    const drawHeight = logo.height * scale;
-    const logoX = marginX;
-    const logoY = (34 - drawHeight) / 2;
+    // Tarjeta información general
+    doc.setFillColor(...COLORS.card);
+    doc.roundedRect(marginX, 42, pageWidth - marginX * 2, 42, 3, 3, "F");
 
-    doc.addImage(logo.dataUrl, "PNG", logoX, logoY, drawWidth, drawHeight);
-  }
+    doc.setTextColor(...COLORS.text);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.5);
+    doc.text("Información general", marginX + 4, 49);
 
-  // Título
-  doc.setTextColor(255, 255, 255);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
-  doc.text("ORDEN DE COMPRA", pageWidth / 2, 14.8, { align: "center" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.2);
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.text("VManage • Gestión empresarial", pageWidth / 2, 21.8, {
-    align: "center",
-  });
+    const proveedorLines = doc.splitTextToSize(
+      safeText(compra.proveedor),
+      64
+    );
 
-  // Datos derecha
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.7);
-  doc.text(`Código: ${safeText(compra.numeroOrden)}`, rightX, 11.5, {
-    align: "right",
-  });
-  doc.text(`Fecha: ${formatDatePdf(compra.fecha)}`, rightX, 17.8, {
-    align: "right",
-  });
-  doc.text(
-    `Entrega: ${formatDatePdf(compra.fechaEntrega)}`,
-    rightX,
-    24.1,
-    { align: "right" }
-  );
+    doc.text("Proveedor:", marginX + 4, 56);
+    doc.text(proveedorLines, marginX + 28, 56);
 
-  // Tarjeta información general
-  doc.setFillColor(...COLORS.card);
-  doc.roundedRect(marginX, 42, pageWidth - marginX * 2, 42, 3, 3, "F");
+    doc.text("Tipo Doc.:", marginX + 4, 65);
+    doc.text(safeText(compra.proveedorTipoDocumento), marginX + 28, 65);
 
-  doc.setTextColor(...COLORS.text);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10.5);
-  doc.text("Información general", marginX + 4, 49);
+    doc.text("N° Documento:", marginX + 4, 74);
+    doc.text(safeText(compra.proveedorNumeroDocumento), marginX + 32, 74);
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9.2);
+    doc.text("Bodega:", 112, 56);
+    doc.text(safeText(compra.bodega), 128, 56);
 
-  const proveedorLines = doc.splitTextToSize(
-    safeText(compra.proveedor),
-    64
-  );
+    doc.text("Térm. pago:", 112, 65);
+    doc.text(safeText(compra.terminoPago), 132, 65);
 
-  doc.text("Proveedor:", marginX + 4, 56);
-  doc.text(proveedorLines, marginX + 28, 56);
+    const estadoStyle = getEstadoStyle(compra.estado);
+    doc.setFillColor(...(estadoStyle.bg as [number, number, number]));
+    doc.roundedRect(112, 69, 44, 9.5, 3, 3, "F");
 
-  doc.text("Tipo Doc.:", marginX + 4, 65);
-  doc.text(safeText(compra.proveedorTipoDocumento), marginX + 28, 65);
+    doc.setTextColor(...(estadoStyle.text as [number, number, number]));
+    doc.setFont("helvetica", "bold");
+    doc.text(`Estado: ${estadoStyle.label}`, 134, 75.4, { align: "center" });
 
-  doc.text("N° Documento:", marginX + 4, 74);
-  doc.text(safeText(compra.proveedorNumeroDocumento), marginX + 32, 74);
+    // Línea separadora
+    doc.setDrawColor(...COLORS.primaryLine);
+    doc.setLineWidth(0.6);
+    doc.line(marginX, 90, rightX, 90);
 
-  doc.text("Bodega:", 112, 56);
-  doc.text(safeText(compra.bodega), 128, 56);
+    // Tabla
+    const tableHead = includePrices
+      ? [["Producto", "Cantidad", "IVA", "Precio Unit.", "Subtotal"]]
+      : [["Producto", "Cantidad", "IVA"]];
 
-  doc.text("Térm. pago:", 112, 65);
-  doc.text(safeText(compra.terminoPago), 132, 65);
+    const tableData =
+      compra.productos?.map((item) => {
+        const detalleProducto = [
+          item.producto?.nombre || "-",
+        ]
+          .filter(Boolean)
+          .join("\n");
 
-  const estadoStyle = getEstadoStyle(compra.estado);
-  doc.setFillColor(...(estadoStyle.bg as [number, number, number]));
-  doc.roundedRect(112, 69, 44, 9.5, 3, 3, "F");
+        if (includePrices) {
+          return [
+            detalleProducto,
+            String(item.cantidad ?? 0),
+            `IVA (${Number(item.ivaPorcentaje || 0).toFixed(2)}%)`,
+            formatMoneyPdf(item.precio || 0),
+            formatMoneyPdf(item.subtotal || 0),
+          ];
+        }
 
-  doc.setTextColor(...(estadoStyle.text as [number, number, number]));
-  doc.setFont("helvetica", "bold");
-  doc.text(`Estado: ${estadoStyle.label}`, 134, 75.4, { align: "center" });
-
-  // Línea separadora
-  doc.setDrawColor(...COLORS.primaryLine);
-  doc.setLineWidth(0.6);
-  doc.line(marginX, 90, rightX, 90);
-
-  // Tabla
-  const tableHead = includePrices
-    ? [["Producto", "Cantidad", "IVA", "Precio Unit.", "Subtotal"]]
-    : [["Producto", "Cantidad", "IVA"]];
-
-  const tableData =
-    compra.productos?.map((item) => {
-      const detalleProducto = [
-        item.producto?.nombre || "-",
-      ]
-        .filter(Boolean)
-        .join("\n");
-
-      if (includePrices) {
         return [
           detalleProducto,
           String(item.cantidad ?? 0),
           `IVA (${Number(item.ivaPorcentaje || 0).toFixed(2)}%)`,
-          formatMoneyPdf(item.precio || 0),
-          formatMoneyPdf(item.subtotal || 0),
         ];
-      }
+      }) || [];
 
-      return [
-        detalleProducto,
-        String(item.cantidad ?? 0),
-        `IVA (${Number(item.ivaPorcentaje || 0).toFixed(2)}%)`,
-      ];
-    }) || [];
-
-  autoTable(doc, {
-    startY: 96,
-    margin: { left: marginX, right: marginX },
-    head: tableHead,
-    body: tableData.length
-      ? tableData
-      : includePrices
-      ? [["Sin productos", "-", "-", "-", "-"]]
-      : [["Sin productos", "-", "-"]],
-    theme: "grid",
-    headStyles: {
-      fillColor: [...COLORS.primary],
-      textColor: [255, 255, 255],
-      fontStyle: "bold",
-      fontSize: 9,
-      halign: "center",
-      valign: "middle",
-      lineColor: [...COLORS.primary],
-      lineWidth: 0.1,
-    },
-    bodyStyles: {
-      fontSize: 8.3,
-      textColor: [...COLORS.text],
-      lineColor: [...COLORS.border],
-      lineWidth: 0.1,
-      valign: "middle",
-    },
-    alternateRowStyles: {
-      fillColor: [...COLORS.primarySoft],
-    },
-    styles: {
-      cellPadding: 3.2,
-      overflow: "linebreak",
-    },
-    columnStyles: includePrices
-      ? {
+    autoTable(doc, {
+      startY: 96,
+      margin: { left: marginX, right: marginX },
+      head: tableHead,
+      body: tableData.length
+        ? tableData
+        : includePrices
+          ? [["Sin productos", "-", "-", "-", "-"]]
+          : [["Sin productos", "-", "-"]],
+      theme: "grid",
+      headStyles: {
+        fillColor: [...COLORS.primary],
+        textColor: [255, 255, 255],
+        fontStyle: "bold",
+        fontSize: 9,
+        halign: "center",
+        valign: "middle",
+        lineColor: [...COLORS.primary],
+        lineWidth: 0.1,
+      },
+      bodyStyles: {
+        fontSize: 8.3,
+        textColor: [...COLORS.text],
+        lineColor: [...COLORS.border],
+        lineWidth: 0.1,
+        valign: "middle",
+      },
+      alternateRowStyles: {
+        fillColor: [...COLORS.primarySoft],
+      },
+      styles: {
+        cellPadding: 3.2,
+        overflow: "linebreak",
+      },
+      columnStyles: includePrices
+        ? {
           0: { cellWidth: 82 },
           1: { cellWidth: 20, halign: "center" },
           2: { cellWidth: 24, halign: "center" },
           3: { cellWidth: 28, halign: "right" },
           4: { cellWidth: 32, halign: "right" },
         }
-      : {
+        : {
           0: { cellWidth: 130 },
           1: { cellWidth: 24, halign: "center" },
           2: { cellWidth: 28, halign: "center" },
         },
-  });
-
-  let currentY = ((doc as any).lastAutoTable?.finalY || 96) + 8;
-
-  const observaciones = safeText(compra.observaciones, "");
-  const observacionesLines = observaciones
-    ? doc.splitTextToSize(observaciones, includePrices ? 95 : 174)
-    : [];
-
-  const observacionesHeight = observaciones
-    ? Math.max(24, 12 + observacionesLines.length * 4.5)
-    : 0;
-
-  const totalsHeight = includePrices ? 31 : 0;
-  const blockHeight = Math.max(observacionesHeight, totalsHeight || 24);
-
-  if (currentY + blockHeight > pageHeight - 24) {
-    doc.addPage();
-    currentY = 20;
-  }
-
-  // Observaciones
-  if (observaciones) {
-    const obsWidth = includePrices ? 108 : pageWidth - marginX * 2;
-
-    doc.setFillColor(255, 251, 235);
-    doc.roundedRect(marginX, currentY, obsWidth, observacionesHeight, 3, 3, "F");
-
-    doc.setTextColor(146, 64, 14);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.text("Observaciones", marginX + 4, currentY + 7);
-
-    doc.setTextColor(87, 83, 78);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.7);
-    doc.text(observacionesLines, marginX + 4, currentY + 13);
-  }
-
-  // Totales solo si incluye precios
-  if (includePrices) {
-    const totalsX = observaciones ? 128 : 124;
-    const totalsWidth = observaciones ? 68 : 72;
-
-    doc.setFillColor(...COLORS.card);
-    doc.roundedRect(totalsX, currentY, totalsWidth, totalsHeight, 3, 3, "F");
-
-    doc.setTextColor(...COLORS.text);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9.5);
-
-    doc.text("Subtotal:", totalsX + 4, currentY + 8);
-    doc.text(
-      formatMoneyPdf(subtotalGeneral),
-      totalsX + totalsWidth - 4,
-      currentY + 8,
-      { align: "right" }
-    );
-
-    doc.text("IVA:", totalsX + 4, currentY + 15);
-    doc.text(
-      formatMoneyPdf(ivaGeneral),
-      totalsX + totalsWidth - 4,
-      currentY + 15,
-      { align: "right" }
-    );
-
-    doc.setFillColor(...COLORS.primary);
-    doc.roundedRect(totalsX + 2, currentY + 20, totalsWidth - 4, 9, 2, 2, "F");
-
-    doc.setTextColor(255, 255, 255);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10.5);
-    doc.text("TOTAL", totalsX + 5, currentY + 26);
-    doc.text(
-      formatMoneyPdf(totalGeneral),
-      totalsX + totalsWidth - 4,
-      currentY + 26,
-      { align: "right" }
-    );
-  }
-
-  // Footer
-  const generatedAt = new Date().toLocaleString("es-CO");
-  const totalPages = doc.getNumberOfPages();
-
-  for (let page = 1; page <= totalPages; page++) {
-    doc.setPage(page);
-
-    doc.setDrawColor(...COLORS.border);
-    doc.setLineWidth(0.3);
-    doc.line(marginX, pageHeight - 14, rightX, pageHeight - 14);
-
-    doc.setFont("helvetica", "italic");
-    doc.setFontSize(8);
-    doc.setTextColor(...COLORS.muted);
-    doc.text(`Generado el ${generatedAt} • VManage`, marginX, pageHeight - 8);
-    doc.text(`Página ${page} de ${totalPages}`, rightX, pageHeight - 8, {
-      align: "right",
     });
-  }
 
-  doc.save(
-    `Orden_Compra_${safeText(compra.numeroOrden, "SIN_CODIGO")}_${
-      includePrices ? "con_precios" : "sin_precios"
-    }.pdf`
-  );
-};
+    let currentY = ((doc as any).lastAutoTable?.finalY || 96) + 8;
+
+    const observaciones = safeText(compra.observaciones, "");
+    const observacionesLines = observaciones
+      ? doc.splitTextToSize(observaciones, includePrices ? 95 : 174)
+      : [];
+
+    const observacionesHeight = observaciones
+      ? Math.max(24, 12 + observacionesLines.length * 4.5)
+      : 0;
+
+    const totalsHeight = includePrices ? 31 : 0;
+    const blockHeight = Math.max(observacionesHeight, totalsHeight || 24);
+
+    if (currentY + blockHeight > pageHeight - 24) {
+      doc.addPage();
+      currentY = 20;
+    }
+
+    // Observaciones
+    if (observaciones) {
+      const obsWidth = includePrices ? 108 : pageWidth - marginX * 2;
+
+      doc.setFillColor(255, 251, 235);
+      doc.roundedRect(marginX, currentY, obsWidth, observacionesHeight, 3, 3, "F");
+
+      doc.setTextColor(146, 64, 14);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text("Observaciones", marginX + 4, currentY + 7);
+
+      doc.setTextColor(87, 83, 78);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.7);
+      doc.text(observacionesLines, marginX + 4, currentY + 13);
+    }
+
+    // Totales solo si incluye precios
+    if (includePrices) {
+      const totalsX = observaciones ? 128 : 124;
+      const totalsWidth = observaciones ? 68 : 72;
+
+      doc.setFillColor(...COLORS.card);
+      doc.roundedRect(totalsX, currentY, totalsWidth, totalsHeight, 3, 3, "F");
+
+      doc.setTextColor(...COLORS.text);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9.5);
+
+      doc.text("Subtotal:", totalsX + 4, currentY + 8);
+      doc.text(
+        formatMoneyPdf(subtotalGeneral),
+        totalsX + totalsWidth - 4,
+        currentY + 8,
+        { align: "right" }
+      );
+
+      doc.text("IVA:", totalsX + 4, currentY + 15);
+      doc.text(
+        formatMoneyPdf(ivaGeneral),
+        totalsX + totalsWidth - 4,
+        currentY + 15,
+        { align: "right" }
+      );
+
+      doc.setFillColor(...COLORS.primary);
+      doc.roundedRect(totalsX + 2, currentY + 20, totalsWidth - 4, 9, 2, 2, "F");
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10.5);
+      doc.text("TOTAL", totalsX + 5, currentY + 26);
+      doc.text(
+        formatMoneyPdf(totalGeneral),
+        totalsX + totalsWidth - 4,
+        currentY + 26,
+        { align: "right" }
+      );
+    }
+
+    // Footer
+    const generatedAt = new Date().toLocaleString("es-CO");
+    const totalPages = doc.getNumberOfPages();
+
+    for (let page = 1; page <= totalPages; page++) {
+      doc.setPage(page);
+
+      doc.setDrawColor(...COLORS.border);
+      doc.setLineWidth(0.3);
+      doc.line(marginX, pageHeight - 14, rightX, pageHeight - 14);
+
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(8);
+      doc.setTextColor(...COLORS.muted);
+      doc.text(`Generado el ${generatedAt} • VManage`, marginX, pageHeight - 8);
+      doc.text(`Página ${page} de ${totalPages}`, rightX, pageHeight - 8, {
+        align: "right",
+      });
+    }
+
+    doc.save(
+      `Orden_Compra_${safeText(compra.numeroOrden, "SIN_CODIGO")}_${includePrices ? "con_precios" : "sin_precios"
+      }.pdf`
+    );
+  };
 
   const handleOpenPdfOptions = (compra: Compra) => {
     setCompraParaDescargarPdf(compra);
@@ -1125,7 +1173,6 @@ const generateCompraPDF = async (
 
     setSelectedProductoId("");
     setSelectedIvaId("");
-    setCantidadProducto(0);
     setCantidadProductoInput("");
     setPrecioProducto("");
     setProductosOrden([]);
@@ -1163,7 +1210,6 @@ const generateCompraPDF = async (
     setProductosOrden(compraDetalle.productos ?? []);
     setSelectedProductoId("");
     setSelectedIvaId("");
-    setCantidadProducto(0);
     setCantidadProductoInput("");
     setPrecioProducto("");
   }, [isEditar, compraDetalle]);
@@ -1278,7 +1324,7 @@ const generateCompraPDF = async (
       precio: precioNormalizado,
       subtotal,
       idIva: ivaSeleccionado.id,
-      ivaNombre: ivaSeleccionado.nombre,
+      ivaNombre: getIvaLabel(ivaSeleccionado),
       ivaPorcentaje: ivaSeleccionado.porcentaje,
     };
 
@@ -1286,7 +1332,6 @@ const generateCompraPDF = async (
 
     setSelectedProductoId("");
     setSelectedIvaId("");
-    setCantidadProducto(0);
     setCantidadProductoInput("");
     setPrecioProducto("");
   };
@@ -1297,99 +1342,99 @@ const generateCompraPDF = async (
     );
   };
 
-const validateCompraForm = () => {
-  if (!formData.bodegaId) {
-    toast.error("Debes seleccionar una bodega");
-    return false;
-  }
+  const validateCompraForm = () => {
+    if (!formData.bodegaId) {
+      toast.error("Debes seleccionar una bodega");
+      return false;
+    }
 
-  if (!formData.proveedorId) {
-    toast.error("Debes seleccionar un proveedor");
-    return false;
-  }
+    if (!formData.proveedorId) {
+      toast.error("Debes seleccionar un proveedor");
+      return false;
+    }
 
-  if (!formData.terminoPagoId) {
-    toast.error("Debes seleccionar un término de pago");
-    return false;
-  }
+    if (!formData.terminoPagoId) {
+      toast.error("Debes seleccionar un término de pago");
+      return false;
+    }
 
-  if (!formData.fechaEntrega) {
-    toast.error("Debes ingresar la fecha de entrega");
-    return false;
-  }
+    if (!formData.fechaEntrega) {
+      toast.error("Debes ingresar la fecha de entrega");
+      return false;
+    }
 
-  if (formData.fechaEntrega < getFechaActual()) {
-    toast.error("La fecha de entrega no puede ser anterior a hoy");
-    return false;
-  }
+    if (formData.fechaEntrega < getFechaActual()) {
+      toast.error("La fecha de entrega no puede ser anterior a hoy");
+      return false;
+    }
 
-  if (formData.observaciones.trim().length > MAX_OBSERVACIONES_LENGTH) {
-    toast.error(`Las observaciones no pueden superar ${MAX_OBSERVACIONES_LENGTH} caracteres`);
-    return false;
-  }
+    if (formData.observaciones.trim().length > MAX_OBSERVACIONES_LENGTH) {
+      toast.error(`Las observaciones no pueden superar ${MAX_OBSERVACIONES_LENGTH} caracteres`);
+      return false;
+    }
 
-  if (productosOrden.length === 0) {
-    toast.error("Debes agregar al menos un producto");
-    return false;
-  }
+    if (productosOrden.length === 0) {
+      toast.error("Debes agregar al menos un producto");
+      return false;
+    }
 
-  return true;
-};
+    return true;
+  };
 
-const confirmCreate = async () => {
-  if (isSaving) return;
+  const confirmCreate = async () => {
+    if (isSaving) return;
 
-  if (!validateCompraForm()) return;
+    if (!validateCompraForm()) return;
 
-  try {
-    setIsSaving(true);
+    try {
+      setIsSaving(true);
 
-    await comprasService.create(buildCompraPayload());
+      await comprasService.create(buildCompraPayload());
 
-    await loadCompras();
-    closeToList();
-    setShowSuccessModal(true);
-  } catch (error) {
-    console.error("Error creando compra:", error);
-    toast.error("No se pudo crear la orden de compra");
-  } finally {
-    setIsSaving(false);
-  }
-};
+      await loadCompras();
+      closeToList();
+      setShowSuccessModal(true);
+    } catch (error) {
+      console.error("Error creando compra:", error);
+      toast.error("No se pudo crear la orden de compra");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
-const confirmEdit = async () => {
-  if (!compraDetalle || isSaving) return;
+  const confirmEdit = async () => {
+    if (!compraDetalle || isSaving) return;
 
-  if (compraDetalle.estado === "Anulada") {
-    toast.error("No puedes editar una orden anulada");
-    return;
-  }
+    if (compraDetalle.estado === "Anulada") {
+      toast.error("No puedes editar una orden anulada");
+      return;
+    }
 
-  if (compraDetalle.estado === "Aprobada") {
-    toast.error("No puedes editar una orden aprobada");
-    return;
-  }
+    if (compraDetalle.estado === "Aprobada") {
+      toast.error("No puedes editar una orden aprobada");
+      return;
+    }
 
-  if (!validateCompraForm()) return;
+    if (!validateCompraForm()) return;
 
-  try {
-    setIsSaving(true);
+    try {
+      setIsSaving(true);
 
-    await comprasService.update(compraDetalle.id, {
-      ...buildCompraPayload(),
-      id_estado_compra: ESTADO_COMPRA_IDS[formData.estado],
-    });
+      await comprasService.update(compraDetalle.id, {
+        ...buildCompraPayload(),
+        id_estado_compra: ESTADO_COMPRA_IDS[formData.estado],
+      });
 
-    await loadCompras();
-    toast.success("Orden actualizada exitosamente");
-    closeToList();
-  } catch (error) {
-    console.error("Error actualizando compra:", error);
-    toast.error("No se pudo actualizar la orden");
-  } finally {
-    setIsSaving(false);
-  }
-};
+      await loadCompras();
+      toast.success("Orden actualizada exitosamente");
+      closeToList();
+    } catch (error) {
+      console.error("Error actualizando compra:", error);
+      toast.error("No se pudo actualizar la orden");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleSuccessModalClose = () => {
     setShowSuccessModal(false);
@@ -1418,6 +1463,31 @@ const confirmEdit = async () => {
       console.error("Error anulando compra:", error);
       toast.error("No se pudo anular la orden");
     }
+  };
+
+  const formatIvaPorcentaje = (value: unknown) => {
+    const porcentaje = Number(value ?? 0);
+
+    if (!Number.isFinite(porcentaje)) return "0";
+
+    return porcentaje.toLocaleString("es-CO", {
+      minimumFractionDigits: porcentaje % 1 === 0 ? 0 : 2,
+      maximumFractionDigits: 2,
+    });
+  };
+
+  const getIvaLabel = (iva?: IvaOption | null) => {
+    if (!iva) return "IVA 0%";
+
+    return `IVA ${formatIvaPorcentaje(iva.porcentaje)}%`;
+  };
+
+  const formatCop = (value: unknown) => {
+    return `COP$${Number(value || 0).toLocaleString("es-CO")}`;
+  };
+
+  const resetNuevoIvaForm = () => {
+    setNuevoIvaPorcentaje("");
   };
 
   const compraSeleccionada = compraDetalle;
@@ -1528,7 +1598,7 @@ const confirmEdit = async () => {
                 <TableHead>N° Orden</TableHead>
                 <TableHead>Proveedor</TableHead>
                 <TableHead>Fecha</TableHead>
-                <TableHead>Fecha Entrega</TableHead>    
+                <TableHead>Fecha Entrega</TableHead>
                 <TableHead>Items</TableHead>
                 <TableHead className="text-center">Estado</TableHead>
                 <TableHead className="text-center">Acciones</TableHead>
@@ -1579,13 +1649,12 @@ const confirmEdit = async () => {
                         size="sm"
                         onClick={() => handleToggleEstado(compra)}
                         disabled={compra.estado === "Anulada"}
-                        className={`h-7 ${
-                          compra.estado === "Aprobada"
-                            ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
-                            : compra.estado === "Pendiente"
+                        className={`h-7 ${compra.estado === "Aprobada"
+                          ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
+                          : compra.estado === "Pendiente"
                             ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
                             : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
-                        }`}
+                          }`}
                       >
                         {compra.estado}
                       </Button>
@@ -1627,7 +1696,7 @@ const confirmEdit = async () => {
                             size={16}
                             className={
                               compra.estado === "Aprobada" ||
-                              compra.estado === "Anulada"
+                                compra.estado === "Anulada"
                                 ? "text-gray-400"
                                 : "text-yellow-600"
                             }
@@ -1649,7 +1718,7 @@ const confirmEdit = async () => {
                             size={16}
                             className={
                               compra.estado === "Aprobada" ||
-                              compra.estado === "Anulada"
+                                compra.estado === "Anulada"
                                 ? "text-gray-400"
                                 : "text-red-600"
                             }
@@ -1965,18 +2034,38 @@ const confirmEdit = async () => {
 
                   <div className="space-y-2">
                     <Label htmlFor="iva">IVA *</Label>
-                    <Select value={selectedIvaId} onValueChange={setSelectedIvaId}>
-                      <SelectTrigger id="iva" className={fieldClass}>
-                        <SelectValue placeholder="Selecciona IVA" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ivasActivos.map((iva) => (
-                          <SelectItem key={iva.id} value={String(iva.id)}>
-                            {iva.nombre} ({iva.porcentaje}%)
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+
+                    <div className="flex gap-2">
+                      <Select value={selectedIvaId} onValueChange={setSelectedIvaId}>
+                        <SelectTrigger id="iva" className={fieldClass}>
+                          <SelectValue placeholder="Selecciona IVA" />
+                        </SelectTrigger>
+
+                        <SelectContent>
+                          {ivasActivos.length === 0 ? (
+                            <div className="px-3 py-2 text-sm text-gray-500">
+                              No hay IVAs disponibles
+                            </div>
+                          ) : (
+                            ivasActivos.map((iva) => (
+                              <SelectItem key={iva.id} value={String(iva.id)}>
+                                {getIvaLabel(iva)}
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowNuevoIvaModal(true)}
+                        className="h-11 shrink-0 border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
+                      >
+                        <Plus size={16} className="mr-1" />
+                        Nuevo IVA
+                      </Button>
+                    </div>
                   </div>
 
                   <div className="space-y-2">
@@ -2028,13 +2117,13 @@ const confirmEdit = async () => {
                               {item.cantidad}
                             </TableCell>
                             <TableCell className="text-center">
-                              {item.ivaNombre} ({item.ivaPorcentaje}%)
+                              {item.ivaNombre}
                             </TableCell>
                             <TableCell className="text-right">
-                              ${item.precio.toLocaleString("es-CO")}
+                              {formatCop(item.precio)}
                             </TableCell>
                             <TableCell className="text-right font-medium">
-                              ${item.subtotal.toLocaleString("es-CO")}
+                              {formatCop(item.subtotal)}
                             </TableCell>
                             <TableCell>
                               <Button
@@ -2056,7 +2145,7 @@ const confirmEdit = async () => {
                             Total
                           </TableCell>
                           <TableCell className="text-right font-semibold text-blue-600">
-                            ${calcularTotales.total.toLocaleString("es-CO")}
+                            {formatCop(calcularTotales.total)}
                           </TableCell>
                           <TableCell />
                         </TableRow>
@@ -2083,19 +2172,19 @@ const confirmEdit = async () => {
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Subtotal</span>
                     <span className="font-medium">
-                      ${calcularTotales.subtotal.toLocaleString("es-CO")}
+                      {formatCop(calcularTotales.subtotal)}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">IVA</span>
                     <span className="font-medium">
-                      ${calcularTotales.impuestos.toLocaleString("es-CO")}
+                      {formatCop(calcularTotales.impuestos)}
                     </span>
                   </div>
                   <div className="flex justify-between border-t pt-3 mt-3">
                     <span className="font-semibold">Total</span>
                     <span className="font-semibold text-blue-600">
-                      ${calcularTotales.total.toLocaleString("es-CO")}
+                      {formatCop(calcularTotales.total)}
                     </span>
                   </div>
                 </div>
@@ -2196,13 +2285,12 @@ const confirmEdit = async () => {
                       size="sm"
                       onClick={() => handleToggleEstado(compraSeleccionada)}
                       disabled={compraSeleccionada.estado === "Anulada"}
-                      className={`h-7 px-3 ${
-                        compraSeleccionada.estado === "Aprobada"
-                          ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
-                          : compraSeleccionada.estado === "Pendiente"
+                      className={`h-7 px-3 ${compraSeleccionada.estado === "Aprobada"
+                        ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
+                        : compraSeleccionada.estado === "Pendiente"
                           ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
                           : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
-                      }`}
+                        }`}
                     >
                       {compraSeleccionada.estado}
                     </Button>
@@ -2245,8 +2333,8 @@ const confirmEdit = async () => {
                   <p className="font-medium">
                     {compraSeleccionada.fecha
                       ? new Date(compraSeleccionada.fecha).toLocaleDateString(
-                          "es-CO"
-                        )
+                        "es-CO"
+                      )
                       : "-"}
                   </p>
                 </div>
@@ -2256,8 +2344,8 @@ const confirmEdit = async () => {
                   <p className="font-medium">
                     {compraSeleccionada.fechaEntrega
                       ? new Date(
-                          compraSeleccionada.fechaEntrega
-                        ).toLocaleDateString("es-CO")
+                        compraSeleccionada.fechaEntrega
+                      ).toLocaleDateString("es-CO")
                       : "-"}
                   </p>
                 </div>
@@ -2291,13 +2379,13 @@ const confirmEdit = async () => {
                                 {item.cantidad}
                               </TableCell>
                               <TableCell className="text-center">
-                                {item.ivaNombre} ({item.ivaPorcentaje}%)
+                                {item.ivaNombre}
                               </TableCell>
                               <TableCell className="text-right">
-                                ${item.precio.toLocaleString("es-CO")}
+                                {formatCop(item.precio)}
                               </TableCell>
                               <TableCell className="text-right">
-                                ${item.subtotal.toLocaleString("es-CO")}
+                                {formatCop(item.subtotal)}
                               </TableCell>
                             </TableRow>
                           ))}
@@ -2316,19 +2404,19 @@ const confirmEdit = async () => {
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Subtotal:</span>
                     <span className="font-medium">
-                      ${compraSeleccionada.subtotal.toLocaleString("es-CO")}
+                      {formatCop(compraSeleccionada.subtotal)}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">IVA:</span>
                     <span className="font-medium">
-                      ${compraSeleccionada.impuestos.toLocaleString("es-CO")}
+                      {formatCop(compraSeleccionada.impuestos)}
                     </span>
                   </div>
                   <div className="flex justify-between text-lg border-t pt-2 mt-2">
                     <span className="font-semibold">Total:</span>
                     <span className="font-bold text-blue-600">
-                      ${compraSeleccionada.total.toLocaleString("es-CO")}
+                      {formatCop(compraSeleccionada.total)}
                     </span>
                   </div>
                 </div>
@@ -2594,7 +2682,7 @@ const confirmEdit = async () => {
                 <Label className="text-lg mb-4 block">Productos de la Orden</Label>
 
                 <div className="grid grid-cols-12 gap-4">
-                  <div className="col-span-4 space-y-2">
+                  <div className="col-span-3 space-y-2">
                     <Label htmlFor="edit-producto">Producto</Label>
                     <Select
                       value={selectedProductoId}
@@ -2627,20 +2715,40 @@ const confirmEdit = async () => {
                     />
                   </div>
 
-                  <div className="col-span-2 space-y-2">
+                  <div className="col-span-3 space-y-2">
                     <Label htmlFor="edit-iva">IVA</Label>
-                    <Select value={selectedIvaId} onValueChange={setSelectedIvaId}>
-                      <SelectTrigger id="edit-iva" className="h-12">
-                        <SelectValue placeholder="Selecciona IVA" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ivasActivos.map((iva) => (
-                          <SelectItem key={iva.id} value={String(iva.id)}>
-                            {iva.nombre} ({iva.porcentaje}%)
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+
+                    <div className="flex gap-2">
+                      <Select value={selectedIvaId} onValueChange={setSelectedIvaId}>
+                        <SelectTrigger id="edit-iva" className="h-12 min-w-0">
+                          <SelectValue placeholder="Selecciona IVA" />
+                        </SelectTrigger>
+
+                        <SelectContent>
+                          {ivasActivos.length === 0 ? (
+                            <div className="px-3 py-2 text-sm text-gray-500">
+                              No hay IVAs disponibles
+                            </div>
+                          ) : (
+                            ivasActivos.map((iva) => (
+                              <SelectItem key={iva.id} value={String(iva.id)}>
+                                {getIvaLabel(iva)}
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowNuevoIvaModal(true)}
+                        className="h-12 w-28 shrink-0 border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
+                      >
+                        <Plus size={16} className="mr-1" />
+                        Nuevo
+                      </Button>
+                    </div>
                   </div>
 
                   <div className="col-span-2 space-y-2">
@@ -2693,13 +2801,13 @@ const confirmEdit = async () => {
                               {item.cantidad}
                             </TableCell>
                             <TableCell className="text-center">
-                              {item.ivaNombre} ({item.ivaPorcentaje}%)
+                              {item.ivaNombre}
                             </TableCell>
                             <TableCell className="text-right">
-                              ${item.precio.toLocaleString("es-CO")}
+                              {formatCop(item.precio)}
                             </TableCell>
                             <TableCell className="text-right">
-                              ${item.subtotal.toLocaleString("es-CO")}
+                              {formatCop(item.subtotal)}
                             </TableCell>
                             <TableCell className="text-center">
                               <Button
@@ -2728,19 +2836,19 @@ const confirmEdit = async () => {
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Subtotal:</span>
                     <span className="font-medium">
-                      ${calcularTotales.subtotal.toLocaleString("es-CO")}
+                      {formatCop(calcularTotales.subtotal)}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">IVA:</span>
                     <span className="font-medium">
-                      ${calcularTotales.impuestos.toLocaleString("es-CO")}
+                      {formatCop(calcularTotales.impuestos)}
                     </span>
                   </div>
                   <div className="flex justify-between text-lg border-t pt-2">
                     <span className="font-semibold">Total:</span>
                     <span className="font-bold text-yellow-600">
-                      ${calcularTotales.total.toLocaleString("es-CO")}
+                      {formatCop(calcularTotales.total)}
                     </span>
                   </div>
                 </div>
@@ -2767,9 +2875,9 @@ const confirmEdit = async () => {
                   placeholder="Escribe cualquier observación sobre la orden de compra..."
                   rows={3}
                 />
-                  <p className="text-xs text-gray-500 text-right">
-                    {formData.observaciones.length}/{MAX_OBSERVACIONES_LENGTH}
-                  </p>
+                <p className="text-xs text-gray-500 text-right">
+                  {formData.observaciones.length}/{MAX_OBSERVACIONES_LENGTH}
+                </p>
               </div>
             </div>
           )}
@@ -2839,8 +2947,7 @@ const confirmEdit = async () => {
                   <strong>Proveedor:</strong> {compraSeleccionada.proveedor}
                 </p>
                 <p>
-                  <strong>Total:</strong> $
-                  {compraSeleccionada.total.toLocaleString("es-CO")}
+                  <strong>Total:</strong> {formatCop(compraSeleccionada.total)}
                 </p>
                 <p>
                   <strong>Estado:</strong> {compraSeleccionada.estado}
@@ -2905,11 +3012,10 @@ const confirmEdit = async () => {
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Estado Actual:</span>
               <span
-                className={`font-medium ${
-                  compraParaCambioEstado?.estado === "Aprobada"
-                    ? "text-blue-700"
-                    : "text-yellow-700"
-                }`}
+                className={`font-medium ${compraParaCambioEstado?.estado === "Aprobada"
+                  ? "text-blue-700"
+                  : "text-yellow-700"
+                  }`}
               >
                 {compraParaCambioEstado?.estado}
               </span>
@@ -2978,6 +3084,79 @@ const confirmEdit = async () => {
               Aceptar
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showNuevoIvaModal}
+        onOpenChange={(open) => {
+          setShowNuevoIvaModal(open);
+
+          if (!open) {
+            resetNuevoIvaForm();
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Nuevo IVA</DialogTitle>
+            <DialogDescription>
+              Registra un nuevo porcentaje de IVA para usarlo en la orden de compra.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="nuevoIvaPorcentaje">Porcentaje *</Label>
+              <Input
+                id="nuevoIvaPorcentaje"
+                type="text"
+                inputMode="decimal"
+                value={nuevoIvaPorcentaje}
+                onChange={(e) => {
+                  const value = e.target.value
+                    .replace(",", ".")
+                    .replace(/[^\d.]/g, "");
+
+                  const partes = value.split(".");
+                  if (partes.length > 2) return;
+                  if ((partes[1] ?? "").length > 2) return;
+
+                  setNuevoIvaPorcentaje(value);
+                }}
+                placeholder="Ej: 19"
+                className={numberFieldClass}
+              />
+              <p className="text-xs text-gray-500">
+                Ingresa solo el número. Ejemplo: 19 para IVA 19%.
+              </p>
+            </div>
+
+            {nuevoIvaPorcentaje && !Number.isNaN(Number(nuevoIvaPorcentaje)) && (
+              <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+                Se creará como:{" "}
+                <strong>IVA {formatIvaPorcentaje(nuevoIvaPorcentaje)}%</strong>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowNuevoIvaModal(false)}
+              disabled={isSavingIva}
+            >
+              Cancelar
+            </Button>
+
+            <Button
+              onClick={handleCrearIva}
+              disabled={isSavingIva}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {isSavingIva ? "Creando..." : "Crear IVA"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
