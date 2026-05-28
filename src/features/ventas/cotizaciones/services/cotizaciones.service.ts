@@ -102,11 +102,11 @@ type CotizacionApi = {
 type CotizacionesListResponse =
   | CotizacionApi[]
   | {
-      data?: CotizacionApi[];
-      rows?: CotizacionApi[];
-      items?: CotizacionApi[];
-      results?: CotizacionApi[];
-    };
+    data?: CotizacionApi[];
+    rows?: CotizacionApi[];
+    items?: CotizacionApi[];
+    results?: CotizacionApi[];
+  };
 
 export type CotizacionProductoUI = {
   producto: ProductoCotizacion;
@@ -194,12 +194,12 @@ function mapProductoApiToUi(
     estado: producto?.estado ?? true,
     lotes: Array.isArray(producto?.lotes)
       ? producto!.lotes!.map((lote) => ({
-          id: String(lote.id_existencia ?? lote.lote ?? ""),
-          numeroLote: lote.lote ?? "",
-          cantidadDisponible: toNumber(lote.cantidad ?? 0),
-          fechaVencimiento: normalizeDate(lote.fecha_vencimiento ?? null),
-          bodega: lote.nombre_bodega ?? "",
-        }))
+        id: String(lote.id_existencia ?? lote.lote ?? ""),
+        numeroLote: lote.lote ?? "",
+        cantidadDisponible: toNumber(lote.cantidad ?? 0),
+        fechaVencimiento: normalizeDate(lote.fecha_vencimiento ?? null),
+        bodega: lote.nombre_bodega ?? "",
+      }))
       : [],
   };
 }
@@ -212,9 +212,9 @@ export function mapCotizacionApiToUi(item: CotizacionApi): CotizacionUI {
       const subtotal = cantidad * precio;
       const ivaPorcentaje = toNumber(
         detalle.iva_porcentaje ??
-          detalle.iva?.porcentaje ??
-          detalle.producto?.iva?.porcentaje ??
-          0
+        detalle.iva?.porcentaje ??
+        detalle.producto?.iva?.porcentaje ??
+        0
       );
 
       return {
@@ -228,15 +228,14 @@ export function mapCotizacionApiToUi(item: CotizacionApi): CotizacionUI {
   );
 
   const subtotal = productos.reduce((acc, itemProducto) => {
-    const porcentaje = Number(itemProducto.producto.iva ?? 0);
-    const base = itemProducto.subtotal / (1 + porcentaje / 100);
-    return acc + base;
+    return acc + Number(itemProducto.subtotal || 0);
   }, 0);
 
   const impuestos = productos.reduce((acc, itemProducto) => {
     const porcentaje = Number(itemProducto.producto.iva ?? 0);
-    const base = itemProducto.subtotal / (1 + porcentaje / 100);
-    return acc + (itemProducto.subtotal - base);
+    const subtotalProducto = Number(itemProducto.subtotal || 0);
+
+    return acc + subtotalProducto * (porcentaje / 100);
   }, 0);
 
   return {

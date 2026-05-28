@@ -43,6 +43,13 @@ export type PaginatedProveedoresResponse = {
   data: ProveedorItem[];
 };
 
+export type PaisOption = CatalogOption;
+
+export type DepartamentoOption = CatalogOption & {
+  idPais: number;
+  pais: string;
+};
+
 type RequestCandidate = {
   url: string;
   config?: AxiosRequestConfig;
@@ -184,8 +191,8 @@ export const getTiposProveedorOptions = async (): Promise<CatalogOption[]> => {
   const rows = Array.isArray(raw)
     ? raw
     : Array.isArray(raw?.data)
-    ? raw.data
-    : [];
+      ? raw.data
+      : [];
 
   const mapped = rows
     .map((item: any) => ({
@@ -197,12 +204,54 @@ export const getTiposProveedorOptions = async (): Promise<CatalogOption[]> => {
   return mapped;
 };
 
-export const getMunicipiosOptions = async (): Promise<MunicipioOption[]> => {
-  const response = await api.get("/municipios");
+const mapPaisOption = (raw: any): PaisOption => {
+  return {
+    value: String(raw?.id_pais ?? raw?.id ?? ""),
+    label: String(raw?.nombre_pais ?? raw?.nombre ?? "").trim(),
+  };
+};
+
+const mapDepartamentoOption = (raw: any): DepartamentoOption => {
+  return {
+    value: String(raw?.id_departamento ?? raw?.id ?? ""),
+    label: String(raw?.nombre_departamento ?? raw?.nombre ?? "").trim(),
+    idPais: Number(raw?.id_pais ?? raw?.paises?.id_pais ?? 0),
+    pais: String(raw?.paises?.nombre_pais ?? raw?.nombre_pais ?? "").trim(),
+  };
+};
+
+export const getMunicipiosOptions = async (params?: {
+  idDepartamento?: number;
+}): Promise<MunicipioOption[]> => {
+  const response = await api.get("/municipios", {
+    params: cleanParams({
+      id_departamento: params?.idDepartamento,
+    }),
+  });
 
   const items = extractArray(response.data)
     .map(mapMunicipioOption)
     .filter((item) => item.value && item.nombre);
+
+  return sortOptions(items);
+};
+
+export const getPaisesOptions = async (): Promise<PaisOption[]> => {
+  const response = await api.get("/paises");
+
+  const items = extractArray(response.data)
+    .map(mapPaisOption)
+    .filter((item) => item.value && item.label);
+
+  return sortOptions(items);
+};
+
+export const getDepartamentosOptions = async (): Promise<DepartamentoOption[]> => {
+  const response = await api.get("/departamentos");
+
+  const items = extractArray(response.data)
+    .map(mapDepartamentoOption)
+    .filter((item) => item.value && item.label && item.idPais);
 
   return sortOptions(items);
 };

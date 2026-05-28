@@ -119,6 +119,14 @@ function normalizeText(value?: string | null) {
     .toLowerCase();
 }
 
+function formatMoney(value: unknown) {
+  return new Intl.NumberFormat("es-CO", {
+    style: "currency",
+    currency: "COP",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+}
+
 function normalizeDate(value?: string | null) {
   if (!value) return "";
   return String(value).slice(0, 10);
@@ -167,24 +175,29 @@ function calcularTotalesConIva(
 ) {
   let subtotalSinIva = 0;
   let totalIva = 0;
+  const impuestosPorPorcentaje: Record<number, number> = {};
 
   items.forEach((item) => {
-    const subtotalBruto = Number(item.subtotal || 0);
+    const subtotal = Number(item.subtotal || 0);
     const ivaPorcentaje = Number(item.iva || 0);
+    const ivaValor = subtotal * (ivaPorcentaje / 100);
 
-    const base = ivaPorcentaje > 0
-      ? subtotalBruto / (1 + ivaPorcentaje / 100)
-      : subtotalBruto;
-
-    const ivaValor = subtotalBruto - base;
-
-    subtotalSinIva += base;
+    subtotalSinIva += subtotal;
     totalIva += ivaValor;
+
+    if (ivaPorcentaje > 0) {
+      if (!impuestosPorPorcentaje[ivaPorcentaje]) {
+        impuestosPorPorcentaje[ivaPorcentaje] = 0;
+      }
+
+      impuestosPorPorcentaje[ivaPorcentaje] += ivaValor;
+    }
   });
 
   return {
     subtotalSinIva,
     totalIva,
+    impuestosPorPorcentaje,
     total: subtotalSinIva + totalIva,
   };
 }
@@ -215,6 +228,8 @@ function buildRemisionUi(item: RemisionVentaApi): RemisionListadoUi {
     };
   });
 
+  const totales = calcularTotalesConIva(detalle);
+
   return {
     id: item.id_remision_venta,
     numeroRemision:
@@ -228,7 +243,7 @@ function buildRemisionUi(item: RemisionVentaApi): RemisionListadoUi {
     fecha: normalizeDate(item.fecha_creacion),
     estado: mapEstado(item.estado_remision_venta?.nombre_estado),
     items: detalle.length,
-    total: detalle.reduce((acc, d) => acc + d.subtotal, 0),
+    total: totales.total,
     observaciones: item.observaciones ?? "",
     bodega: item.orden_venta?.bodega?.nombre_bodega ?? "",
     estadoId:
@@ -1082,7 +1097,7 @@ export default function RemisionesVenta() {
     };
 
     const formatMoneyPdf = (value: number) =>
-      `$${Number(value || 0).toLocaleString("es-CO", {
+      `COP$${Number(value || 0).toLocaleString("es-CO", {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       })}`;
@@ -1153,6 +1168,36 @@ export default function RemisionesVenta() {
       doc.addImage(logo.dataUrl, "PNG", logoX, logoY, drawWidth, drawHeight);
     }
 
+    const detallePdf = remision.detalle.map((item) => {
+      const cantidad = toNumber(item.cantidad);
+      const precio = toNumber(item.precio);
+      const ivaPorcentaje = toNumber(item.iva);
+      const subtotal = cantidad * precio;
+      const ivaValor = subtotal * (ivaPorcentaje / 100);
+
+      return {
+        producto: item.producto || "-",
+        lote: item.lote || "-",
+        cantidad,
+        ivaPorcentaje,
+        precio,
+        subtotal,
+        ivaValor,
+      };
+    });
+
+    const subtotalGeneral = detallePdf.reduce(
+      (acc, item) => acc + item.subtotal,
+      0
+    );
+
+    const ivaGeneral = detallePdf.reduce(
+      (acc, item) => acc + item.ivaValor,
+      0
+    );
+
+    const totalGeneral = subtotalGeneral + ivaGeneral;
+
     // Título
     doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
@@ -1180,7 +1225,7 @@ export default function RemisionesVenta() {
 
     // Tarjeta información general
     doc.setFillColor(...COLORS.card);
-    doc.roundedRect(marginX, 42, pageWidth - marginX * 2, 34, 3, 3, "F");
+    doc.roundedRect(marginX, 42, pageWidth - marginX * 2, 44, 3, 3, "F");
 
     doc.setTextColor(...COLORS.text);
     doc.setFont("helvetica", "bold");
@@ -1203,6 +1248,9 @@ export default function RemisionesVenta() {
     doc.text("Orden venta:", marginX + 4, 70);
     doc.text(remision.ordenVenta || "-", marginX + 28, 70);
 
+    doc.text("Bodega:", marginX + 4, 78);
+    doc.text(remision.bodega || "-", marginX + 28, 78);
+
     doc.text("Items:", 112, 56);
     doc.text(String(remision.items || 0), 126, 56);
 
@@ -1214,25 +1262,25 @@ export default function RemisionesVenta() {
     doc.setFont("helvetica", "bold");
     doc.text(`Estado: ${estadoStyle.label}`, 134, 66.4, { align: "center" });
 
-    // Línea separadora
     doc.setDrawColor(...COLORS.primaryLine);
     doc.setLineWidth(0.6);
-    doc.line(marginX, 86, rightX, 86);
+    doc.line(marginX, 94, rightX, 94);
 
     // Tabla
     autoTable(doc, {
-      startY: 92,
+      startY: 100,
       margin: { left: marginX, right: marginX },
-      head: [["Producto", "Lote", "Cantidad", "Precio Unit.", "Subtotal"]],
-      body: remision.detalle.length
-        ? remision.detalle.map((item) => [
-          item.producto || "-",
-          item.lote || "-",
+      head: [["Producto", "Lote", "Cantidad", "IVA", "Precio Unit.", "Subtotal"]],
+      body: detallePdf.length
+        ? detallePdf.map((item) => [
+          item.producto,
+          item.lote,
           String(item.cantidad ?? 0),
+          `IVA (${item.ivaPorcentaje.toFixed(2)}%)`,
           formatMoneyPdf(item.precio || 0),
           formatMoneyPdf(item.subtotal || 0),
         ])
-        : [["Sin productos", "-", "-", "-", "-"]],
+        : [["Sin productos", "-", "-", "-", "-", "-"]],
       theme: "grid",
       headStyles: {
         fillColor: [...COLORS.primary],
@@ -1245,7 +1293,7 @@ export default function RemisionesVenta() {
         lineWidth: 0.1,
       },
       bodyStyles: {
-        fontSize: 8.5,
+        fontSize: 8.3,
         textColor: [...COLORS.text],
         lineColor: [...COLORS.border],
         lineWidth: 0.1,
@@ -1259,15 +1307,16 @@ export default function RemisionesVenta() {
         overflow: "linebreak",
       },
       columnStyles: {
-        0: { cellWidth: 72 },
-        1: { cellWidth: 30, halign: "center" },
-        2: { cellWidth: 22, halign: "center" },
-        3: { cellWidth: 30, halign: "right" },
-        4: { cellWidth: 30, halign: "right" },
+        0: { cellWidth: 58 },
+        1: { cellWidth: 28, halign: "center" },
+        2: { cellWidth: 20, halign: "center" },
+        3: { cellWidth: 24, halign: "center" },
+        4: { cellWidth: 28, halign: "right" },
+        5: { cellWidth: 30, halign: "right" },
       },
     });
 
-    let currentY = ((doc as any).lastAutoTable?.finalY || 92) + 8;
+    let currentY = ((doc as any).lastAutoTable?.finalY || 100) + 8;
 
     const observacionesLines = remision.observaciones
       ? doc.splitTextToSize(remision.observaciones, 95)
@@ -1277,7 +1326,7 @@ export default function RemisionesVenta() {
       ? Math.max(24, 12 + observacionesLines.length * 4.5)
       : 0;
 
-    const totalsHeight = 24;
+    const totalsHeight = 31;
     const blockHeight = Math.max(observacionesHeight, totalsHeight);
 
     if (currentY + blockHeight > pageHeight - 24) {
@@ -1285,7 +1334,6 @@ export default function RemisionesVenta() {
       currentY = 20;
     }
 
-    // Observaciones
     if (remision.observaciones) {
       doc.setFillColor(255, 251, 235);
       doc.roundedRect(marginX, currentY, 108, observacionesHeight, 3, 3, "F");
@@ -1301,24 +1349,44 @@ export default function RemisionesVenta() {
       doc.text(observacionesLines, marginX + 4, currentY + 13);
     }
 
-    // Total
     const totalsX = remision.observaciones ? 128 : 124;
     const totalsWidth = remision.observaciones ? 68 : 72;
 
     doc.setFillColor(...COLORS.card);
     doc.roundedRect(totalsX, currentY, totalsWidth, totalsHeight, 3, 3, "F");
 
+    doc.setTextColor(...COLORS.text);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.5);
+
+    doc.text("Subtotal:", totalsX + 4, currentY + 8);
+    doc.text(
+      formatMoneyPdf(subtotalGeneral),
+      totalsX + totalsWidth - 4,
+      currentY + 8,
+      { align: "right" }
+    );
+
+    doc.text("IVA:", totalsX + 4, currentY + 15);
+    doc.text(
+      formatMoneyPdf(ivaGeneral),
+      totalsX + totalsWidth - 4,
+      currentY + 15,
+      { align: "right" }
+    );
+
     doc.setFillColor(...COLORS.primary);
-    doc.roundedRect(totalsX + 2, currentY + 7, totalsWidth - 4, 9, 2, 2, "F");
+    doc.roundedRect(totalsX + 2, currentY + 20, totalsWidth - 4, 9, 2, 2, "F");
 
     doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10.5);
-    doc.text("TOTAL", totalsX + 5, currentY + 13.5);
+
+    doc.text("TOTAL", totalsX + 5, currentY + 26);
     doc.text(
-      formatMoneyPdf(remision.total || 0),
+      formatMoneyPdf(totalGeneral),
       totalsX + totalsWidth - 4,
-      currentY + 13.5,
+      currentY + 26,
       { align: "right" }
     );
 
@@ -1370,6 +1438,18 @@ export default function RemisionesVenta() {
 
     return orden.cantidad_pendiente_total;
   };
+
+  const totalesRemisionSeleccionada = useMemo(() => {
+    if (!remisionSeleccionada) {
+      return {
+        subtotalSinIva: 0,
+        totalIva: 0,
+        total: 0,
+      };
+    }
+
+    return calcularTotalesConIva(remisionSeleccionada.detalle);
+  }, [remisionSeleccionada]);
 
   return (
     <div className="space-y-6">
@@ -1914,97 +1994,144 @@ export default function RemisionesVenta() {
       </Dialog>
 
       <Dialog open={isVer} onOpenChange={(open) => !open && closeToList()}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Detalle de Remisión</DialogTitle>
+            <DialogDescription>
+              Información completa de la remisión de venta
+            </DialogDescription>
           </DialogHeader>
 
           {remisionSeleccionada && (
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label>N° Remisión</Label>
-                  <Input value={remisionSeleccionada.numeroRemision} disabled />
-                </div>
-                <div>
-                  <Label>Orden de Venta</Label>
-                  <Input value={remisionSeleccionada.ordenVenta} disabled />
-                </div>
-                <div>
-                  <Label>Cliente</Label>
-                  <Input value={remisionSeleccionada.cliente} disabled />
+                  <Label className="text-gray-600">N° Remisión</Label>
+                  <p className="font-medium">{remisionSeleccionada.numeroRemision}</p>
                 </div>
 
                 <div>
-                  <Label>Documento / NIT</Label>
-                  <Input
-                    value={remisionSeleccionada.documentoCliente || "No registrado"}
-                    disabled
-                  />
+                  <Label className="text-gray-600">Estado</Label>
+                  <p className="font-medium">{remisionSeleccionada.estado}</p>
                 </div>
 
                 <div>
-                  <Label>Estado</Label>
-                  <Input value={remisionSeleccionada.estado} disabled />
+                  <Label className="text-gray-600">Orden de Venta</Label>
+                  <p className="font-medium">{remisionSeleccionada.ordenVenta}</p>
+                </div>
+
+                <div>
+                  <Label className="text-gray-600">Fecha</Label>
+                  <p className="font-medium">
+                    {remisionSeleccionada.fecha
+                      ? new Date(remisionSeleccionada.fecha).toLocaleDateString("es-CO")
+                      : "-"}
+                  </p>
+                </div>
+
+                <div>
+                  <Label className="text-gray-600">Cliente</Label>
+                  <p className="font-medium">{remisionSeleccionada.cliente}</p>
+                </div>
+
+                <div>
+                  <Label className="text-gray-600">Documento / NIT</Label>
+                  <p className="font-medium">
+                    {remisionSeleccionada.documentoCliente || "No registrado"}
+                  </p>
+                </div>
+
+                <div className="md:col-span-2">
+                  <Label className="text-gray-600">Bodega</Label>
+                  <p className="font-medium">{remisionSeleccionada.bodega || "-"}</p>
                 </div>
               </div>
 
-              <div className="overflow-x-auto rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Producto</TableHead>
-                      <TableHead>Lote</TableHead>
-                      <TableHead>Cantidad</TableHead>
-                      <TableHead>Precio</TableHead>
-                      <TableHead>IVA %</TableHead>
-                      <TableHead>Subtotal</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {remisionSeleccionada.detalle.map((item, index) => (
-                      <TableRow key={`${item.producto}-${index}`}>
-                        <TableCell>{item.producto}</TableCell>
-                        <TableCell>{item.lote || "-"}</TableCell>
-                        <TableCell>{item.cantidad}</TableCell>
-                        <TableCell>
-                          $
-                          {item.precio.toLocaleString("es-CO", {
-                            minimumFractionDigits: 2,
-                          })}
-                        </TableCell>
-                        <TableCell>{item.iva}%</TableCell>
-                        <TableCell>
-                          $
-                          {item.subtotal.toLocaleString("es-CO", {
-                            minimumFractionDigits: 2,
-                          })}
-                        </TableCell>
+              <div className="border-t pt-4">
+                <Label className="text-gray-600 mb-2 block">Productos</Label>
+
+                <div className="overflow-x-auto rounded-lg border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-gray-50">
+                        <TableHead>Producto</TableHead>
+                        <TableHead>Lote</TableHead>
+                        <TableHead className="text-center">Cantidad</TableHead>
+                        <TableHead className="text-center">IVA</TableHead>
+                        <TableHead className="text-right">Precio Unit.</TableHead>
+                        <TableHead className="text-right">Subtotal</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+
+                    <TableBody>
+                      {remisionSeleccionada.detalle.map((item, index) => (
+                        <TableRow key={`${item.producto}-${index}`}>
+                          <TableCell className="font-medium">
+                            {item.producto}
+                          </TableCell>
+
+                          <TableCell>{item.lote || "-"}</TableCell>
+
+                          <TableCell className="text-center">
+                            {item.cantidad}
+                          </TableCell>
+
+                          <TableCell className="text-center">
+                            IVA {item.iva}%
+                          </TableCell>
+
+                          <TableCell className="text-right">
+                            {formatMoney(item.precio)}
+                          </TableCell>
+
+                          <TableCell className="text-right">
+                            {formatMoney(item.subtotal)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
 
-              {remisionSeleccionada.observaciones && (
-                <div>
-                  <Label>Observaciones</Label>
-                  <textarea
-                    className="w-full min-h-22.5 rounded-md border border-gray-300 px-3 py-2 bg-gray-50"
-                    value={remisionSeleccionada.observaciones || "Sin observaciones"}
-                    disabled
-                  />
-                </div>
-              )}
+              <div className="border-t pt-4">
+                <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">N° de Items:</span>
+                    <span className="font-medium">{remisionSeleccionada.items}</span>
+                  </div>
 
-              <div className="flex justify-between items-center">
-                <div className="text-lg font-semibold">
-                  Total: $
-                  {remisionSeleccionada.total.toLocaleString("es-CO", {
-                    minimumFractionDigits: 2,
-                  })}
-                </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Subtotal:</span>
+                    <span className="font-medium">
+                      {formatMoney(totalesRemisionSeleccionada.subtotalSinIva)}
+                    </span>
+                  </div>
 
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">IVA:</span>
+                    <span className="font-medium">
+                      {formatMoney(totalesRemisionSeleccionada.totalIva)}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between text-lg border-t pt-2 mt-2">
+                    <span className="font-semibold">Total:</span>
+                    <span className="font-bold text-blue-600">
+                      {formatMoney(totalesRemisionSeleccionada.total)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-gray-600">Observaciones</Label>
+                <p className="text-sm bg-gray-50 p-3 rounded-lg min-h-12">
+                  {remisionSeleccionada.observaciones || "Sin observaciones"}
+                </p>
+              </div>
+
+              <div className="flex justify-end">
                 <Button
                   onClick={() => void handleDescargarPDF(remisionSeleccionada)}
                   className="bg-green-600 hover:bg-green-700"

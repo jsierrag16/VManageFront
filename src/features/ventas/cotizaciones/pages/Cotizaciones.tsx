@@ -52,6 +52,7 @@ import {
   DialogDescription,
 } from "../../../../shared/components/ui/dialog";
 import { toast } from "sonner";
+import logoVmanage from "../../../../assets/images/VLogo.png";
 import type {
   ClienteCotizacion,
   ProductoCotizacion,
@@ -66,6 +67,13 @@ import {
   ESTADO_COTIZACION_FALLBACK,
   type CotizacionUI as Cotizacion,
 } from "@/features/ventas/cotizaciones/services/cotizaciones.service";
+
+const normalizeText = (value: unknown) =>
+  String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
 
 export default function Cotizaciones() {
   const navigate = useNavigate();
@@ -110,6 +118,8 @@ export default function Cotizaciones() {
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+
+  const [detalleCotizacionInicial, setDetalleCotizacionInicial] = useState("");
 
   const cotizacionSeleccionada = useMemo(() => {
     if (!params.id) return null;
@@ -187,16 +197,6 @@ export default function Cotizaciones() {
   const precioMinimoProductoSeleccionado = selectedProductoId
     ? getPrecioMinimoProducto(selectedProductoId)
     : 0;
-
-  const generarNumeroCotizacion = () => {
-    const maxNum = cotizaciones.reduce((max, c) => {
-      const match = /^COT-(\d+)$/.exec(c.numeroCotizacion);
-      const num = match ? Number(match[1]) : 0;
-      return Number.isFinite(num) ? Math.max(max, num) : max;
-    }, 0);
-
-    return `COT-${String(maxNum + 1).padStart(4, "0")}`;
-  };
 
   const estadoIds = useMemo(() => {
     const map = { ...ESTADO_COTIZACION_FALLBACK };
@@ -305,14 +305,68 @@ export default function Cotizaciones() {
     void cargarCatalogos();
   }, [selectedBodegaId, selectedBodegaNombre]);
 
-  const getFechaActual = () => {
-    return new Date().toISOString().split("T")[0];
+  const formatMoney = (value: unknown) => {
+    return `COP$${Number(value || 0).toLocaleString("es-CO", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
   };
 
-  const getFechaVencimiento = () => {
-    const fecha = new Date();
-    fecha.setDate(fecha.getDate() + 10);
-    return fecha.toISOString().split("T")[0];
+  const padDate = (value: number) => String(value).padStart(2, "0");
+
+  const formatDateLocalInput = (date: Date) => {
+    return `${date.getFullYear()}-${padDate(date.getMonth() + 1)}-${padDate(
+      date.getDate()
+    )}`;
+  };
+
+  const parseDateOnlyLocal = (value?: string | null) => {
+    if (!value) return null;
+
+    const dateOnly = String(value).slice(0, 10);
+    const [year, month, day] = dateOnly.split("-").map(Number);
+
+    if (!year || !month || !day) return null;
+
+    return new Date(year, month - 1, day);
+  };
+
+  const formatDateDisplay = (value?: string | null) => {
+    const date = parseDateOnlyLocal(value);
+
+    if (!date || Number.isNaN(date.getTime())) return "-";
+
+    return date.toLocaleDateString("es-CO");
+  };
+
+  const getFechaActual = () => {
+    return formatDateLocalInput(new Date());
+  };
+
+  const sumarDiasAFechaLocal = (fechaBase: string, dias: number) => {
+    const date = parseDateOnlyLocal(fechaBase);
+
+    if (!date) return "";
+
+    date.setDate(date.getDate() + dias);
+
+    return formatDateLocalInput(date);
+  };
+
+  const getFechaVencimientoDesde = (fechaBase = getFechaActual()) => {
+    return sumarDiasAFechaLocal(fechaBase, 10);
+  };
+
+  const buildDetalleCotizacionKey = (items: ProductoOrdenCotizacion[]) => {
+    return JSON.stringify(
+      items
+        .map((item) => ({
+          id_producto: String(item.producto.id),
+          cantidad: Number(item.cantidad || 0),
+          precio: Number(item.precio || 0),
+        }))
+        .sort((a, b) => a.id_producto.localeCompare(b.id_producto))
+    );
   };
 
   const clientesActivos = useMemo(() => {
@@ -432,12 +486,14 @@ export default function Cotizaciones() {
         ? String(selectedBodegaId)
         : "";
 
+    const fechaActual = getFechaActual();
+
     setFormData({
-      numeroCotizacion: generarNumeroCotizacion(),
+      numeroCotizacion: "",
       cliente: "",
       idCliente: "",
-      fecha: getFechaActual(),
-      fechaVencimiento: getFechaVencimiento(),
+      fecha: fechaActual,
+      fechaVencimiento: getFechaVencimientoDesde(fechaActual),
       estado: "Pendiente",
       items: 0,
       subtotal: 0,
@@ -463,6 +519,8 @@ export default function Cotizaciones() {
     if (!isEditar) return;
     if (!cotizacionSeleccionada) return;
 
+    const productosEdit = cotizacionSeleccionada.productos || [];
+
     setFormData({
       numeroCotizacion: cotizacionSeleccionada.numeroCotizacion,
       cliente: cotizacionSeleccionada.cliente,
@@ -478,11 +536,42 @@ export default function Cotizaciones() {
       idBodega: String(cotizacionSeleccionada.idBodega),
     });
 
+    setProductosOrden(productosEdit);
+    setDetalleCotizacionInicial(buildDetalleCotizacionKey(productosEdit));
+
     setProductosOrden(cotizacionSeleccionada.productos || []);
     setSelectedProductoId("");
     setCantidadProducto("0");
     setPrecioProducto("");
   }, [isEditar, cotizacionSeleccionada]);
+
+  useEffect(() => {
+    if (!isEditar) return;
+    if (!cotizacionSeleccionada) return;
+    if (!detalleCotizacionInicial) return;
+
+    const detalleActual = buildDetalleCotizacionKey(productosOrden);
+
+    if (detalleActual === detalleCotizacionInicial) {
+      setFormData((prev) => ({
+        ...prev,
+        fechaVencimiento: cotizacionSeleccionada.fechaVencimiento,
+      }));
+      return;
+    }
+
+    const fechaActual = getFechaActual();
+
+    setFormData((prev) => ({
+      ...prev,
+      fechaVencimiento: getFechaVencimientoDesde(fechaActual),
+    }));
+  }, [
+    isEditar,
+    cotizacionSeleccionada,
+    detalleCotizacionInicial,
+    productosOrden,
+  ]);
 
   useEffect(() => {
     if (!selectedProductoId) {
@@ -566,9 +655,9 @@ export default function Cotizaciones() {
     const impuestosPorPorcentaje: { [key: number]: number } = {};
 
     productosOrden.forEach((item) => {
-      const ivaProducto = item.producto.iva || 0;
-      const subtotalProducto = item.subtotal / (1 + ivaProducto / 100);
-      const ivaProductoMonto = item.subtotal - subtotalProducto;
+      const subtotalProducto = Number(item.subtotal || 0);
+      const ivaProducto = Number(item.producto.iva || 0);
+      const ivaProductoMonto = subtotalProducto * (ivaProducto / 100);
 
       subtotalSinIva += subtotalProducto;
       totalImpuestos += ivaProductoMonto;
@@ -577,6 +666,7 @@ export default function Cotizaciones() {
         if (!impuestosPorPorcentaje[ivaProducto]) {
           impuestosPorPorcentaje[ivaProducto] = 0;
         }
+
         impuestosPorPorcentaje[ivaProducto] += ivaProductoMonto;
       }
     });
@@ -709,7 +799,6 @@ export default function Cotizaciones() {
 
   const confirmCreate = async () => {
     if (
-      !formData.numeroCotizacion ||
       !formData.idCliente ||
       !formData.fecha ||
       !formData.fechaVencimiento ||
@@ -771,9 +860,60 @@ export default function Cotizaciones() {
   };
 
   const confirmEdit = async () => {
-    toast.info(
-      "Editar cotización todavía no está disponible porque tu backend actual no tiene PATCH /cotizaciones/:id"
-    );
+    if (!cotizacionSeleccionada) return;
+
+    if (!formData.idCliente || !formData.fecha || !formData.fechaVencimiento || !formData.idBodega) {
+      toast.error("Por favor completa todos los campos obligatorios");
+      return;
+    }
+
+    if (productosOrden.length === 0) {
+      toast.error("Debes agregar al menos un producto a la cotización");
+      return;
+    }
+
+    for (const item of productosOrden) {
+      const precioMinimo = getPrecioMinimoProducto(String(item.producto.id));
+      const precioActual = Number(item.precio ?? 0);
+
+      if (precioMinimo > 0 && precioActual < precioMinimo) {
+        toast.error(
+          `El producto "${item.producto.nombre}" no puede tener un precio menor a ${precioMinimo.toLocaleString("es-CO")}`
+        );
+        return;
+      }
+    }
+
+    try {
+      const actualizada = await cotizacionesService.update(cotizacionSeleccionada.id, {
+        fecha: formData.fecha,
+        fecha_vencimiento: formData.fechaVencimiento,
+        id_cliente: Number(formData.idCliente),
+        id_bodega: Number(formData.idBodega),
+        id_estado_cotizacion: estadoIds[formData.estado],
+        observaciones: formData.observaciones.trim() || undefined,
+        detalle: productosOrden.map((item) => ({
+          id_producto: Number(item.producto.id),
+          cantidad: Number(item.cantidad),
+          precio_unitario: Number(item.precio),
+          ...(item.idIva ? { id_iva: item.idIva } : {}),
+        })),
+      });
+
+      setCotizaciones((prev) =>
+        prev.map((cotizacion) =>
+          cotizacion.id === actualizada.id ? actualizada : cotizacion
+        )
+      );
+
+      toast.success("Cotización actualizada exitosamente");
+      closeToList();
+    } catch (error: any) {
+      console.error("Error actualizando cotización:", error);
+      toast.error(
+        error?.response?.data?.message || "No se pudo actualizar la cotización"
+      );
+    }
   };
 
   const confirmAnular = async () => {
@@ -811,191 +951,456 @@ export default function Cotizaciones() {
     }
   };
 
-  const handleDownloadPDF = (
+  type PdfImageInfo = {
+    dataUrl: string;
+    width: number;
+    height: number;
+  };
+
+  const loadImageInfoAsDataUrl = (src: string): Promise<PdfImageInfo> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("No se pudo obtener el contexto del canvas"));
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0);
+
+        resolve({
+          dataUrl: canvas.toDataURL("image/png"),
+          width: img.naturalWidth,
+          height: img.naturalHeight,
+        });
+      };
+
+      img.onerror = () => reject(new Error("No se pudo cargar el logo"));
+      img.src = src;
+    });
+  };
+
+  const formatPdfMoney = (value: unknown) =>
+    `COP$${Number(value || 0).toLocaleString("es-CO", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+
+  const formatPdfDate = (value?: string | null) => {
+    return formatDateDisplay(value);
+  };
+
+  const safePdfText = (value: unknown, fallback = "-") => {
+    const text = String(value ?? "").trim();
+    return text || fallback;
+  };
+
+  const handleDownloadPDF = async (
     cotizacion: Cotizacion,
     incluirPrecios: boolean = true
   ) => {
-    const doc = new jsPDF();
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+    });
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const marginX = 14;
+    const rightX = pageWidth - marginX;
+
+    const COLORS = {
+      primary: [14, 116, 217] as const,
+      primarySoft: [239, 246, 255] as const,
+      primaryLine: [191, 219, 254] as const,
+      text: [51, 65, 85] as const,
+      muted: [100, 116, 139] as const,
+      card: [248, 250, 252] as const,
+      successBg: [220, 252, 231] as const,
+      successText: [22, 101, 52] as const,
+      dangerBg: [254, 226, 226] as const,
+      dangerText: [153, 27, 27] as const,
+      warningBg: [255, 247, 237] as const,
+      warningText: [180, 83, 9] as const,
+      border: [226, 232, 240] as const,
+    };
+
+    const getEstadoStyle = (estado: string) => {
+      const normalized = normalizeText(estado);
+
+      if (normalized.includes("aprobad")) {
+        return {
+          bg: COLORS.successBg,
+          text: COLORS.successText,
+          label: estado || "Aprobada",
+        };
+      }
+
+      if (normalized.includes("rechaz") || normalized.includes("anulad")) {
+        return {
+          bg: COLORS.dangerBg,
+          text: COLORS.dangerText,
+          label: estado || "Anulada",
+        };
+      }
+
+      return {
+        bg: COLORS.warningBg,
+        text: COLORS.warningText,
+        label: estado || "Pendiente",
+      };
+    };
+
+    let logo: PdfImageInfo | null = null;
+
+    try {
+      logo = await loadImageInfoAsDataUrl(logoVmanage);
+    } catch (error) {
+      console.warn("No se pudo cargar el logo para el PDF:", error);
+    }
+
     const documentoCliente = getDocumentoClienteCotizacion(cotizacion);
 
-    doc.setFontSize(20);
-    doc.setFont("helvetica", "bold");
-    doc.text("COTIZACIÓN", 105, 20, { align: "center" });
+    const detallePdf =
+      cotizacion.productos?.map((item) => {
+        const cantidad = Number(item.cantidad || 0);
+        const precio = Number(item.precio || 0);
+        const ivaPorcentaje = Number(item.producto.iva || 0);
+        const subtotal = cantidad * precio;
+        const ivaValor = subtotal * (ivaPorcentaje / 100);
 
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
+        return {
+          producto: item.producto.nombre || "-",
+          cantidad,
+          precio,
+          ivaPorcentaje,
+          subtotal,
+          ivaValor,
+        };
+      }) ?? [];
 
-    doc.text(`N° Cotización: ${cotizacion.numeroCotizacion}`, 20, 40);
-    doc.text(`Cliente: ${cotizacion.cliente}`, 20, 46);
-    doc.text(`Documento/NIT: ${documentoCliente}`, 20, 52);
-    doc.text(`Bodega: ${cotizacion.bodega}`, 20, 58);
-
-    doc.text(
-      `Fecha: ${new Date(cotizacion.fecha).toLocaleDateString("es-CO")}`,
-      120,
-      40
+    const subtotalGeneral = detallePdf.reduce(
+      (acc, item) => acc + item.subtotal,
+      0
     );
 
-    doc.text(
-      `Fecha Vencimiento: ${new Date(
-        cotizacion.fechaVencimiento
-      ).toLocaleDateString("es-CO")}`,
-      120,
-      46
+    const ivaGeneral = detallePdf.reduce(
+      (acc, item) => acc + item.ivaValor,
+      0
     );
 
-    doc.text(`Estado: ${cotizacion.estado}`, 120, 52);
+    const totalGeneral = subtotalGeneral + ivaGeneral;
 
-    doc.setLineWidth(0.5);
-    doc.line(20, 64, 190, 64);
+    const impuestosPorPorcentajePdf = detallePdf.reduce<Record<number, number>>(
+      (acc, item) => {
+        const porcentaje = Number(item.ivaPorcentaje || 0);
+        const ivaValor = Number(item.ivaValor || 0);
 
-    if (cotizacion.productos && cotizacion.productos.length > 0) {
-      let tableData;
-      let tableHeaders;
-      let columnStyles;
+        if (porcentaje > 0) {
+          acc[porcentaje] = (acc[porcentaje] || 0) + ivaValor;
+        }
 
-      if (incluirPrecios) {
-        tableData = cotizacion.productos.map((item) => [
-          item.producto.nombre,
-          item.cantidad.toString(),
-          `$${item.precio.toLocaleString("es-CO", {
-            minimumFractionDigits: 2,
-          })}`,
-          `${item.producto.iva}%`,
-          `$${item.subtotal.toLocaleString("es-CO", {
-            minimumFractionDigits: 2,
-          })}`,
-        ]);
+        return acc;
+      },
+      {}
+    );
 
-        tableHeaders = [
-          ["Producto", "Cantidad", "Precio Unit.", "IVA%", "Subtotal"],
-        ];
+    const ivaEntriesPdf = Object.entries(impuestosPorPorcentajePdf).sort(
+      ([a], [b]) => Number(a) - Number(b)
+    );
 
-        columnStyles = {
-          0: { cellWidth: 65 },
-          1: { cellWidth: 25, halign: "center" },
-          2: { cellWidth: 35, halign: "right" },
-          3: { cellWidth: 20, halign: "center" },
-          4: { cellWidth: 35, halign: "right" },
-        };
-      } else {
-        tableData = cotizacion.productos.map((item) => [
-          item.producto.nombre,
-          item.cantidad.toString(),
-        ]);
+    doc.setFillColor(...COLORS.primary);
+    doc.rect(0, 0, pageWidth, 34, "F");
 
-        tableHeaders = [["Producto", "Cantidad"]];
+    doc.setFillColor(9, 92, 181);
+    doc.rect(0, 34, pageWidth, 1.2, "F");
 
-        columnStyles = {
-          0: { cellWidth: 130 },
-          1: { cellWidth: 30, halign: "center" },
-        };
-      }
+    if (logo) {
+      const maxLogoWidth = 22;
+      const maxLogoHeight = 14;
+      const scale = Math.min(
+        maxLogoWidth / logo.width,
+        maxLogoHeight / logo.height
+      );
 
-      autoTable(doc, {
-        startY: 71,
-        head: tableHeaders,
-        body: tableData,
-        theme: "grid",
-        headStyles: {
-          fillColor: [37, 99, 235],
-          textColor: 255,
-          fontSize: 10,
-          fontStyle: "bold",
-        },
-        styles: {
-          fontSize: 9,
-          cellPadding: 3,
-        },
-        columnStyles: columnStyles as any,
-      });
+      const drawWidth = logo.width * scale;
+      const drawHeight = logo.height * scale;
+      const logoX = marginX;
+      const logoY = (34 - drawHeight) / 2;
+
+      doc.addImage(logo.dataUrl, "PNG", logoX, logoY, drawWidth, drawHeight);
     }
 
-    const finalY = (doc as any).lastAutoTable?.finalY || 71;
-    let totalesY = finalY + 10;
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.text("COTIZACIÓN", pageWidth / 2, 14.8, { align: "center" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text("VManage • Gestión empresarial", pageWidth / 2, 21.8, {
+      align: "center",
+    });
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.7);
+    doc.text(`Código: ${safePdfText(cotizacion.numeroCotizacion)}`, rightX, 11.5, {
+      align: "right",
+    });
+    doc.text(`Fecha: ${formatPdfDate(cotizacion.fecha)}`, rightX, 17.8, {
+      align: "right",
+    });
+    doc.text(
+      `Vencimiento: ${formatPdfDate(cotizacion.fechaVencimiento)}`,
+      rightX,
+      24.1,
+      { align: "right" }
+    );
+
+    doc.setFillColor(...COLORS.card);
+    doc.roundedRect(marginX, 42, pageWidth - marginX * 2, 42, 3, 3, "F");
+
+    doc.setTextColor(...COLORS.text);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.5);
+    doc.text("Información general", marginX + 4, 49);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.2);
+
+    const clienteLines = doc.splitTextToSize(
+      safePdfText(cotizacion.cliente),
+      68
+    );
+
+    const documentoLines = doc.splitTextToSize(
+      safePdfText(documentoCliente, "No registrado"),
+      68
+    );
+
+    doc.text("Cliente:", marginX + 4, 56);
+    doc.text(clienteLines, marginX + 28, 56);
+
+    doc.text("Documento / NIT:", marginX + 4, 65);
+    doc.text(documentoLines, marginX + 38, 65);
+
+    doc.text("Bodega:", marginX + 4, 74);
+    doc.text(safePdfText(cotizacion.bodega), marginX + 28, 74);
+
+    doc.text("Items:", 112, 56);
+    doc.text(String(detallePdf.length), 126, 56);
+
+    const estadoStyle = getEstadoStyle(cotizacion.estado);
+    doc.setFillColor(estadoStyle.bg[0], estadoStyle.bg[1], estadoStyle.bg[2]);
+    doc.roundedRect(112, 61, 44, 9.5, 3, 3, "F");
+
+    doc.setTextColor(estadoStyle.text[0], estadoStyle.text[1], estadoStyle.text[2]);
+    doc.setFont("helvetica", "bold");
+    doc.text(`Estado: ${estadoStyle.label}`, 134, 67.4, {
+      align: "center",
+    });
+
+    doc.setDrawColor(...COLORS.primaryLine);
+    doc.setLineWidth(0.6);
+    doc.line(marginX, 90, rightX, 90);
+
+    const tableHead = incluirPrecios
+      ? [["Producto", "Cantidad", "IVA", "Precio Unit.", "Subtotal"]]
+      : [["Producto", "Cantidad"]];
+
+    const tableBody = incluirPrecios
+      ? detallePdf.length
+        ? detallePdf.map((item) => [
+          item.producto,
+          String(item.cantidad),
+          `${item.ivaPorcentaje.toFixed(2)}%`,
+          formatPdfMoney(item.precio),
+          formatPdfMoney(item.subtotal),
+        ])
+        : [["Sin productos", "-", "-", "-", "-"]]
+      : detallePdf.length
+        ? detallePdf.map((item) => [item.producto, String(item.cantidad)])
+        : [["Sin productos", "-"]];
+
+    autoTable(doc, {
+      startY: 96,
+      margin: { left: marginX, right: marginX },
+      head: tableHead,
+      body: tableBody,
+      theme: "grid",
+      headStyles: {
+        fillColor: [...COLORS.primary],
+        textColor: [255, 255, 255],
+        fontStyle: "bold",
+        fontSize: 9,
+        halign: "center",
+        valign: "middle",
+        lineColor: [...COLORS.primary],
+        lineWidth: 0.1,
+      },
+      bodyStyles: {
+        fontSize: 8.5,
+        textColor: [...COLORS.text],
+        lineColor: [...COLORS.border],
+        lineWidth: 0.1,
+        valign: "middle",
+      },
+      alternateRowStyles: {
+        fillColor: [...COLORS.primarySoft],
+      },
+      styles: {
+        cellPadding: 3.2,
+        overflow: "linebreak",
+      },
+      columnStyles: incluirPrecios
+        ? {
+          0: { cellWidth: 74 },
+          1: { cellWidth: 22, halign: "center" },
+          2: { cellWidth: 26, halign: "center" },
+          3: { cellWidth: 30, halign: "right" },
+          4: { cellWidth: 30, halign: "right" },
+        }
+        : {
+          0: { cellWidth: 140 },
+          1: { cellWidth: 30, halign: "center" },
+        },
+    });
+
+    let currentY = ((doc as any).lastAutoTable?.finalY || 96) + 8;
+
+    const observaciones = safePdfText(cotizacion.observaciones, "");
+    const observacionesLines = observaciones
+      ? doc.splitTextToSize(observaciones, incluirPrecios ? 95 : 174)
+      : [];
+
+    const observacionesHeight = observaciones
+      ? Math.max(24, 12 + observacionesLines.length * 4.5)
+      : 0;
+
+    const ivaRowsCount = incluirPrecios ? Math.max(ivaEntriesPdf.length, 1) : 0;
+    const totalsHeight = incluirPrecios ? 29 + ivaRowsCount * 7 : 0;
+    const blockHeight = Math.max(observacionesHeight, totalsHeight || 24);
+
+    if (currentY + blockHeight > pageHeight - 24) {
+      doc.addPage();
+      currentY = 20;
+    }
+
+    if (observaciones) {
+      const obsWidth = incluirPrecios ? 108 : pageWidth - marginX * 2;
+
+      doc.setFillColor(255, 251, 235);
+      doc.roundedRect(marginX, currentY, obsWidth, observacionesHeight, 3, 3, "F");
+
+      doc.setTextColor(146, 64, 14);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text("Observaciones", marginX + 4, currentY + 7);
+
+      doc.setTextColor(87, 83, 78);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.7);
+      doc.text(observacionesLines, marginX + 4, currentY + 13);
+    }
 
     if (incluirPrecios) {
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
+      const totalsX = observaciones ? 128 : 124;
+      const totalsWidth = observaciones ? 68 : 72;
 
-      doc.text("Subtotal:", 130, totalesY);
+      doc.setFillColor(...COLORS.card);
+      doc.roundedRect(totalsX, currentY, totalsWidth, totalsHeight, 3, 3, "F");
+
+      doc.setTextColor(...COLORS.text);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9.5);
+
+      doc.text("Subtotal:", totalsX + 4, currentY + 8);
       doc.text(
-        `$${cotizacion.subtotal.toLocaleString("es-CO", {
-          minimumFractionDigits: 2,
-        })}`,
-        190,
-        totalesY,
+        formatPdfMoney(subtotalGeneral),
+        totalsX + totalsWidth - 4,
+        currentY + 8,
         { align: "right" }
       );
 
-      const impuestosPorPorcentaje = calcularImpuestosPorPorcentaje(cotizacion);
-      const porcentajesOrdenados = Object.entries(impuestosPorPorcentaje).sort(
-        ([a], [b]) => Number(a) - Number(b)
-      );
+      let ivaRowY = currentY + 15;
 
-      totalesY += 6;
+      if (ivaEntriesPdf.length > 0) {
+        ivaEntriesPdf.forEach(([porcentaje, monto]) => {
+          doc.text(`Total IVA ${porcentaje}%:`, totalsX + 4, ivaRowY);
+          doc.text(
+            formatPdfMoney(Number(monto)),
+            totalsX + totalsWidth - 4,
+            ivaRowY,
+            { align: "right" }
+          );
 
-      porcentajesOrdenados.forEach(([porcentaje, monto]) => {
-        doc.text(`Total IVA ${porcentaje}%:`, 130, totalesY);
-        doc.text(
-          `$${monto.toLocaleString("es-CO", { minimumFractionDigits: 2 })}`,
-          190,
-          totalesY,
-          { align: "right" }
-        );
-        totalesY += 6;
-      });
+          ivaRowY += 7;
+        });
+      } else {
+        doc.text("IVA:", totalsX + 4, ivaRowY);
+        doc.text(formatPdfMoney(0), totalsX + totalsWidth - 4, ivaRowY, {
+          align: "right",
+        });
 
-      doc.setLineWidth(0.3);
-      doc.line(130, totalesY - 2, 190, totalesY - 2);
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
-
-      doc.text("Total:", 130, totalesY + 4);
-      doc.text(
-        `$${cotizacion.total.toLocaleString("es-CO", {
-          minimumFractionDigits: 2,
-        })}`,
-        190,
-        totalesY + 4,
-        { align: "right" }
-      );
-    }
-
-    if (cotizacion.observaciones) {
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-
-      const obsY = incluirPrecios ? totalesY + 20 : totalesY + 10;
-
-      doc.text("Observaciones:", 20, obsY);
-
-      const splitObservaciones = doc.splitTextToSize(
-        cotizacion.observaciones,
-        170
-      );
-
-      doc.text(splitObservaciones, 20, obsY + 6);
-    }
-
-    const pageHeight = doc.internal.pageSize.height;
-
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "italic");
-
-    doc.text(
-      `Generado el ${new Date().toLocaleString("es-CO")}`,
-      105,
-      pageHeight - 10,
-      {
-        align: "center",
+        ivaRowY += 7;
       }
-    );
 
-    const suffix = incluirPrecios ? "" : "_SinPrecios";
+      const totalBoxY = ivaRowY + 4;
 
-    doc.save(`Cotizacion_${cotizacion.numeroCotizacion}${suffix}.pdf`);
+      doc.setFillColor(...COLORS.primary);
+      doc.roundedRect(
+        totalsX + 2,
+        totalBoxY,
+        totalsWidth - 4,
+        9,
+        2,
+        2,
+        "F"
+      );
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10.5);
+
+      doc.text("TOTAL", totalsX + 5, totalBoxY + 6);
+      doc.text(
+        formatPdfMoney(totalGeneral),
+        totalsX + totalsWidth - 4,
+        totalBoxY + 6,
+        { align: "right" }
+      );
+    }
+
+    const generatedAt = new Date().toLocaleString("es-CO");
+    const totalPages = doc.getNumberOfPages();
+
+    for (let page = 1; page <= totalPages; page++) {
+      doc.setPage(page);
+
+      doc.setDrawColor(...COLORS.border);
+      doc.setLineWidth(0.3);
+      doc.line(marginX, pageHeight - 14, rightX, pageHeight - 14);
+
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(8);
+      doc.setTextColor(...COLORS.muted);
+      doc.text(`Generado el ${generatedAt} • VManage`, marginX, pageHeight - 8);
+      doc.text(`Página ${page} de ${totalPages}`, rightX, pageHeight - 8, {
+        align: "right",
+      });
+    }
+
+    const suffix = incluirPrecios ? "con_precios" : "sin_precios";
+
+    doc.save(`Cotizacion_${cotizacion.numeroCotizacion}_${suffix}.pdf`);
 
     toast.success("PDF descargado exitosamente");
   };
@@ -1005,29 +1410,88 @@ export default function Cotizaciones() {
     setIsPdfOptionsModalOpen(true);
   };
 
-  const calcularImpuestosPorPorcentaje = (cotizacion: Cotizacion) => {
+  const calcularTotalesCotizacion = (cotizacion?: Cotizacion | null) => {
+    let subtotal = 0;
+    let impuestos = 0;
     const impuestosPorPorcentaje: { [key: number]: number } = {};
 
-    if (cotizacion.productos) {
-      cotizacion.productos.forEach((item) => {
-        const ivaProducto = item.producto.iva || 0;
-        if (ivaProducto > 0) {
-          const subtotalProducto = item.subtotal / (1 + ivaProducto / 100);
-          const ivaProductoMonto = item.subtotal - subtotalProducto;
+    cotizacion?.productos?.forEach((item) => {
+      const subtotalProducto = Number(item.subtotal || 0);
+      const ivaProducto = Number(item.producto.iva || 0);
+      const ivaMonto = subtotalProducto * (ivaProducto / 100);
 
-          if (!impuestosPorPorcentaje[ivaProducto]) {
-            impuestosPorPorcentaje[ivaProducto] = 0;
-          }
-          impuestosPorPorcentaje[ivaProducto] += ivaProductoMonto;
+      subtotal += subtotalProducto;
+      impuestos += ivaMonto;
+
+      if (ivaProducto > 0) {
+        if (!impuestosPorPorcentaje[ivaProducto]) {
+          impuestosPorPorcentaje[ivaProducto] = 0;
         }
-      });
-    }
 
-    return impuestosPorPorcentaje;
+        impuestosPorPorcentaje[ivaProducto] += ivaMonto;
+      }
+    });
+
+    return {
+      subtotal,
+      impuestos,
+      impuestosPorPorcentaje,
+      total: subtotal + impuestos,
+      items: cotizacion?.productos?.length ?? 0,
+    };
   };
+
+  const totalesCotizacionSeleccionada = useMemo(() => {
+    return calcularTotalesCotizacion(cotizacionSeleccionada);
+  }, [cotizacionSeleccionada]);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
+  };
+
+  const handleActualizarCantidadProducto = (productoId: string, value: string) => {
+    const cantidad = Number(value);
+
+    if (Number.isNaN(cantidad) || cantidad < 0) return;
+
+    setProductosOrden((prev) =>
+      prev.map((item) => {
+        if (item.producto.id !== productoId) return item;
+
+        return {
+          ...item,
+          cantidad,
+          subtotal: cantidad * Number(item.precio || 0),
+        };
+      })
+    );
+  };
+
+  const handleActualizarPrecioProducto = (productoId: string, value: string) => {
+    const precio = Number(value);
+
+    if (Number.isNaN(precio) || precio < 0) return;
+
+    const precioMinimo = getPrecioMinimoProducto(productoId);
+
+    if (precioMinimo > 0 && precio < precioMinimo) {
+      toast.error(
+        `El precio no puede ser menor a ${precioMinimo.toLocaleString("es-CO")}`
+      );
+      return;
+    }
+
+    setProductosOrden((prev) =>
+      prev.map((item) => {
+        if (item.producto.id !== productoId) return item;
+
+        return {
+          ...item,
+          precio,
+          subtotal: Number(item.cantidad || 0) * precio,
+        };
+      })
+    );
   };
 
   return (
@@ -1086,24 +1550,26 @@ export default function Cotizaciones() {
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1">
-          <Search
-            className="absolute left-3 top-1/2 -translate-y-1/2 transform text-gray-400"
-            size={20}
-          />
-          <Input
-            placeholder="Buscar por número de cotización, cliente, documento/NIT, estado o número de items..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+        <div className="flex items-center gap-4">
+          <div className="relative flex-1">
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 transform text-gray-400"
+              size={20}
+            />
+            <Input
+              placeholder="Buscar por número de cotización, cliente, documento/NIT, estado o número de items..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
 
-        <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
-          <Plus size={18} className="mr-2" />
-          Nueva Cotización
-        </Button>
+          <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
+            <Plus size={18} className="mr-2" />
+            Nueva Cotización
+          </Button>
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
@@ -1147,12 +1613,11 @@ export default function Cotizaciones() {
                     </TableCell>
 
                     <TableCell>
-                      {new Date(cotizacion.fecha).toLocaleDateString("es-CO")}
+                      {formatDateDisplay(cotizacion.fecha)}
                     </TableCell>
+
                     <TableCell>
-                      {new Date(cotizacion.fechaVencimiento).toLocaleDateString(
-                        "es-CO"
-                      )}
+                      {formatDateDisplay(cotizacion.fechaVencimiento)}
                     </TableCell>
                     <TableCell>{cotizacion.items}</TableCell>
                     <TableCell className="text-center">
@@ -1320,11 +1785,12 @@ export default function Cotizaciones() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="numeroCotizacion">Número de Cotización *</Label>
+                <Label htmlFor="numeroCotizacion">Codigo de Cotización *</Label>
                 <Input
                   id="numeroCotizacion"
                   value={formData.numeroCotizacion}
                   disabled
+                  placeholder="Se genera automáticamente"
                   className="bg-gray-100"
                 />
               </div>
@@ -1531,8 +1997,7 @@ export default function Cotizaciones() {
                   />
                   {precioMinimoProductoSeleccionado > 0 && (
                     <p className="mt-1 text-xs text-amber-600">
-                      Mínimo permitido: $
-                      {precioMinimoProductoSeleccionado.toLocaleString("es-CO")}
+                      Mínimo permitido: {formatMoney(precioMinimoProductoSeleccionado)}
                     </p>
                   )}
                 </div>
@@ -1573,7 +2038,7 @@ export default function Cotizaciones() {
                             {item.cantidad}
                           </TableCell>
                           <TableCell className="text-right">
-                            ${item.precio.toLocaleString()}
+                            {formatMoney(item.precio)}
                           </TableCell>
                           <TableCell className="text-center">
                             <Badge variant="outline" className="bg-blue-50">
@@ -1581,7 +2046,7 @@ export default function Cotizaciones() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">
-                            ${item.subtotal.toLocaleString()}
+                            {formatMoney(item.subtotal)}
                           </TableCell>
                           <TableCell className="text-center">
                             <Button
@@ -1611,11 +2076,7 @@ export default function Cotizaciones() {
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Subtotal:</span>
                   <span className="font-medium">
-                    $
-                    {calcularTotales.subtotal.toLocaleString("es-CO", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
+                    {formatMoney(calcularTotales.subtotal)}
                   </span>
                 </div>
 
@@ -1641,11 +2102,7 @@ export default function Cotizaciones() {
                             Subtotal IVA {porcentaje}%:
                           </span>
                           <span className="font-medium">
-                            $
-                            {monto.toLocaleString("es-CO", {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}
+                            {formatMoney(monto)}
                           </span>
                         </div>
                       ))}
@@ -1656,11 +2113,7 @@ export default function Cotizaciones() {
                 <div className="flex justify-between border-t pt-2 text-lg">
                   <span className="font-semibold">Total:</span>
                   <span className="font-bold text-blue-600">
-                    $
-                    {calcularTotales.total.toLocaleString("es-CO", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
+                    {formatMoney(calcularTotales.total)}
                   </span>
                 </div>
               </div>
@@ -1708,21 +2161,20 @@ export default function Cotizaciones() {
           <DialogHeader>
             <DialogTitle>Editar Cotización</DialogTitle>
             <DialogDescription id="edit-quote-description">
-              Actualiza la información de la cotización
+              Actualiza la información permitida de la cotización
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="numeroCotizacionEdit">
-                  Número de Cotización
-                </Label>
+                <Label htmlFor="numeroCotizacionEdit">Número de Cotización</Label>
                 <Input
                   id="numeroCotizacionEdit"
                   value={formData.numeroCotizacion}
                   disabled
-                  className="bg-gray-100"
+                  readOnly
+                  className="bg-gray-100 cursor-not-allowed"
                 />
               </div>
 
@@ -1750,52 +2202,14 @@ export default function Cotizaciones() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="clienteEdit">Cliente *</Label>
-                <Select
-                  value={formData.idCliente}
-                  onValueChange={(value: string) => {
-                    const clienteSeleccionado = clientesActivos.find(
-                      (cliente) => cliente.id === value
-                    );
-
-                    setFormData({
-                      ...formData,
-                      idCliente: value,
-                      cliente: clienteSeleccionado?.nombre ?? "",
-                    });
-                  }}
-                >
-                  <SelectTrigger id="clienteEdit">
-                    {formData.cliente ? (
-                      <span className="truncate">{formData.cliente}</span>
-                    ) : (
-                      <SelectValue placeholder="Selecciona un cliente" />
-                    )}
-                  </SelectTrigger>
-
-                  <SelectContent>
-                    {clientesActivos.length === 0 ? (
-                      <div className="px-2 py-2 text-sm text-gray-500">
-                        No hay clientes activos disponibles
-                      </div>
-                    ) : (
-                      clientesActivos.map((cliente) => (
-                        <SelectItem
-                          key={cliente.id}
-                          value={cliente.id}
-                          textValue={cliente.nombre}
-                        >
-                          <div className="flex flex-col">
-                            <span>{cliente.nombre}</span>
-                            <span className="text-xs text-gray-500">
-                              {getDocumentoClienteTexto(cliente)}
-                            </span>
-                          </div>
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="clienteEdit">Cliente</Label>
+                <Input
+                  id="clienteEdit"
+                  value={formData.cliente}
+                  readOnly
+                  disabled
+                  className="bg-gray-100 cursor-not-allowed"
+                />
               </div>
 
               <div>
@@ -1807,22 +2221,34 @@ export default function Cotizaciones() {
                   value={getDocumentoClienteTexto(clienteSeleccionadoForm)}
                   readOnly
                   disabled
-                  placeholder="Se completa al seleccionar cliente"
-                  className="bg-gray-100"
+                  placeholder="No registrado"
+                  className="bg-gray-100 cursor-not-allowed"
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <Label htmlFor="fechaEdit">Fecha *</Label>
+                <Label htmlFor="fechaEdit">Fecha de creación</Label>
                 <Input
                   id="fechaEdit"
                   type="date"
                   value={formData.fecha}
-                  onChange={(e) =>
-                    setFormData({ ...formData, fecha: e.target.value })
-                  }
+                  readOnly
+                  disabled
+                  className="bg-gray-100 cursor-not-allowed"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="fechaVencimientoEdit">Fecha de vencimiento</Label>
+                <Input
+                  id="fechaVencimientoEdit"
+                  type="date"
+                  value={formData.fechaVencimiento}
+                  readOnly
+                  disabled
+                  className="bg-gray-100 cursor-not-allowed"
                 />
               </div>
 
@@ -1843,7 +2269,7 @@ export default function Cotizaciones() {
                   }}
                 >
                   <SelectTrigger id="bodegaEdit">
-                    <SelectValue />
+                    <SelectValue placeholder="Selecciona una bodega" />
                   </SelectTrigger>
 
                   <SelectContent>
@@ -1923,10 +2349,11 @@ export default function Cotizaciones() {
                     placeholder="0.00"
                     className="sin-flechas w-full"
                   />
+
                   {precioMinimoProductoSeleccionado > 0 && (
                     <p className="mt-1 text-xs text-amber-600">
-                      Mínimo permitido: $
-                      {precioMinimoProductoSeleccionado.toLocaleString("es-CO")}
+                      Mínimo permitido:{" "}
+                      {formatMoney(precioMinimoProductoSeleccionado)}
                     </p>
                   )}
                 </div>
@@ -1943,7 +2370,7 @@ export default function Cotizaciones() {
                 </div>
               </div>
 
-              {productosOrden.length > 0 && (
+              {productosOrden.length > 0 ? (
                 <div className="mt-4 overflow-hidden rounded-lg border">
                   <Table>
                     <TableHeader>
@@ -1963,20 +2390,47 @@ export default function Cotizaciones() {
                           <TableCell className="font-medium">
                             {item.producto.nombre}
                           </TableCell>
+
                           <TableCell className="text-center">
-                            {item.cantidad}
+                            <Input
+                              type="number"
+                              min="1"
+                              value={item.cantidad}
+                              onChange={(e) =>
+                                handleActualizarCantidadProducto(
+                                  item.producto.id,
+                                  e.target.value
+                                )
+                              }
+                              className="mx-auto h-9 w-24 text-center"
+                            />
                           </TableCell>
+
                           <TableCell className="text-right">
-                            ${item.precio.toLocaleString()}
+                            <Input
+                              type="number"
+                              min={getPrecioMinimoProducto(item.producto.id)}
+                              value={item.precio}
+                              onChange={(e) =>
+                                handleActualizarPrecioProducto(
+                                  item.producto.id,
+                                  e.target.value
+                                )
+                              }
+                              className="ml-auto h-9 w-36 text-right"
+                            />
                           </TableCell>
+
                           <TableCell className="text-center">
                             <Badge variant="outline" className="bg-blue-50">
                               {item.producto.iva}%
                             </Badge>
                           </TableCell>
+
                           <TableCell className="text-right">
-                            ${item.subtotal.toLocaleString()}
+                            {formatMoney(item.subtotal)}
                           </TableCell>
+
                           <TableCell className="text-center">
                             <Button
                               variant="ghost"
@@ -1994,58 +2448,51 @@ export default function Cotizaciones() {
                     </TableBody>
                   </Table>
                 </div>
+              ) : (
+                <div className="mt-4 rounded-lg border border-dashed py-8 text-center text-gray-500">
+                  <Package size={44} className="mx-auto mb-2 text-gray-300" />
+                  <p>No hay productos agregados</p>
+                  <p className="text-sm">
+                    Selecciona un producto y agrégalo a la cotización
+                  </p>
+                </div>
               )}
 
-              <div className="mt-4 space-y-2 rounded-lg bg-gray-50 p-4">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">N° de Items:</span>
-                  <span className="font-medium">{calcularTotales.items}</span>
-                </div>
+              <div className="mt-4 flex justify-end">
+                <div className="min-w-75 rounded-lg border border-blue-200 bg-blue-50 p-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">N° de Items:</span>
+                      <span className="font-medium">{calcularTotales.items}</span>
+                    </div>
 
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Subtotal:</span>
-                  <span className="font-medium">
-                    $
-                    {calcularTotales.subtotal.toLocaleString("es-CO", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </span>
-                </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Subtotal:</span>
+                      <span className="font-medium">
+                        {formatMoney(calcularTotales.subtotal)}
+                      </span>
+                    </div>
 
-                {Object.keys(calcularTotales.impuestosPorPorcentaje).length > 0 && (
-                  <div className="space-y-1 border-t pt-2">
                     {Object.entries(calcularTotales.impuestosPorPorcentaje)
                       .sort(([a], [b]) => Number(a) - Number(b))
                       .map(([porcentaje, monto]) => (
-                        <div
-                          key={porcentaje}
-                          className="flex justify-between text-sm"
-                        >
+                        <div key={porcentaje} className="flex justify-between text-sm">
                           <span className="text-gray-600">
                             Total IVA {porcentaje}%:
                           </span>
                           <span className="font-medium">
-                            $
-                            {monto.toLocaleString("es-CO", {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}
+                            {formatMoney(monto)}
                           </span>
                         </div>
                       ))}
-                  </div>
-                )}
 
-                <div className="flex justify-between border-t pt-2 text-lg">
-                  <span className="font-semibold">Total:</span>
-                  <span className="font-bold text-blue-600">
-                    $
-                    {calcularTotales.total.toLocaleString("es-CO", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </span>
+                    <div className="flex justify-between border-t border-blue-300 pt-2 text-lg">
+                      <span className="font-semibold text-gray-700">Total:</span>
+                      <span className="font-bold text-blue-600">
+                        {formatMoney(calcularTotales.total)}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2068,6 +2515,7 @@ export default function Cotizaciones() {
             <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
+
             <Button
               onClick={confirmEdit}
               className="bg-blue-600 hover:bg-blue-700"
@@ -2091,10 +2539,7 @@ export default function Cotizaciones() {
         >
           <DialogHeader>
             <DialogTitle>Detalles de la Cotización</DialogTitle>
-            <DialogDescription
-              id="view-quote-description"
-              className="sr-only"
-            >
+            <DialogDescription id="view-quote-description" className="sr-only">
               Información detallada de la cotización
             </DialogDescription>
           </DialogHeader>
@@ -2122,8 +2567,11 @@ export default function Cotizaciones() {
                           ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
                           : cotizacionSeleccionada.estado === "Rechazada"
                             ? "bg-red-100 text-red-800 hover:bg-red-200"
-                            : "bg-gray-100 text-gray-800 hover:bg-gray-200"
+                            : cotizacionSeleccionada.estado === "Anulada"
+                              ? "cursor-not-allowed bg-gray-100 text-gray-800 opacity-60 hover:bg-gray-100"
+                              : "bg-gray-100 text-gray-800 hover:bg-gray-200"
                         }`}
+                      disabled={cotizacionSeleccionada.estado === "Anulada"}
                     >
                       {cotizacionSeleccionada.estado}
                     </Button>
@@ -2144,145 +2592,149 @@ export default function Cotizaciones() {
 
                 <div>
                   <p className="text-sm text-gray-600">Bodega</p>
-                  <p className="font-medium">{cotizacionSeleccionada.bodega}</p>
+                  <p className="font-medium">{cotizacionSeleccionada.bodega || "-"}</p>
                 </div>
 
                 <div>
                   <p className="text-sm text-gray-600">Fecha</p>
                   <p className="font-medium">
-                    {new Date(cotizacionSeleccionada.fecha).toLocaleDateString("es-CO")}
+                    {formatDateDisplay(cotizacionSeleccionada.fecha)}
                   </p>
                 </div>
 
                 <div>
                   <p className="text-sm text-gray-600">Fecha de Vencimiento</p>
                   <p className="font-medium">
-                    {new Date(cotizacionSeleccionada.fechaVencimiento).toLocaleDateString(
-                      "es-CO"
-                    )}
+                    {formatDateDisplay(cotizacionSeleccionada.fechaVencimiento)}
                   </p>
+                </div>
+
+                <div>
+                  <p className="text-sm text-gray-600">N° de Items</p>
+                  <p className="font-medium">{totalesCotizacionSeleccionada.items}</p>
                 </div>
               </div>
 
-              {cotizacionSeleccionada.productos &&
-                cotizacionSeleccionada.productos.length > 0 && (
-                  <div>
-                    <h3 className="mb-3 text-lg font-medium">Productos</h3>
-                    <div className="overflow-hidden rounded-lg border">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="bg-gray-50">
-                            <TableHead>Producto</TableHead>
-                            <TableHead className="text-center">
-                              Cantidad
-                            </TableHead>
-                            <TableHead className="text-right">
-                              Precio Unit.
-                            </TableHead>
-                            <TableHead className="text-center">IVA%</TableHead>
-                            <TableHead className="text-right">Subtotal</TableHead>
-                          </TableRow>
-                        </TableHeader>
+              <div>
+                <h3 className="mb-3 text-lg font-medium">Productos</h3>
 
-                        <TableBody>
-                          {cotizacionSeleccionada.productos.map((item, index) => (
-                            <TableRow key={index}>
-                              <TableCell className="font-medium">
-                                {item.producto.nombre}
-                              </TableCell>
-                              <TableCell className="text-center">
-                                {item.cantidad}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                ${item.precio.toLocaleString()}
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <Badge variant="outline" className="bg-blue-50">
-                                  {item.producto.iva}%
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                ${item.subtotal.toLocaleString()}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </div>
-                )}
+                <div className="overflow-hidden rounded-lg border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-gray-50">
+                        <TableHead>Producto</TableHead>
+                        <TableHead className="text-center">Cantidad</TableHead>
+                        <TableHead className="text-right">Precio Unit.</TableHead>
+                        <TableHead className="text-center">IVA%</TableHead>
+                        <TableHead className="text-right">Subtotal</TableHead>
+                      </TableRow>
+                    </TableHeader>
+
+                    <TableBody>
+                      {cotizacionSeleccionada.productos &&
+                        cotizacionSeleccionada.productos.length > 0 ? (
+                        cotizacionSeleccionada.productos.map((item, index) => (
+                          <TableRow key={`${item.producto.id}-${index}`}>
+                            <TableCell className="font-medium">
+                              {item.producto.nombre}
+                            </TableCell>
+
+                            <TableCell className="text-center">
+                              {item.cantidad}
+                            </TableCell>
+
+                            <TableCell className="text-right">
+                              {formatMoney(item.precio)}
+                            </TableCell>
+
+                            <TableCell className="text-center">
+                              <Badge variant="outline" className="bg-blue-50">
+                                {item.producto.iva}%
+                              </Badge>
+                            </TableCell>
+
+                            <TableCell className="text-right">
+                              {formatMoney(item.subtotal)}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell
+                            colSpan={5}
+                            className="py-8 text-center text-gray-500"
+                          >
+                            No hay productos agregados
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
 
               <div className="flex justify-end">
                 <div className="min-w-75 rounded-lg border border-blue-200 bg-blue-50 p-4">
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Subtotal:</span>
+                      <span className="text-gray-600">N° de Items:</span>
                       <span className="font-medium">
-                        $
-                        {cotizacionSeleccionada.subtotal.toLocaleString("es-CO", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
+                        {totalesCotizacionSeleccionada.items}
                       </span>
                     </div>
 
-                    {(() => {
-                      const impuestosPorPorcentaje =
-                        calcularImpuestosPorPorcentaje(cotizacionSeleccionada);
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Subtotal:</span>
+                      <span className="font-medium">
+                        {formatMoney(totalesCotizacionSeleccionada.subtotal)}
+                      </span>
+                    </div>
 
-                      return Object.keys(impuestosPorPorcentaje).length > 0 ? (
-                        <div className="space-y-1 border-t border-blue-200 pt-2">
-                          {Object.entries(impuestosPorPorcentaje)
-                            .sort(([a], [b]) => Number(a) - Number(b))
-                            .map(([porcentaje, monto]) => (
-                              <div
-                                key={porcentaje}
-                                className="flex justify-between text-sm"
-                              >
-                                <span className="text-gray-600">
-                                  Total IVA {porcentaje}%:
-                                </span>
-                                <span className="font-medium">
-                                  $
-                                  {monto.toLocaleString("es-CO", {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}
-                                </span>
-                              </div>
-                            ))}
+                    {Object.entries(totalesCotizacionSeleccionada.impuestosPorPorcentaje)
+                      .sort(([a], [b]) => Number(a) - Number(b))
+                      .map(([porcentaje, monto]) => (
+                        <div key={porcentaje} className="flex justify-between text-sm">
+                          <span className="text-gray-600">
+                            Total IVA {porcentaje}%:
+                          </span>
+                          <span className="font-medium">
+                            {formatMoney(monto)}
+                          </span>
                         </div>
-                      ) : null;
-                    })()}
+                      ))}
 
                     <div className="flex justify-between border-t border-blue-300 pt-2 text-lg">
                       <span className="font-semibold text-gray-700">Total:</span>
                       <span className="font-bold text-blue-600">
-                        $
-                        {cotizacionSeleccionada.total.toLocaleString("es-CO", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
+                        {formatMoney(totalesCotizacionSeleccionada.total)}
                       </span>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {cotizacionSeleccionada.observaciones && (
-                <div>
-                  <h3 className="mb-2 text-lg font-medium">Observaciones</h3>
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                    <p className="text-gray-700">
-                      {cotizacionSeleccionada.observaciones}
-                    </p>
-                  </div>
+              <div>
+                <h3 className="mb-2 text-lg font-medium">Observaciones</h3>
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                  <p className="whitespace-pre-wrap text-gray-700">
+                    {cotizacionSeleccionada.observaciones || "Sin observaciones"}
+                  </p>
                 </div>
-              )}
+              </div>
             </div>
           )}
 
           <DialogFooter>
+            {cotizacionSeleccionada && (
+              <Button
+                onClick={() => openPdfOptionsModal(cotizacionSeleccionada)}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Download size={16} className="mr-2" />
+                Descargar PDF
+              </Button>
+            )}
+
             <Button variant="outline" onClick={closeToList}>
               Cerrar
             </Button>
@@ -2420,7 +2872,7 @@ export default function Cotizaciones() {
           <div className="space-y-3 py-4">
             <Button
               onClick={() => {
-                if (cotizacionParaPdf) handleDownloadPDF(cotizacionParaPdf, true);
+                if (cotizacionParaPdf) void handleDownloadPDF(cotizacionParaPdf, true);
                 setIsPdfOptionsModalOpen(false);
               }}
               className="flex w-full items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700"
@@ -2431,8 +2883,7 @@ export default function Cotizaciones() {
 
             <Button
               onClick={() => {
-                if (cotizacionParaPdf)
-                  handleDownloadPDF(cotizacionParaPdf, false);
+                if (cotizacionParaPdf) void handleDownloadPDF(cotizacionParaPdf, false);
                 setIsPdfOptionsModalOpen(false);
               }}
               variant="outline"

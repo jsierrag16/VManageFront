@@ -765,68 +765,71 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
       </div>
 
       {/* Search + filtros + botón */}
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1">
-          <Search
-            className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-            size={20}
-          />
-          <Input
-            placeholder="Buscar bodegas..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
 
-        {/* Filtro Estado */}
-        <div className="flex items-center gap-2 border border-gray-300 rounded-lg p-1 bg-gray-50">
-          <Filter size={16} className="text-gray-500 ml-2" />
-          <Button
-            size="sm"
-            variant={estadoFilter === "todos" ? "default" : "ghost"}
-            onClick={() => setEstadoFilter("todos")}
-            className={`h-8 ${estadoFilter === "todos"
-              ? "bg-blue-600 text-white hover:bg-blue-700"
-              : "hover:bg-gray-200"
-              }`}
-          >
-            Todas
-          </Button>
-          <Button
-            size="sm"
-            variant={estadoFilter === "activas" ? "default" : "ghost"}
-            onClick={() => setEstadoFilter("activas")}
-            className={`h-8 ${estadoFilter === "activas"
-              ? "bg-green-600 text-white hover:bg-green-700"
-              : "hover:bg-gray-200"
-              }`}
-          >
-            Activas
-          </Button>
-          <Button
-            size="sm"
-            variant={estadoFilter === "inactivas" ? "default" : "ghost"}
-            onClick={() => setEstadoFilter("inactivas")}
-            className={`h-8 ${estadoFilter === "inactivas"
-              ? "bg-red-600 text-white hover:bg-red-700"
-              : "hover:bg-gray-200"
-              }`}
-          >
-            Inactivas
-          </Button>
-        </div>
+        <div className="flex items-center gap-4">
+          <div className="relative flex-1">
+            <Search
+              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+              size={20}
+            />
+            <Input
+              placeholder="Buscar bodegas..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
 
-        {canCreateBodegas && (
-          <Button
-            onClick={onClickCreate}
-            className="bg-blue-600 hover:bg-blue-700"
-            disabled={isLoading}
-          >
-            <Plus size={18} className="mr-2" />
-            Nueva Bodega
-          </Button>
-        )}
+          {/* Filtro Estado */}
+          <div className="flex items-center gap-2 border border-gray-300 rounded-lg p-1 bg-gray-50">
+            <Filter size={16} className="text-gray-500 ml-2" />
+            <Button
+              size="sm"
+              variant={estadoFilter === "todos" ? "default" : "ghost"}
+              onClick={() => setEstadoFilter("todos")}
+              className={`h-8 ${estadoFilter === "todos"
+                ? "bg-blue-600 text-white hover:bg-blue-700"
+                : "hover:bg-gray-200"
+                }`}
+            >
+              Todas
+            </Button>
+            <Button
+              size="sm"
+              variant={estadoFilter === "activas" ? "default" : "ghost"}
+              onClick={() => setEstadoFilter("activas")}
+              className={`h-8 ${estadoFilter === "activas"
+                ? "bg-green-600 text-white hover:bg-green-700"
+                : "hover:bg-gray-200"
+                }`}
+            >
+              Activas
+            </Button>
+            <Button
+              size="sm"
+              variant={estadoFilter === "inactivas" ? "default" : "ghost"}
+              onClick={() => setEstadoFilter("inactivas")}
+              className={`h-8 ${estadoFilter === "inactivas"
+                ? "bg-red-600 text-white hover:bg-red-700"
+                : "hover:bg-gray-200"
+                }`}
+            >
+              Inactivas
+            </Button>
+          </div>
+
+          {canCreateBodegas && (
+            <Button
+              onClick={onClickCreate}
+              className="bg-blue-600 hover:bg-blue-700"
+              disabled={isLoading}
+            >
+              <Plus size={18} className="mr-2" />
+              Nueva Bodega
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Tabla */}

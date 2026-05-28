@@ -94,12 +94,11 @@ function normalizarTexto(value?: string | null) {
     .replace(/\p{Diacritic}/gu, "");
 }
 
-function formatMoney(value: number) {
-  return new Intl.NumberFormat("es-CO", {
-    style: "currency",
-    currency: "COP",
-    maximumFractionDigits: 0,
-  }).format(value || 0);
+function formatMoney(value: unknown) {
+  return `COP$${Number(value || 0).toLocaleString("es-CO", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 function formatDateInput(value?: string | null) {
@@ -280,22 +279,18 @@ function calcularTotalesConIva(
   const impuestosPorPorcentaje: Record<number, number> = {};
 
   items.forEach((item) => {
-    const subtotalBruto = Number(item.subtotal || 0);
+    const subtotal = Number(item.subtotal || 0);
     const ivaPorcentaje = Number(item.iva || 0);
+    const ivaValor = subtotal * (ivaPorcentaje / 100);
 
-    const base = ivaPorcentaje > 0
-      ? subtotalBruto / (1 + ivaPorcentaje / 100)
-      : subtotalBruto;
-
-    const ivaValor = subtotalBruto - base;
-
-    subtotalSinIva += base;
+    subtotalSinIva += subtotal;
     totalIva += ivaValor;
 
     if (ivaPorcentaje > 0) {
       if (!impuestosPorPorcentaje[ivaPorcentaje]) {
         impuestosPorPorcentaje[ivaPorcentaje] = 0;
       }
+
       impuestosPorPorcentaje[ivaPorcentaje] += ivaValor;
     }
   });
@@ -401,8 +396,8 @@ const toPdfNumber = (value: unknown) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-const formatPdfMoney = (value: number) =>
-  `$${Number(value || 0).toLocaleString("es-CO", {
+const formatPdfMoney = (value: unknown) =>
+  `COP$${Number(value || 0).toLocaleString("es-CO", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
@@ -1415,6 +1410,28 @@ export default function OrdenesVenta() {
   const handleEdit = handleOpenEdit;
   const handleAnularClick = handleOpenAnular;
 
+  const detalleOrdenSeleccionada = useMemo(() => {
+    return (selectedOrden?.detalle_orden_venta || []).map((item) => {
+      const cantidad = Number(item.cantidad || 0);
+      const precio = Number(item.precio_unitario || 0);
+      const iva = Number(item.producto?.iva?.porcentaje ?? 0);
+      const subtotal = cantidad * precio;
+
+      return {
+        id_producto: Number(item.id_producto),
+        nombre: getProductoNombre(item.producto),
+        cantidad,
+        precio_unitario: precio,
+        subtotal,
+        iva,
+      };
+    });
+  }, [selectedOrden]);
+
+  const totalesOrdenSeleccionada = useMemo(() => {
+    return calcularTotalesConIva(detalleOrdenSeleccionada);
+  }, [detalleOrdenSeleccionada]);
+
   if (loading) {
     return (
       <div className="flex min-h-75 items-center justify-center text-gray-500">
@@ -1479,24 +1496,26 @@ export default function OrdenesVenta() {
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1">
-          <Search
-            className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-            size={20}
-          />
-          <Input
-            placeholder="Buscar por número de orden, cliente, documento/NIT, estado o número de items..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+        <div className="flex items-center gap-4">
+          <div className="relative flex-1">
+            <Search
+              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+              size={20}
+            />
+            <Input
+              placeholder="Buscar por número de orden, cliente, documento/NIT, estado o número de items..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
 
-        <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
-          <Plus size={18} className="mr-2" />
-          Nueva Orden
-        </Button>
+          <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
+            <Plus size={18} className="mr-2" />
+            Nueva Orden
+          </Button>
+        </div>
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
@@ -2124,157 +2143,172 @@ export default function OrdenesVenta() {
       </Dialog>
 
       <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Detalle de la orden de venta</DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="sr-only">
               Información completa de la orden seleccionada
             </DialogDescription>
           </DialogHeader>
 
           {selectedOrden && (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="rounded-lg border p-4">
-                  <p className="text-sm text-gray-500">Código</p>
-                  <p className="font-semibold">
+              <div className="grid grid-cols-2 gap-4 rounded-lg bg-gray-50 p-4">
+                <div>
+                  <p className="text-sm text-gray-600">Número de Orden</p>
+                  <p className="font-medium text-blue-600">
                     {selectedOrden.codigo_orden_venta ||
                       `OV-${selectedOrden.id_orden_venta}`}
                   </p>
                 </div>
 
-                <div className="rounded-lg border p-4">
-                  <p className="text-sm text-gray-500">Estado</p>
-                  <Badge>{getEstadoNombre(selectedOrden.estado_orden_venta)}</Badge>
+                <div>
+                  <p className="text-sm text-gray-600">Estado</p>
+                  <div className="mt-1">
+                    <Badge>
+                      {getEstadoNombre(selectedOrden.estado_orden_venta)}
+                    </Badge>
+                  </div>
                 </div>
 
-                <div className="rounded-lg border p-4">
-                  <p className="text-sm text-gray-500">Cliente</p>
-                  <p className="font-semibold">
+                <div>
+                  <p className="text-sm text-gray-600">Cliente</p>
+                  <p className="font-medium">
                     {getClienteNombre(selectedOrden.cliente)}
                   </p>
                 </div>
 
-                <div className="rounded-lg border p-4">
-                  <p className="text-sm text-gray-500">Documento / NIT</p>
-                  <p className="font-semibold">
+                <div>
+                  <p className="text-sm text-gray-600">Documento / NIT</p>
+                  <p className="font-medium">
                     {getDocumentoClienteTexto(selectedOrden.cliente)}
                   </p>
                 </div>
 
-                <div className="rounded-lg border p-4">
-                  <p className="text-sm text-gray-500">Bodega</p>
-                  <p className="font-semibold">
+                <div>
+                  <p className="text-sm text-gray-600">Bodega</p>
+                  <p className="font-medium">
                     {getBodegaNombre(selectedOrden.bodega)}
                   </p>
                 </div>
 
-                <div className="rounded-lg border p-4">
-                  <p className="text-sm text-gray-500">Fecha</p>
-                  <p className="font-semibold">
+                <div>
+                  <p className="text-sm text-gray-600">Término de pago</p>
+                  <p className="font-medium">
+                    {getTerminoNombre(selectedOrden.termino_pago)}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-sm text-gray-600">Fecha</p>
+                  <p className="font-medium">
                     {formatDateDisplay(selectedOrden.fecha_creacion)}
                   </p>
                 </div>
 
-                <div className="rounded-lg border p-4">
-                  <p className="text-sm text-gray-500">Fecha vencimiento</p>
-                  <p className="font-semibold">
+                <div>
+                  <p className="text-sm text-gray-600">Fecha de Vencimiento</p>
+                  <p className="font-medium">
                     {formatDateDisplay(selectedOrden.fecha_vencimiento)}
                   </p>
                 </div>
+              </div>
 
-                <div className="rounded-lg border p-4 md:col-span-2">
-                  <p className="text-sm text-gray-500">Término de pago</p>
-                  <p className="font-semibold">
-                    {getTerminoNombre(selectedOrden.termino_pago)}
-                  </p>
+              {detalleOrdenSeleccionada.length > 0 && (
+                <div>
+                  <h3 className="mb-3 text-lg font-medium">Productos</h3>
+
+                  <div className="overflow-hidden rounded-lg border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-gray-50">
+                          <TableHead>Producto</TableHead>
+                          <TableHead className="text-center">Cantidad</TableHead>
+                          <TableHead className="text-right">Precio Unit.</TableHead>
+                          <TableHead className="text-center">IVA%</TableHead>
+                          <TableHead className="text-right">Subtotal</TableHead>
+                        </TableRow>
+                      </TableHeader>
+
+                      <TableBody>
+                        {detalleOrdenSeleccionada.map((item, index) => (
+                          <TableRow key={`${item.id_producto}-${index}`}>
+                            <TableCell className="font-medium">
+                              {item.nombre}
+                            </TableCell>
+
+                            <TableCell className="text-center">
+                              {item.cantidad}
+                            </TableCell>
+
+                            <TableCell className="text-right">
+                              {formatMoney(item.precio_unitario)}
+                            </TableCell>
+
+                            <TableCell className="text-center">
+                              <Badge variant="outline" className="bg-blue-50">
+                                {item.iva}%
+                              </Badge>
+                            </TableCell>
+
+                            <TableCell className="text-right">
+                              {formatMoney(item.subtotal)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end">
+                <div className="min-w-75 rounded-lg border border-blue-200 bg-blue-50 p-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">N° de Items:</span>
+                      <span className="font-medium">
+                        {detalleOrdenSeleccionada.length}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Subtotal:</span>
+                      <span className="font-medium">
+                        {formatMoney(totalesOrdenSeleccionada.subtotalSinIva)}
+                      </span>
+                    </div>
+
+                    {Object.entries(totalesOrdenSeleccionada.impuestosPorPorcentaje)
+                      .sort(([a], [b]) => Number(a) - Number(b))
+                      .map(([porcentaje, monto]) => (
+                        <div key={porcentaje} className="flex justify-between text-sm">
+                          <span className="text-gray-600">
+                            Total IVA {porcentaje}%:
+                          </span>
+                          <span className="font-medium">
+                            {formatMoney(monto)}
+                          </span>
+                        </div>
+                      ))}
+
+                    <div className="flex justify-between border-t border-blue-300 pt-2 text-lg">
+                      <span className="font-semibold text-gray-700">Total:</span>
+                      <span className="font-bold text-blue-600">
+                        {formatMoney(totalesOrdenSeleccionada.total)}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div className="rounded-lg border p-4">
-                <h3 className="mb-3 font-semibold text-gray-900">Productos</h3>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Producto</TableHead>
-                      <TableHead>Cantidad</TableHead>
-                      <TableHead>Precio</TableHead>
-                      <TableHead>IVA %</TableHead>
-                      <TableHead>Subtotal</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {(selectedOrden.detalle_orden_venta || []).map(
-                      (item, index) => {
-                        const cantidad = Number(item.cantidad || 0);
-                        const precio = Number(item.precio_unitario || 0);
-                        const iva = Number(item.producto?.iva?.porcentaje ?? 0);
-                        const subtotal = cantidad * precio;
-
-                        return (
-                          <TableRow
-                            key={item.id_detalle_orden_venta || index}
-                          >
-                            <TableCell>{getProductoNombre(item.producto)}</TableCell>
-                            <TableCell>{cantidad}</TableCell>
-                            <TableCell>{formatMoney(precio)}</TableCell>
-                            <TableCell>{iva}%</TableCell>
-                            <TableCell>{formatMoney(subtotal)}</TableCell>
-                          </TableRow>
-                        );
-                      }
-                    )}
-                  </TableBody>
-                </Table>
-
-                {(() => {
-                  const totalesDetalle = calcularTotalesConIva(
-                    (selectedOrden.detalle_orden_venta || []).map((item) => {
-                      const cantidad = Number(item.cantidad || 0);
-                      const precio = Number(item.precio_unitario || 0);
-                      const iva = Number(item.producto?.iva?.porcentaje ?? 0);
-
-                      return {
-                        subtotal: cantidad * precio,
-                        iva,
-                      };
-                    })
-                  );
-
-                  return (
-                    <div className="mt-4 flex justify-end">
-                      <div className="min-w-75 rounded-lg border border-blue-200 bg-blue-50 p-4">
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Subtotal sin IVA:</span>
-                            <span className="font-medium">
-                              {formatMoney(totalesDetalle.subtotalSinIva)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Total IVA:</span>
-                            <span className="font-medium">
-                              {formatMoney(totalesDetalle.totalIva)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between border-t border-blue-300 pt-2 text-lg">
-                            <span className="font-semibold text-gray-700">Total:</span>
-                            <span className="font-bold text-blue-600">
-                              {formatMoney(totalesDetalle.total)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-
-              <div className="rounded-lg border p-4">
-                <p className="text-sm text-gray-500">Observaciones</p>
-                <p className="mt-1 whitespace-pre-wrap">
-                  {selectedOrden.descripcion || "Sin observaciones"}
-                </p>
+              <div>
+                <h3 className="mb-2 text-lg font-medium">Observaciones</h3>
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                  <p className="whitespace-pre-wrap text-gray-700">
+                    {selectedOrden.descripcion || "Sin observaciones"}
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -2289,6 +2323,7 @@ export default function OrdenesVenta() {
                 Descargar PDF
               </Button>
             )}
+
             <Button variant="outline" onClick={() => setIsViewModalOpen(false)}>
               Cerrar
             </Button>

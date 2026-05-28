@@ -1235,51 +1235,73 @@ export default function Traslados({
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1">
-          <Search
-            className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-            size={20}
-          />
-          <Input
-            placeholder="Buscar traslados por fecha, bodegas, unidades, estado..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
 
-        {canCreateTraslados && (
-          <Button
-            onClick={handleNuevoTraslado}
-            className="bg-purple-600 hover:bg-purple-700"
-          >
-            <Plus size={18} className="mr-2" />
-            Nuevo Traslado
-          </Button>
-        )}
-      </div>
+      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+            <div className="relative flex-1">
+              <Label className="mb-2 block text-sm font-medium text-gray-700">
+                Buscar traslado
+              </Label>
 
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="fecha-inicio">Fecha Inicio</Label>
-            <Input
-              id="fecha-inicio"
-              type="date"
-              value={fechaInicio}
-              onChange={(e) => setFechaInicio(e.target.value)}
-            />
-          </div>
+              <Search
+                className="absolute left-3 top-10.5 -translate-y-1/2 text-gray-400"
+                size={20}
+              />
 
-          <div>
-            <Label htmlFor="fecha-fin">Fecha Fin</Label>
-            <Input
-              id="fecha-fin"
-              type="date"
-              value={fechaFin}
-              onChange={(e) => setFechaFin(e.target.value)}
-            />
+              <Input
+                placeholder="Buscar traslados por fecha, bodegas, unidades, estado..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="h-11 pl-10"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:w-105">
+              <div>
+                <Label
+                  htmlFor="fecha-inicio"
+                  className="mb-2 block text-sm font-medium text-gray-700"
+                >
+                  Fecha inicio
+                </Label>
+
+                <Input
+                  id="fecha-inicio"
+                  type="date"
+                  value={fechaInicio}
+                  onChange={(e) => setFechaInicio(e.target.value)}
+                  className="h-11"
+                />
+              </div>
+
+              <div>
+                <Label
+                  htmlFor="fecha-fin"
+                  className="mb-2 block text-sm font-medium text-gray-700"
+                >
+                  Fecha fin
+                </Label>
+
+                <Input
+                  id="fecha-fin"
+                  type="date"
+                  value={fechaFin}
+                  onChange={(e) => setFechaFin(e.target.value)}
+                  className="h-11"
+                />
+              </div>
+            </div>
+
+            {canCreateTraslados && (
+              <Button
+                onClick={handleNuevoTraslado}
+                className="h-11 shrink-0 bg-purple-600 px-5 hover:bg-purple-700"
+              >
+                <Plus size={18} className="mr-2" />
+                Nuevo Traslado
+              </Button>
+            )}
           </div>
         </div>
       </div>

@@ -826,39 +826,42 @@ export default function Productos({
       </div>
 
       {/* Search Bar and Action Buttons */}
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1">
-          <Search
-            className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-            size={20}
-          />
-          <Input
-            placeholder="Buscar productos..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
+      
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+        <div className="flex items-center gap-4">
+          <div className="relative flex-1">
+            <Search
+              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+              size={20}
+            />
+            <Input
+              placeholder="Buscar productos..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+
+          {canCreateProductos && (
+            <Button
+              onClick={handleNuevoProducto}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <Plus size={18} className="mr-2" />
+              Nuevo Producto
+            </Button>
+          )}
+
+          {canCreateTraslados && (
+            <Button
+              onClick={handleTrasladar}
+              className="bg-purple-600 hover:bg-purple-700"
+            >
+              <ArrowRightLeft size={18} className="mr-2" />
+              Trasladar
+            </Button>
+          )}
         </div>
-
-        {canCreateProductos && (
-          <Button
-            onClick={handleNuevoProducto}
-            className="bg-blue-600 hover:bg-blue-700"
-          >
-            <Plus size={18} className="mr-2" />
-            Nuevo Producto
-          </Button>
-        )}
-
-        {canCreateTraslados && (
-          <Button
-            onClick={handleTrasladar}
-            className="bg-purple-600 hover:bg-purple-700"
-          >
-            <ArrowRightLeft size={18} className="mr-2" />
-            Trasladar
-          </Button>
-        )}
       </div>
 
       {/* Table */}

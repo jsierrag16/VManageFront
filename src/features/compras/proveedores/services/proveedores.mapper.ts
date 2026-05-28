@@ -5,7 +5,10 @@ export type CatalogOption = {
 
 export type MunicipioOption = CatalogOption & {
   nombre: string;
+  idDepartamento: number;
   departamento: string;
+  idPais: number;
+  pais: string;
 };
 
 export type ProveedorItem = {
@@ -21,9 +24,12 @@ export type ProveedorItem = {
   tipoDocumento: string;
   idTipoProveedor: number;
   tipoProveedor: string;
+  idPais: number;
+  pais: string;
+  idDepartamento: number;
+  departamento: string;
   idMunicipio: number;
   ciudad: string;
-  departamento: string;
   estado: "Activo" | "Inactivo";
 };
 
@@ -73,88 +79,172 @@ export const mapCatalogOption = (
 };
 
 export const mapMunicipioOption = (raw: any): MunicipioOption => {
+  const departamentoRef =
+    raw?.departamentos ??
+    raw?.departamento ??
+    null;
+
+  const paisRef =
+    departamentoRef?.paises ??
+    departamentoRef?.pais ??
+    raw?.paises ??
+    raw?.pais ??
+    null;
+
   const id = toNumber(raw?.id_municipio ?? raw?.id ?? raw?.value);
 
   const nombre = toText(
     raw?.nombre_municipio ??
-      raw?.nombre ??
-      raw?.municipio ??
-      raw?.label
+    raw?.nombre ??
+    raw?.municipio ??
+    raw?.label
+  );
+
+  const idDepartamento = toNumber(
+    raw?.id_departamento ??
+    raw?.idDepartamento ??
+    departamentoRef?.id_departamento ??
+    departamentoRef?.id
   );
 
   const departamento = toText(
-    raw?.departamentos?.nombre_departamento ??
-      raw?.departamento?.nombre_departamento ??
-      raw?.departamento ??
-      raw?.nombre_departamento
+    departamentoRef?.nombre_departamento ??
+    raw?.nombre_departamento ??
+    raw?.departamento
+  );
+
+  const idPais = toNumber(
+    departamentoRef?.id_pais ??
+    raw?.id_pais ??
+    raw?.idPais ??
+    paisRef?.id_pais ??
+    paisRef?.id
+  );
+
+  const pais = toText(
+    paisRef?.nombre_pais ??
+    raw?.nombre_pais ??
+    raw?.pais
   );
 
   return {
     value: String(id),
-    label: departamento ? `${nombre} - ${departamento}` : nombre,
+    label: nombre,
+
     nombre,
+    idDepartamento,
     departamento,
+    idPais,
+    pais,
   };
 };
 
 export const mapProveedor = (raw: any): ProveedorItem => {
   const tipoDocumentoRef = raw?.tipo_documento ?? raw?.tipoDocumento ?? null;
   const tipoProveedorRef = raw?.tipo_proveedor ?? raw?.tipoProveedorRef ?? null;
+
   const municipioRef = raw?.municipios ?? raw?.municipio ?? null;
+  const departamentoRef =
+    municipioRef?.departamentos ??
+    municipioRef?.departamento ??
+    raw?.departamentos ??
+    raw?.departamento ??
+    null;
+
+  const paisRef =
+    departamentoRef?.paises ??
+    departamentoRef?.pais ??
+    raw?.paises ??
+    raw?.pais ??
+    null;
 
   const id = toNumber(raw?.id_proveedor ?? raw?.id);
+
   const idTipoDocumento = toNumber(
     raw?.id_tipo_doc ??
-      raw?.idTipoDocumento ??
-      tipoDocumentoRef?.id_tipo_doc ??
-      tipoDocumentoRef?.id
+    raw?.idTipoDocumento ??
+    tipoDocumentoRef?.id_tipo_doc ??
+    tipoDocumentoRef?.id
   );
+
   const idTipoProveedor = toNumber(
     raw?.id_tipo_proveedor ??
-      raw?.idTipoProveedor ??
-      tipoProveedorRef?.id_tipo_proveedor ??
-      tipoProveedorRef?.id
+    raw?.idTipoProveedor ??
+    tipoProveedorRef?.id_tipo_proveedor ??
+    tipoProveedorRef?.id
   );
+
   const idMunicipio = toNumber(
     raw?.id_municipio ??
-      raw?.idMunicipio ??
-      municipioRef?.id_municipio ??
-      municipioRef?.id
+    raw?.idMunicipio ??
+    municipioRef?.id_municipio ??
+    municipioRef?.id
+  );
+
+  const idDepartamento = toNumber(
+    municipioRef?.id_departamento ??
+    raw?.id_departamento ??
+    raw?.idDepartamento ??
+    departamentoRef?.id_departamento ??
+    departamentoRef?.id
+  );
+
+  const idPais = toNumber(
+    departamentoRef?.id_pais ??
+    raw?.id_pais ??
+    raw?.idPais ??
+    paisRef?.id_pais ??
+    paisRef?.id
   );
 
   return {
     id,
     codigo: toText(raw?.codigo_proveedor ?? raw?.codigo),
+
     numeroDocumento: toText(raw?.num_documento ?? raw?.numeroDocumento),
     nombre: toText(raw?.nombre_empresa ?? raw?.nombre),
     email: toText(raw?.email),
     telefono: toText(raw?.telefono),
     direccion: toText(raw?.direccion),
     contacto: toText(raw?.nombre_contacto ?? raw?.contacto),
+
     idTipoDocumento,
     tipoDocumento: toText(
       tipoDocumentoRef?.nombre_doc ??
-        raw?.tipoDocumento ??
-        raw?.nombre_doc
+      tipoDocumentoRef?.nombre_tipo_doc ??
+      raw?.tipoDocumento ??
+      raw?.nombre_doc
     ),
+
     idTipoProveedor,
     tipoProveedor: toText(
       tipoProveedorRef?.nombre_tipo_proveedor ??
-        raw?.tipoProveedor ??
-        raw?.nombre_tipo_proveedor
+      raw?.tipoProveedor ??
+      raw?.nombre_tipo_proveedor
     ),
+
+    idPais,
+    pais: toText(
+      paisRef?.nombre_pais ??
+      raw?.pais ??
+      raw?.nombre_pais
+    ),
+
+    idDepartamento,
+    departamento: toText(
+      departamentoRef?.nombre_departamento ??
+      raw?.departamento ??
+      raw?.nombre_departamento
+    ),
+
     idMunicipio,
     ciudad: toText(
       municipioRef?.nombre_municipio ??
-        raw?.ciudad ??
-        raw?.nombre_municipio
+      raw?.ciudad ??
+      raw?.municipio ??
+      raw?.nombre_municipio
     ),
-    departamento: toText(
-      municipioRef?.departamentos?.nombre_departamento ??
-        municipioRef?.departamento?.nombre_departamento ??
-        raw?.departamento ??
-        raw?.nombre_departamento
-    ),
+
     estado: normalizeEstado(raw?.estado),
   };
 };

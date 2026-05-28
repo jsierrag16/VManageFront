@@ -9,11 +9,6 @@ import {
   ChevronRight,
   Plus,
   CheckCircle,
-  Truck,
-  Mail,
-  MapPin,
-  User,
-  Phone,
   Loader2,
 } from "lucide-react";
 import { Button } from "../../../../shared/components/ui/button";
@@ -54,6 +49,10 @@ import {
   getTiposDocumentoOptions,
   getTiposProveedorOptions,
   updateProveedor,
+  getDepartamentosOptions,
+  getPaisesOptions,
+  type DepartamentoOption,
+  type PaisOption,
   type CatalogOption,
   type MunicipioOption,
   type ProveedorItem,
@@ -125,6 +124,13 @@ const getErrorMessage = (error: any, fallback: string) => {
 
   return fallback;
 };
+
+const normalizeText = (value: unknown) =>
+  String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
 
 const validators: Record<keyof FormState, (value: string) => string> = {
   tipoDocId: (value) => (!value ? "El tipo de documento es requerido" : ""),
@@ -212,6 +218,14 @@ export default function Proveedores() {
   const [tiposProveedor, setTiposProveedor] = useState<CatalogOption[]>([]);
   const [municipios, setMunicipios] = useState<MunicipioOption[]>([]);
 
+  const [paises, setPaises] = useState<PaisOption[]>([]);
+  const [departamentos, setDepartamentos] = useState<DepartamentoOption[]>([]);
+
+  const [paisSeleccionado, setPaisSeleccionado] = useState("");
+  const [departamentoSeleccionado, setDepartamentoSeleccionado] = useState("");
+
+  const [isLoadingMunicipios, setIsLoadingMunicipios] = useState(false);
+
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [errors, setErrors] = useState<FormErrors>(EMPTY_ERRORS);
   const [touched, setTouched] = useState<FormTouched>(EMPTY_TOUCHED);
@@ -232,10 +246,68 @@ export default function Proveedores() {
   const [isLoadingCatalogos, setIsLoadingCatalogos] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const selectedMunicipio = useMemo(
-    () => municipios.find((m) => m.value === form.municipioId) ?? null,
-    [municipios, form.municipioId]
-  );
+  const paisColombia = useMemo(() => {
+    return (
+      paises.find((pais) => normalizeText(pais.label) === "colombia") ?? null
+    );
+  }, [paises]);
+
+  const departamentosDisponibles = useMemo(() => {
+    if (!paisSeleccionado) return [];
+
+    return departamentos.filter(
+      (departamento) => String(departamento.idPais) === String(paisSeleccionado)
+    );
+  }, [departamentos, paisSeleccionado]);
+
+  const handlePaisChange = (value: string) => {
+    setPaisSeleccionado(value);
+    setDepartamentoSeleccionado("");
+    setMunicipios([]);
+
+    setFieldValue("municipioId", "");
+
+    setTouched((prev) => ({
+      ...prev,
+      municipioId: false,
+    }));
+
+    setErrors((prev) => ({
+      ...prev,
+      municipioId: "",
+    }));
+  };
+
+  const handleDepartamentoChange = (value: string) => {
+    setDepartamentoSeleccionado(value);
+    setMunicipios([]);
+
+    setFieldValue("municipioId", "");
+
+    setTouched((prev) => ({
+      ...prev,
+      municipioId: false,
+    }));
+
+    setErrors((prev) => ({
+      ...prev,
+      municipioId: "",
+    }));
+  };
+
+  const handleMunicipioChange = (value: string) => {
+    setFieldValue("municipioId", value);
+
+    setTouched((prev) => ({
+      ...prev,
+      municipioId: true,
+    }));
+
+    setErrors((prev) => ({
+      ...prev,
+      municipioId: validators.municipioId(value),
+    }));
+  };
 
   const tipoDocMap = useMemo(
     () =>
@@ -253,14 +325,6 @@ export default function Proveedores() {
     [tiposProveedor]
   );
 
-  const municipioMap = useMemo(
-    () =>
-      Object.fromEntries(
-        municipios.map((item) => [Number(item.value), item])
-      ) as Record<number, MunicipioOption>,
-    [municipios]
-  );
-
   const getTipoDocumentoLabel = useCallback(
     (proveedor: ProveedorItem) =>
       proveedor.tipoDocumento || tipoDocMap[proveedor.idTipoDocumento] || "—",
@@ -271,18 +335,6 @@ export default function Proveedores() {
     (proveedor: ProveedorItem) =>
       proveedor.tipoProveedor || tipoProveedorMap[proveedor.idTipoProveedor] || "—",
     [tipoProveedorMap]
-  );
-
-  const getMunicipioLabel = useCallback(
-    (proveedor: ProveedorItem) =>
-      proveedor.ciudad || municipioMap[proveedor.idMunicipio]?.nombre || "—",
-    [municipioMap]
-  );
-
-  const getDepartamentoLabel = useCallback(
-    (proveedor: ProveedorItem) =>
-      proveedor.departamento || municipioMap[proveedor.idMunicipio]?.departamento || "—",
-    [municipioMap]
   );
 
   const resetForm = useCallback(() => {
@@ -347,17 +399,17 @@ export default function Proveedores() {
     return true;
   };
 
-const buildPayload = (): SaveProveedorPayload => ({
-  num_documento: form.numeroDoc.trim(),
-  nombre_empresa: form.nombre.trim(),
-  email: form.email.trim(),
-  telefono: form.telefono.trim(),
-  direccion: form.direccion.trim() || undefined,
-  nombre_contacto: form.contacto.trim(),
-  id_tipo_proveedor: Number(form.tipoProveedorId),
-  id_tipo_doc: Number(form.tipoDocId),
-  id_municipio: Number(form.municipioId),
-});
+  const buildPayload = (): SaveProveedorPayload => ({
+    num_documento: form.numeroDoc.trim(),
+    nombre_empresa: form.nombre.trim(),
+    email: form.email.trim(),
+    telefono: form.telefono.trim(),
+    direccion: form.direccion.trim() || undefined,
+    nombre_contacto: form.contacto.trim(),
+    id_tipo_proveedor: Number(form.tipoProveedorId),
+    id_tipo_doc: Number(form.tipoDocId),
+    id_municipio: Number(form.municipioId),
+  });
 
   const getSearchFilters = useCallback((term: string) => {
     const normalized = term.trim().toLowerCase();
@@ -379,10 +431,16 @@ const buildPayload = (): SaveProveedorPayload => ({
     try {
       setIsLoadingCatalogos(true);
 
-      const [tiposDocRes, tiposProveedorRes, municipiosRes] = await Promise.allSettled([
+      const [
+        tiposDocRes,
+        tiposProveedorRes,
+        paisesRes,
+        departamentosRes,
+      ] = await Promise.allSettled([
         getTiposDocumentoOptions(),
         getTiposProveedorOptions(),
-        getMunicipiosOptions(),
+        getPaisesOptions(),
+        getDepartamentosOptions(),
       ]);
 
       if (tiposDocRes.status === "fulfilled") {
@@ -399,11 +457,18 @@ const buildPayload = (): SaveProveedorPayload => ({
         toast.error("No se pudieron cargar los tipos de proveedor");
       }
 
-      if (municipiosRes.status === "fulfilled") {
-        setMunicipios(municipiosRes.value);
+      if (paisesRes.status === "fulfilled") {
+        setPaises(paisesRes.value);
       } else {
-        console.error("Error cargando municipios:", municipiosRes.reason);
-        toast.error("No se pudieron cargar los municipios");
+        console.error("Error cargando países:", paisesRes.reason);
+        toast.error("No se pudieron cargar los países");
+      }
+
+      if (departamentosRes.status === "fulfilled") {
+        setDepartamentos(departamentosRes.value);
+      } else {
+        console.error("Error cargando departamentos:", departamentosRes.reason);
+        toast.error("No se pudieron cargar los departamentos");
       }
     } finally {
       setIsLoadingCatalogos(false);
@@ -463,6 +528,45 @@ const buildPayload = (): SaveProveedorPayload => ({
   }, [loadCatalogos]);
 
   useEffect(() => {
+    if (!departamentoSeleccionado) {
+      setMunicipios([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const cargarMunicipiosPorDepartamento = async () => {
+      try {
+        setIsLoadingMunicipios(true);
+
+        const data = await getMunicipiosOptions({
+          idDepartamento: Number(departamentoSeleccionado),
+        });
+
+        if (!cancelled) {
+          setMunicipios(data);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Error cargando municipios:", error);
+          toast.error("No se pudieron cargar los municipios");
+          setMunicipios([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingMunicipios(false);
+        }
+      }
+    };
+
+    void cargarMunicipiosPorDepartamento();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [departamentoSeleccionado]);
+
+  useEffect(() => {
     const timeout = window.setTimeout(() => {
       setDebouncedSearch(searchTerm.trim());
     }, 300);
@@ -495,23 +599,30 @@ const buildPayload = (): SaveProveedorPayload => ({
 
   useEffect(() => {
     if (!isCrear) return;
+
     resetForm();
-  }, [isCrear, resetForm]);
+    setPaisSeleccionado(paisColombia?.value ?? "");
+    setDepartamentoSeleccionado("");
+    setMunicipios([]);
+  }, [isCrear, resetForm, paisColombia?.value]);
 
   useEffect(() => {
     if (!isEditar || !proveedorDetalle) return;
 
     setForm({
-      tipoDocId: String(proveedorDetalle.idTipoDocumento),
-      numeroDoc: proveedorDetalle.numeroDocumento,
-      nombre: proveedorDetalle.nombre,
-      email: proveedorDetalle.email,
-      telefono: proveedorDetalle.telefono,
-      direccion: proveedorDetalle.direccion,
-      municipioId: String(proveedorDetalle.idMunicipio),
-      tipoProveedorId: String(proveedorDetalle.idTipoProveedor),
-      contacto: proveedorDetalle.contacto,
+      tipoDocId: String(proveedorDetalle.idTipoDocumento || ""),
+      numeroDoc: proveedorDetalle.numeroDocumento || "",
+      nombre: proveedorDetalle.nombre || "",
+      email: proveedorDetalle.email || "",
+      telefono: proveedorDetalle.telefono || "",
+      direccion: proveedorDetalle.direccion || "",
+      municipioId: String(proveedorDetalle.idMunicipio || ""),
+      tipoProveedorId: String(proveedorDetalle.idTipoProveedor || ""),
+      contacto: proveedorDetalle.contacto || "",
     });
+
+    setPaisSeleccionado(String(proveedorDetalle.idPais || ""));
+    setDepartamentoSeleccionado(String(proveedorDetalle.idDepartamento || ""));
 
     setErrors(EMPTY_ERRORS);
     setTouched(EMPTY_TOUCHED);
@@ -640,100 +751,113 @@ const buildPayload = (): SaveProveedorPayload => ({
   const renderDetalleBody = () => {
     if (isLoadingDetalle) {
       return (
-        <div className="py-10 flex items-center justify-center gap-2 text-gray-500">
+        <div className="flex items-center justify-center gap-2 py-10 text-gray-500">
           <Loader2 className="h-4 w-4 animate-spin" />
           Cargando proveedor...
         </div>
       );
     }
 
-    if (!proveedorDetalle) return null;
+    if (!proveedorDetalle) {
+      return (
+        <div className="py-8 text-center text-gray-500">
+          No se encontró la información del proveedor
+        </div>
+      );
+    }
 
     return (
-      <div className="space-y-4">
-        <div className="bg-linear-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-100">
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">
-            {proveedorDetalle.nombre}
-          </h3>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className="bg-white text-xs">
-              {getTipoDocumentoLabel(proveedorDetalle)}: {proveedorDetalle.numeroDocumento}
-            </Badge>
-
-            <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100 text-xs">
-              {getTipoProveedorLabel(proveedorDetalle)}
-            </Badge>
-
-            <Badge
-              className={
-                proveedorDetalle.estado === "Activo"
-                  ? "bg-green-100 text-green-800 hover:bg-green-100 text-xs"
-                  : "bg-red-100 text-red-800 hover:bg-red-100 text-xs"
-              }
-            >
-              {proveedorDetalle.estado}
-            </Badge>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-            <div className="flex items-center gap-2 mb-1">
-              <Mail className="h-3.5 w-3.5 text-blue-600" />
-              <Label className="text-xs text-gray-500">Email</Label>
-            </div>
-            <p className="text-sm font-medium text-gray-900">
-              {proveedorDetalle.email || "No registrado"}
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 gap-x-10 gap-y-5 rounded-lg bg-gray-50 p-5 md:grid-cols-2">
+          <div>
+            <p className="text-sm text-gray-600">Proveedor</p>
+            <p className="font-medium text-blue-600">
+              {proveedorDetalle.nombre || "-"}
             </p>
           </div>
 
-          <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-            <div className="flex items-center gap-2 mb-1">
-              <Phone className="h-3.5 w-3.5 text-blue-600" />
-              <Label className="text-xs text-gray-500">Teléfono</Label>
+          <div>
+            <p className="text-sm text-gray-600">Estado</p>
+            <div className="mt-1">
+              <Badge
+                variant="outline"
+                className={
+                  proveedorDetalle.estado === "Activo"
+                    ? "border-green-200 bg-green-50 text-green-700"
+                    : "border-red-200 bg-red-50 text-red-700"
+                }
+              >
+                {proveedorDetalle.estado || "Sin estado"}
+              </Badge>
             </div>
-            <p className="text-sm font-medium text-gray-900">
-              {proveedorDetalle.telefono || "No registrado"}
+          </div>
+
+          <div>
+            <p className="text-sm text-gray-600">Tipo de documento</p>
+            <p className="font-medium">
+              {getTipoDocumentoLabel(proveedorDetalle) || "-"}
             </p>
           </div>
 
-          <div className="col-span-2 bg-gray-50 rounded-lg p-3 border border-gray-200">
-            <div className="flex items-center gap-2 mb-1">
-              <User className="h-3.5 w-3.5 text-blue-600" />
-              <Label className="text-xs text-gray-500">Contacto Principal</Label>
-            </div>
-            <p className="text-sm font-medium text-gray-900">
+          <div>
+            <p className="text-sm text-gray-600">Documento / NIT</p>
+            <p className="font-medium">
+              {proveedorDetalle.numeroDocumento || "-"}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-sm text-gray-600">Tipo de proveedor</p>
+            <p className="font-medium">
+              {getTipoProveedorLabel(proveedorDetalle) || "-"}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-sm text-gray-600">Contacto principal</p>
+            <p className="font-medium">
               {proveedorDetalle.contacto || "No registrado"}
             </p>
           </div>
 
-          <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-            <div className="flex items-center gap-2 mb-1">
-              <MapPin className="h-3.5 w-3.5 text-blue-600" />
-              <Label className="text-xs text-gray-500">Municipio</Label>
-            </div>
-            <p className="text-sm font-medium text-gray-900">
-              {getMunicipioLabel(proveedorDetalle)}
+          <div>
+            <p className="text-sm text-gray-600">Email</p>
+            <p className="font-medium">
+              {proveedorDetalle.email || "No registrado"}
             </p>
           </div>
 
-          <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-            <div className="flex items-center gap-2 mb-1">
-              <MapPin className="h-3.5 w-3.5 text-blue-600" />
-              <Label className="text-xs text-gray-500">Departamento</Label>
-            </div>
-            <p className="text-sm font-medium text-gray-900">
-              {getDepartamentoLabel(proveedorDetalle)}
+          <div>
+            <p className="text-sm text-gray-600">Teléfono</p>
+            <p className="font-medium">
+              {proveedorDetalle.telefono || "No registrado"}
             </p>
           </div>
 
-          <div className="col-span-2 bg-gray-50 rounded-lg p-3 border border-gray-200">
-            <div className="flex items-center gap-2 mb-1">
-              <MapPin className="h-3.5 w-3.5 text-blue-600" />
-              <Label className="text-xs text-gray-500">Dirección</Label>
-            </div>
-            <p className="text-sm font-medium text-gray-900">
+          <div>
+            <p className="text-sm text-gray-600">País</p>
+            <p className="font-medium">
+              {proveedorDetalle.pais || "-"}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-sm text-gray-600">Departamento</p>
+            <p className="font-medium">
+              {proveedorDetalle.departamento || "-"}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-sm text-gray-600">Ciudad / Municipio</p>
+            <p className="font-medium">
+              {proveedorDetalle.ciudad || "-"}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-sm text-gray-600">Dirección</p>
+            <p className="font-medium">
               {proveedorDetalle.direccion || "No registrada"}
             </p>
           </div>
@@ -750,25 +874,27 @@ const buildPayload = (): SaveProveedorPayload => ({
           Gestiona la información de tus proveedores
         </p>
       </div>
+      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
 
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1">
-          <Search
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-            size={20}
-          />
-          <Input
-            placeholder="Buscar por nombre, documento, email, teléfono, contacto o estado..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
+        <div className="flex items-center gap-4">
+          <div className="relative flex-1">
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              size={20}
+            />
+            <Input
+              placeholder="Buscar por nombre, documento, email, teléfono, contacto o estado..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+
+          <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
+            <Plus size={18} className="mr-2" />
+            Nuevo Proveedor
+          </Button>
         </div>
-
-        <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
-          <Plus size={18} className="mr-2" />
-          Nuevo Proveedor
-        </Button>
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
@@ -776,23 +902,23 @@ const buildPayload = (): SaveProveedorPayload => ({
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50">
-                <TableHead className="w-16">#</TableHead>
-                <TableHead>Código</TableHead>
+                <TableHead className="w-14 text-center">#</TableHead>
+                <TableHead className="text-center">Código</TableHead>
                 <TableHead>Nombre</TableHead>
-                <TableHead>Tipo Doc.</TableHead>
-                <TableHead>N° Documento</TableHead>
+                <TableHead className="text-center">Documento / NIT</TableHead>
+                <TableHead>Ciudad / Municipio</TableHead>
                 <TableHead>Email</TableHead>
-                <TableHead>Teléfono</TableHead>
-                <TableHead>Tipo Proveedor</TableHead>
+                <TableHead className="text-center">Teléfono</TableHead>
+                <TableHead className="text-center">Tipo Proveedor</TableHead>
                 <TableHead className="text-center">Estado</TableHead>
-                <TableHead className="text-right w-32">Acciones</TableHead>
+                <TableHead className="w-32 text-center">Acciones</TableHead>
               </TableRow>
             </TableHeader>
 
             <TableBody>
               {isLoadingList ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={10} className="py-8 text-center text-gray-500">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Cargando proveedores...
@@ -801,41 +927,50 @@ const buildPayload = (): SaveProveedorPayload => ({
                 </TableRow>
               ) : proveedores.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={10} className="py-8 text-center text-gray-500">
                     No se encontraron proveedores
                   </TableCell>
                 </TableRow>
               ) : (
                 proveedores.map((proveedor, index) => (
                   <TableRow key={proveedor.id} className="hover:bg-gray-50">
-                    <TableCell>{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</TableCell>
+                    <TableCell className="text-center text-gray-600">
+                      {(currentPage - 1) * ITEMS_PER_PAGE + index + 1}
+                    </TableCell>
 
-                    <TableCell className="font-mono text-sm">
-                      {proveedor.codigo}
+                    <TableCell className="text-center font-mono text-sm">
+                      {proveedor.codigo || "—"}
                     </TableCell>
 
                     <TableCell className="font-medium text-gray-900">
-                      {proveedor.nombre}
+                      {proveedor.nombre || "—"}
                     </TableCell>
 
-                    <TableCell>{getTipoDocumentoLabel(proveedor)}</TableCell>
+                    <TableCell className="text-center">
+                      <span className="font-medium">
+                        {getTipoDocumentoLabel(proveedor)}:
+                      </span>{" "}
+                      <span className="font-mono text-sm">
+                        {proveedor.numeroDocumento || "—"}
+                      </span>
+                    </TableCell>
 
-                    <TableCell className="font-mono text-sm">
-                      {proveedor.numeroDocumento}
+                    <TableCell className="text-gray-700">
+                      {proveedor.ciudad || "—"}
                     </TableCell>
 
                     <TableCell className="text-gray-700">
                       {proveedor.email || "—"}
                     </TableCell>
 
-                    <TableCell className="text-gray-700">
+                    <TableCell className="text-center text-gray-700">
                       {proveedor.telefono || "—"}
                     </TableCell>
 
-                    <TableCell>
+                    <TableCell className="text-center">
                       <Badge
                         variant="outline"
-                        className="bg-blue-50 text-blue-700 border-blue-200"
+                        className="border-blue-200 bg-blue-50 text-blue-700"
                       >
                         {getTipoProveedorLabel(proveedor)}
                       </Badge>
@@ -847,8 +982,8 @@ const buildPayload = (): SaveProveedorPayload => ({
                         size="sm"
                         onClick={() => handleToggleEstado(proveedor)}
                         className={`h-7 ${proveedor.estado === "Activo"
-                          ? "bg-green-100 text-green-800 hover:bg-green-200"
-                          : "bg-red-100 text-red-800 hover:bg-red-200"
+                            ? "bg-green-100 text-green-800 hover:bg-green-200"
+                            : "bg-red-100 text-red-800 hover:bg-red-200"
                           }`}
                       >
                         {proveedor.estado}
@@ -856,12 +991,12 @@ const buildPayload = (): SaveProveedorPayload => ({
                     </TableCell>
 
                     <TableCell>
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-center gap-2">
                         <Button
                           variant="ghost"
                           size="icon"
                           onClick={() => handleView(proveedor)}
-                          className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                          className="h-8 w-8 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
                           title="Ver detalles"
                         >
                           <Eye size={16} />
@@ -871,7 +1006,7 @@ const buildPayload = (): SaveProveedorPayload => ({
                           variant="ghost"
                           size="icon"
                           onClick={() => handleEdit(proveedor)}
-                          className="h-8 w-8 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                          className="h-8 w-8 text-orange-600 hover:bg-orange-50 hover:text-orange-700"
                           title="Editar"
                         >
                           <Edit size={16} />
@@ -881,7 +1016,7 @@ const buildPayload = (): SaveProveedorPayload => ({
                           variant="ghost"
                           size="icon"
                           onClick={() => handleDelete(proveedor)}
-                          className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                          className="h-8 w-8 text-red-600 hover:bg-red-50 hover:text-red-700"
                           title="Desactivar"
                         >
                           <Trash2 size={16} />
@@ -957,10 +1092,7 @@ const buildPayload = (): SaveProveedorPayload => ({
           onInteractOutside={(e) => e.preventDefault()}
         >
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Truck className="h-5 w-5 text-blue-600" />
-              Detalles del Proveedor
-            </DialogTitle>
+            <DialogTitle>Detalles del Proveedor</DialogTitle>
             <DialogDescription id="view-proveedor-description">
               Información completa del proveedor
             </DialogDescription>
@@ -1159,48 +1291,113 @@ const buildPayload = (): SaveProveedorPayload => ({
               </div>
             </div>
 
-            <div>
-              <Label htmlFor="create-municipio">Municipio *</Label>
-              <Select
-                value={form.municipioId}
-                onValueChange={(value) => {
-                  setFieldValue("municipioId", value);
-                  setTouched((prev) => ({ ...prev, municipioId: true }));
-                  setErrors((prev) => ({
-                    ...prev,
-                    municipioId: validators.municipioId(value),
-                  }));
-                }}
-                disabled={isLoadingCatalogos}
-              >
-                <SelectTrigger
-                  id="create-municipio"
-                  className={errors.municipioId && touched.municipioId ? "border-red-500" : ""}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div>
+                <Label htmlFor="create-pais">País *</Label>
+                <Select
+                  value={paisSeleccionado}
+                  onValueChange={handlePaisChange}
+                  disabled={isLoadingCatalogos}
                 >
-                  <SelectValue
-                    placeholder={
-                      isLoadingCatalogos
-                        ? "Cargando municipios..."
-                        : "Selecciona un municipio"
+                  <SelectTrigger id="create-pais">
+                    <SelectValue
+                      placeholder={
+                        isLoadingCatalogos ? "Cargando países..." : "Selecciona un país"
+                      }
+                    />
+                  </SelectTrigger>
+
+                  <SelectContent>
+                    {paises.map((pais) => (
+                      <SelectItem key={pais.value} value={pais.value}>
+                        {pais.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="create-departamento">Departamento *</Label>
+                <Select
+                  value={departamentoSeleccionado}
+                  onValueChange={handleDepartamentoChange}
+                  disabled={isLoadingCatalogos || !paisSeleccionado}
+                >
+                  <SelectTrigger id="create-departamento">
+                    <SelectValue
+                      placeholder={
+                        !paisSeleccionado
+                          ? "Selecciona primero un país"
+                          : "Selecciona un departamento"
+                      }
+                    />
+                  </SelectTrigger>
+
+                  <SelectContent>
+                    {departamentosDisponibles.length === 0 ? (
+                      <div className="px-3 py-2 text-sm text-gray-500">
+                        No hay departamentos disponibles
+                      </div>
+                    ) : (
+                      departamentosDisponibles.map((departamento) => (
+                        <SelectItem key={departamento.value} value={departamento.value}>
+                          {departamento.label}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="create-municipio">Ciudad / Municipio *</Label>
+                <Select
+                  value={form.municipioId}
+                  onValueChange={handleMunicipioChange}
+                  disabled={
+                    isLoadingCatalogos ||
+                    isLoadingMunicipios ||
+                    !paisSeleccionado ||
+                    !departamentoSeleccionado
+                  }
+                >
+                  <SelectTrigger
+                    id="create-municipio"
+                    className={
+                      errors.municipioId && touched.municipioId ? "border-red-500" : ""
                     }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {municipios.map((municipio) => (
-                    <SelectItem key={municipio.value} value={municipio.value}>
-                      {municipio.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {selectedMunicipio?.departamento && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Departamento: {selectedMunicipio.departamento}
-                </p>
-              )}
-              {errors.municipioId && touched.municipioId && (
-                <p className="text-red-500 text-sm mt-1">{errors.municipioId}</p>
-              )}
+                  >
+                    <SelectValue
+                      placeholder={
+                        !departamentoSeleccionado
+                          ? "Selecciona primero un departamento"
+                          : isLoadingMunicipios
+                            ? "Cargando municipios..."
+                            : "Selecciona una ciudad / municipio"
+                      }
+                    />
+                  </SelectTrigger>
+
+                  <SelectContent>
+                    {municipios.length === 0 ? (
+                      <div className="px-3 py-2 text-sm text-gray-500">
+                        No hay municipios disponibles
+                      </div>
+                    ) : (
+                      municipios.map((municipio) => (
+                        <SelectItem key={municipio.value} value={municipio.value}>
+                          {municipio.label}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+
+                {errors.municipioId && touched.municipioId && (
+                  <p className="mt-1 text-sm text-red-500">{errors.municipioId}</p>
+                )}
+              </div>
             </div>
 
             <div>
@@ -1412,42 +1609,113 @@ const buildPayload = (): SaveProveedorPayload => ({
                 </div>
               </div>
 
-              <div>
-                <Label htmlFor="edit-municipio">Municipio *</Label>
-                <Select
-                  value={form.municipioId}
-                  onValueChange={(value) => {
-                    setFieldValue("municipioId", value);
-                    setTouched((prev) => ({ ...prev, municipioId: true }));
-                    setErrors((prev) => ({
-                      ...prev,
-                      municipioId: validators.municipioId(value),
-                    }));
-                  }}
-                  disabled={isLoadingCatalogos}
-                >
-                  <SelectTrigger
-                    id="edit-municipio"
-                    className={errors.municipioId && touched.municipioId ? "border-red-500" : ""}
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div>
+                  <Label htmlFor="edit-pais">País *</Label>
+                  <Select
+                    value={paisSeleccionado}
+                    onValueChange={handlePaisChange}
+                    disabled={isLoadingCatalogos}
                   >
-                    <SelectValue placeholder="Selecciona un municipio" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {municipios.map((municipio) => (
-                      <SelectItem key={municipio.value} value={municipio.value}>
-                        {municipio.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {selectedMunicipio?.departamento && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Departamento: {selectedMunicipio.departamento}
-                  </p>
-                )}
-                {errors.municipioId && touched.municipioId && (
-                  <p className="text-red-500 text-sm mt-1">{errors.municipioId}</p>
-                )}
+                    <SelectTrigger id="edit-pais">
+                      <SelectValue
+                        placeholder={
+                          isLoadingCatalogos ? "Cargando países..." : "Selecciona un país"
+                        }
+                      />
+                    </SelectTrigger>
+
+                    <SelectContent>
+                      {paises.map((pais) => (
+                        <SelectItem key={pais.value} value={pais.value}>
+                          {pais.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label htmlFor="edit-departamento">Departamento *</Label>
+                  <Select
+                    value={departamentoSeleccionado}
+                    onValueChange={handleDepartamentoChange}
+                    disabled={isLoadingCatalogos || !paisSeleccionado}
+                  >
+                    <SelectTrigger id="edit-departamento">
+                      <SelectValue
+                        placeholder={
+                          !paisSeleccionado
+                            ? "Selecciona primero un país"
+                            : "Selecciona un departamento"
+                        }
+                      />
+                    </SelectTrigger>
+
+                    <SelectContent>
+                      {departamentosDisponibles.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-gray-500">
+                          No hay departamentos disponibles
+                        </div>
+                      ) : (
+                        departamentosDisponibles.map((departamento) => (
+                          <SelectItem key={departamento.value} value={departamento.value}>
+                            {departamento.label}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label htmlFor="edit-municipio">Ciudad / Municipio *</Label>
+                  <Select
+                    value={form.municipioId}
+                    onValueChange={handleMunicipioChange}
+                    disabled={
+                      isLoadingCatalogos ||
+                      isLoadingMunicipios ||
+                      !paisSeleccionado ||
+                      !departamentoSeleccionado
+                    }
+                  >
+                    <SelectTrigger
+                      id="edit-municipio"
+                      className={
+                        errors.municipioId && touched.municipioId ? "border-red-500" : ""
+                      }
+                    >
+                      <SelectValue
+                        placeholder={
+                          !departamentoSeleccionado
+                            ? "Selecciona primero un departamento"
+                            : isLoadingMunicipios
+                              ? "Cargando municipios..."
+                              : "Selecciona una ciudad / municipio"
+                        }
+                      />
+                    </SelectTrigger>
+
+                    <SelectContent>
+                      {municipios.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-gray-500">
+                          No hay municipios disponibles
+                        </div>
+                      ) : (
+                        municipios.map((municipio) => (
+                          <SelectItem key={municipio.value} value={municipio.value}>
+                            {municipio.label}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+
+                  {errors.municipioId && touched.municipioId && (
+                    <p className="mt-1 text-sm text-red-500">{errors.municipioId}</p>
+                  )}
+                </div>
               </div>
 
               <div>
