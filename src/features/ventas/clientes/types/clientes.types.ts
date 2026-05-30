@@ -29,6 +29,13 @@ export type ClienteApi = {
     nombre_municipio?: string;
     nombre?: string;
     municipio?: string;
+    id_departamento?: number;
+    departamentos?: {
+      id_departamento: number;
+      nombre_departamento?: string;
+      nombre?: string;
+      departamento?: string;
+    };
     departamento?: {
       id_departamento: number;
       nombre_departamento?: string;
@@ -50,10 +57,16 @@ export type ClienteUI = {
   direccion: string;
   ciudad: string;
   departamento: string;
+  idDepartamento: number;
   idMunicipio: number;
   tipoCliente: string;
   idTipoCliente: number;
   estado: "Activo" | "Inactivo";
+};
+
+export type DepartamentoOption = {
+  id: number;
+  nombre: string;
 };
 
 export type TipoDocumentoOption = {
@@ -69,6 +82,7 @@ export type TipoClienteOption = {
 export type MunicipioOption = {
   id: number;
   nombre: string;
+  idDepartamento: number;
   departamento: string;
 };
 

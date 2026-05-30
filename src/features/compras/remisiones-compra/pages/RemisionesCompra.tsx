@@ -1793,14 +1793,14 @@ const validateBeforeSubmit = () => {
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50">
-                <TableHead className="w-16">#</TableHead>
+                <TableHead className="w-14">#</TableHead>
                 <TableHead>N° Remisión</TableHead>
                 <TableHead>Orden de Compra</TableHead>
                 <TableHead>Proveedor</TableHead>
                 <TableHead>Fecha</TableHead>
-                <TableHead>Items</TableHead>
+                <TableHead className="text-center">Items</TableHead>
                 <TableHead className="text-center">Estado</TableHead>
-                <TableHead className="text-center">Acciones</TableHead>
+                <TableHead className="text-center w-32">Acciones</TableHead>
               </TableRow>
             </TableHeader>
 
@@ -1828,7 +1828,9 @@ const validateBeforeSubmit = () => {
                       <TableCell>{remision.ordenCompra}</TableCell>
                       <TableCell>{remision.proveedor}</TableCell>
                       <TableCell>{formatDate(remision.fecha)}</TableCell>
-                      <TableCell>{remision.itemsCount}</TableCell>
+                      <TableCell className="text-center">
+                        {remision.itemsCount}
+                      </TableCell>
                       <TableCell className="text-center">
                         <Button
                           variant="ghost"

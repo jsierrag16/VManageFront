@@ -8,10 +8,6 @@ import {
   ChevronRight,
   Plus,
   CheckCircle,
-  Mail,
-  MapPin,
-  User,
-  Phone,
   Filter,
 } from "lucide-react";
 import { Button } from "../../../../shared/components/ui/button";
@@ -48,13 +44,13 @@ import {
   mapFormToClientePayload,
   mapTiposCliente,
   mapTiposDocumento,
-  mapMunicipios,
 } from "../services/clientes.mapper";
 import type {
   ClienteUI,
   TipoClienteOption,
   TipoDocumentoOption,
   MunicipioOption,
+  DepartamentoOption,
 } from "../types/clientes.types";
 import {
   useNavigate,
@@ -88,6 +84,9 @@ export default function Clientes() {
   );
   const [tiposCliente, setTiposCliente] = useState<TipoClienteOption[]>([]);
   const [municipios, setMunicipios] = useState<MunicipioOption[]>([]);
+  const [departamentos, setDepartamentos] = useState<DepartamentoOption[]>([]);
+  const [formDepartamentoId, setFormDepartamentoId] = useState("");
+  const [isLoadingMunicipios, setIsLoadingMunicipios] = useState(false);
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
@@ -108,16 +107,6 @@ export default function Clientes() {
   const [formDireccion, setFormDireccion] = useState("");
   const [formMunicipioId, setFormMunicipioId] = useState("");
   const [formTipoClienteId, setFormTipoClienteId] = useState("");
-
-  // -------------------------
-  // Helpers de ubicación
-  // -------------------------
-  const municipioSeleccionado = useMemo(() => {
-    return municipios.find((m) => String(m.id) === formMunicipioId) || null;
-  }, [municipios, formMunicipioId]);
-
-  const ciudadSeleccionada = municipioSeleccionado?.nombre ?? "";
-  const departamentoSeleccionado = municipioSeleccionado?.departamento ?? "";
 
   // -------------------------
   // Cliente seleccionado por URL
@@ -269,6 +258,18 @@ export default function Clientes() {
     }
   };
 
+  const handleDepartamentoChange = (value: string) => {
+    setFormDepartamentoId(value);
+    setFormMunicipioId("");
+
+    if (touched.municipio) {
+      setErrors((prev) => ({
+        ...prev,
+        municipio: validateMunicipio(""),
+      }));
+    }
+  };
+
   const handleMunicipioChange = (value: string) => {
     setFormMunicipioId(value);
     if (touched.municipio) {
@@ -334,11 +335,27 @@ export default function Clientes() {
 
   const loadMeta = useCallback(async () => {
     try {
-      const meta = await clientesService.getMeta();
+      const [metaResult, departamentosResult] = await Promise.allSettled([
+        clientesService.getMeta(),
+        clientesService.getDepartamentos(),
+      ]);
 
-      setTiposDocumento(mapTiposDocumento(meta.tiposDocumento || []));
-      setTiposCliente(mapTiposCliente(meta.tiposCliente || []));
-      setMunicipios(mapMunicipios(meta.municipios || []));
+      if (metaResult.status === "fulfilled") {
+        const meta = metaResult.value;
+
+        setTiposDocumento(mapTiposDocumento(meta.tiposDocumento || []));
+        setTiposCliente(mapTiposCliente(meta.tiposCliente || []));
+      } else {
+        console.error(metaResult.reason);
+        toast.error("No se pudieron cargar los catálogos de clientes");
+      }
+
+      if (departamentosResult.status === "fulfilled") {
+        setDepartamentos(departamentosResult.value);
+      } else {
+        console.error(departamentosResult.reason);
+        toast.error("No se pudieron cargar los departamentos");
+      }
     } catch (error) {
       console.error(error);
       toast.error("No se pudieron cargar los catálogos");
@@ -349,6 +366,45 @@ export default function Clientes() {
     loadMeta();
     loadClientes();
   }, [loadMeta, loadClientes]);
+
+  useEffect(() => {
+    if (!formDepartamentoId) {
+      setMunicipios([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const cargarMunicipios = async () => {
+      try {
+        setIsLoadingMunicipios(true);
+
+        const data = await clientesService.getMunicipiosByDepartamento(
+          Number(formDepartamentoId)
+        );
+
+        if (!cancelled) {
+          setMunicipios(data);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error(error);
+          toast.error("No se pudieron cargar los municipios");
+          setMunicipios([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingMunicipios(false);
+        }
+      }
+    };
+
+    void cargarMunicipios();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [formDepartamentoId]);
 
   // -------------------------
   // Filtrar clientes
@@ -385,6 +441,8 @@ export default function Clientes() {
     setFormTelefono("");
     setFormDireccion("");
     setFormMunicipioId("");
+    setFormDepartamentoId("");
+    setMunicipios([]);
     setFormTipoClienteId("");
 
     setErrors({
@@ -424,6 +482,7 @@ export default function Clientes() {
     setFormTelefono(clienteSeleccionado.telefono);
     setFormDireccion(clienteSeleccionado.direccion);
     setFormMunicipioId(String(clienteSeleccionado.idMunicipio));
+    setFormDepartamentoId(String(clienteSeleccionado.idDepartamento || ""));
     setFormTipoClienteId(String(clienteSeleccionado.idTipoCliente));
 
     setErrors({
@@ -621,6 +680,17 @@ export default function Clientes() {
     }
   };
 
+  const getDocumentoClienteTexto = (cliente?: ClienteUI | null) => {
+    if (!cliente) return "No registrado";
+
+    const tipoDocumento = cliente.tipoDocumento?.trim() || "Documento";
+    const numeroDocumento = cliente.numeroDocumento?.trim() || "";
+
+    if (!numeroDocumento) return "No registrado";
+
+    return `${tipoDocumento}: ${numeroDocumento}`;
+  };
+
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
   };
@@ -638,64 +708,66 @@ export default function Clientes() {
         </p>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1">
-          <Search
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-            size={20}
-          />
-          <Input
-            placeholder="Buscar por nombre, documento, email o código..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+        <div className="flex items-center gap-4">
+          <div className="relative flex-1">
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              size={20}
+            />
+            <Input
+              placeholder="Buscar por nombre, documento, email o código..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
 
-        <div className="flex items-center gap-2 border border-gray-300 rounded-lg p-1 bg-gray-50">
-          <Filter size={16} className="text-gray-500 ml-2" />
+          <div className="flex items-center gap-2 border border-gray-300 rounded-lg p-1 bg-gray-50">
+            <Filter size={16} className="text-gray-500 ml-2" />
+            <Button
+              size="sm"
+              variant={estadoFilter === "todos" ? "default" : "ghost"}
+              onClick={() => setEstadoFilter("todos")}
+              className={`h-8 ${estadoFilter === "todos"
+                ? "bg-blue-600 text-white hover:bg-blue-700"
+                : "hover:bg-gray-200"
+                }`}
+            >
+              Todos
+            </Button>
+            <Button
+              size="sm"
+              variant={estadoFilter === "activo" ? "default" : "ghost"}
+              onClick={() => setEstadoFilter("activo")}
+              className={`h-8 ${estadoFilter === "activo"
+                ? "bg-green-600 text-white hover:bg-green-700"
+                : "hover:bg-gray-200"
+                }`}
+            >
+              Activos
+            </Button>
+            <Button
+              size="sm"
+              variant={estadoFilter === "inactivo" ? "default" : "ghost"}
+              onClick={() => setEstadoFilter("inactivo")}
+              className={`h-8 ${estadoFilter === "inactivo"
+                ? "bg-red-600 text-white hover:bg-red-700"
+                : "hover:bg-gray-200"
+                }`}
+            >
+              Inactivos
+            </Button>
+          </div>
+
           <Button
-            size="sm"
-            variant={estadoFilter === "todos" ? "default" : "ghost"}
-            onClick={() => setEstadoFilter("todos")}
-            className={`h-8 ${estadoFilter === "todos"
-              ? "bg-blue-600 text-white hover:bg-blue-700"
-              : "hover:bg-gray-200"
-              }`}
+            onClick={handleCreate}
+            className="bg-blue-600 hover:bg-blue-700"
           >
-            Todos
-          </Button>
-          <Button
-            size="sm"
-            variant={estadoFilter === "activo" ? "default" : "ghost"}
-            onClick={() => setEstadoFilter("activo")}
-            className={`h-8 ${estadoFilter === "activo"
-              ? "bg-green-600 text-white hover:bg-green-700"
-              : "hover:bg-gray-200"
-              }`}
-          >
-            Activos
-          </Button>
-          <Button
-            size="sm"
-            variant={estadoFilter === "inactivo" ? "default" : "ghost"}
-            onClick={() => setEstadoFilter("inactivo")}
-            className={`h-8 ${estadoFilter === "inactivo"
-              ? "bg-red-600 text-white hover:bg-red-700"
-              : "hover:bg-gray-200"
-              }`}
-          >
-            Inactivos
+            <Plus size={18} className="mr-2" />
+            Nuevo Cliente
           </Button>
         </div>
-
-        <Button
-          onClick={handleCreate}
-          className="bg-blue-600 hover:bg-blue-700"
-        >
-          <Plus size={18} className="mr-2" />
-          Nuevo Cliente
-        </Button>
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
@@ -703,23 +775,22 @@ export default function Clientes() {
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50">
-                <TableHead className="w-16">#</TableHead>
+                <TableHead className="w-14">#</TableHead>
                 <TableHead>Código</TableHead>
                 <TableHead>Nombre</TableHead>
-                <TableHead>Tipo Doc.</TableHead>
-                <TableHead>N° Documento</TableHead>
+                <TableHead>Documento / NIT</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Teléfono</TableHead>
                 <TableHead>Tipo Cliente</TableHead>
                 <TableHead className="text-center">Estado</TableHead>
-                <TableHead className="text-right w-32">Acciones</TableHead>
+                <TableHead className="text-center w-32">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
                   <TableCell
-                    colSpan={10}
+                    colSpan={9}
                     className="text-center py-8 text-gray-500"
                   >
                     Cargando clientes...
@@ -728,7 +799,7 @@ export default function Clientes() {
               ) : currentClientes.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={10}
+                    colSpan={9}
                     className="text-center py-8 text-gray-500"
                   >
                     No se encontraron clientes
@@ -737,22 +808,31 @@ export default function Clientes() {
               ) : (
                 currentClientes.map((cliente, index) => (
                   <TableRow key={cliente.id} className="hover:bg-gray-50">
-                    <TableCell>{startIndex + index + 1}</TableCell>
-                    <TableCell className="font-mono text-sm">
-                      {cliente.codigo}
+                    <TableCell className="text-gray-600">
+                      {startIndex + index + 1}
                     </TableCell>
+
+                    <TableCell className="font-mono text-sm">
+                      {cliente.codigo || "—"}
+                    </TableCell>
+
                     <TableCell className="font-medium text-gray-900">
-                      {cliente.nombre}
+                      {cliente.nombre || "—"}
                     </TableCell>
-                    <TableCell>{cliente.tipoDocumento}</TableCell>
-                    <TableCell className="font-mono text-sm">
-                      {cliente.numeroDocumento}
+
+                    <TableCell className="">
+                      <span className="font-medium">{cliente.tipoDocumento || "Documento"}:</span>{" "}
+                      <span className="font-mono text-sm">
+                        {cliente.numeroDocumento || "—"}
+                      </span>
                     </TableCell>
+
                     <TableCell className="text-gray-700">
-                      {cliente.email || "N/A"}
+                      {cliente.email || "—"}
                     </TableCell>
+
                     <TableCell className="text-gray-700">
-                      {cliente.telefono || "N/A"}
+                      {cliente.telefono || "—"}
                     </TableCell>
                     <TableCell>
                       <Badge
@@ -776,7 +856,7 @@ export default function Clientes() {
                       </Button>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-center gap-2">
                         <Button
                           variant="ghost"
                           size="icon"
@@ -877,95 +957,106 @@ export default function Clientes() {
         <DialogContent
           className="max-w-6xl max-h-[85vh] overflow-y-auto"
           aria-describedby="view-cliente-description"
+          onInteractOutside={(e) => e.preventDefault()}
         >
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <User className="h-5 w-5 text-blue-600" />
-              Detalles del Cliente
-            </DialogTitle>
+            <DialogTitle>Detalles del Cliente</DialogTitle>
             <DialogDescription id="view-cliente-description">
               Información completa del cliente
             </DialogDescription>
           </DialogHeader>
 
-          {clienteSeleccionado && (
-            <div className="space-y-4">
-              <div className="bg-linear-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-100">
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  {clienteSeleccionado.nombre}
-                </h3>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline" className="bg-white text-xs">
-                    {clienteSeleccionado.tipoDocumento}:{" "}
-                    {clienteSeleccionado.numeroDocumento}
-                  </Badge>
-                  <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100 text-xs">
-                    {clienteSeleccionado.tipoCliente}
-                  </Badge>
-                  <Badge
-                    className={`text-xs hover:bg-current ${clienteSeleccionado.estado === "Activo"
-                      ? "bg-green-100 text-green-800"
-                      : "bg-red-100 text-red-800"
-                      }`}
-                  >
-                    {clienteSeleccionado.estado}
-                  </Badge>
+          {clienteSeleccionado ? (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 gap-x-10 gap-y-5 rounded-lg bg-gray-50 p-5 md:grid-cols-2">
+                <div>
+                  <p className="text-sm text-gray-600">Código</p>
+                  <p className="font-medium text-blue-600">
+                    {clienteSeleccionado.codigo || "-"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-sm text-gray-600">Estado</p>
+                  <div className="mt-1">
+                    <Badge
+                      variant="outline"
+                      className={
+                        clienteSeleccionado.estado === "Activo"
+                          ? "border-green-200 bg-green-50 text-green-700"
+                          : "border-red-200 bg-red-50 text-red-700"
+                      }
+                    >
+                      {clienteSeleccionado.estado || "Sin estado"}
+                    </Badge>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-sm text-gray-600">Cliente</p>
+                  <p className="font-medium text-gray-900">
+                    {clienteSeleccionado.nombre || "-"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-sm text-gray-600">Tipo de cliente</p>
+                  <div className="mt-1">
+                    <Badge
+                      variant="outline"
+                      className="border-purple-200 bg-purple-50 text-purple-700"
+                    >
+                      {clienteSeleccionado.tipoCliente || "-"}
+                    </Badge>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-sm text-gray-600">Documento / NIT</p>
+                  <p className="font-medium">
+                    {getDocumentoClienteTexto(clienteSeleccionado)}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-sm text-gray-600">Email</p>
+                  <p className="font-medium">
+                    {clienteSeleccionado.email || "No registrado"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-sm text-gray-600">Teléfono</p>
+                  <p className="font-medium">
+                    {clienteSeleccionado.telefono || "No registrado"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-sm text-gray-600">Departamento</p>
+                  <p className="font-medium">
+                    {clienteSeleccionado.departamento || "-"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-sm text-gray-600">Ciudad / Municipio</p>
+                  <p className="font-medium">
+                    {clienteSeleccionado.ciudad || "-"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-sm text-gray-600">Dirección</p>
+                  <p className="font-medium">
+                    {clienteSeleccionado.direccion || "No registrada"}
+                  </p>
                 </div>
               </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Mail className="h-3.5 w-3.5 text-blue-600" />
-                    <Label className="text-xs text-gray-500">Email</Label>
-                  </div>
-                  <p className="text-sm font-medium text-gray-900">
-                    {clienteSeleccionado.email || "N/A"}
-                  </p>
-                </div>
-
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Phone className="h-3.5 w-3.5 text-blue-600" />
-                    <Label className="text-xs text-gray-500">Teléfono</Label>
-                  </div>
-                  <p className="text-sm font-medium text-gray-900">
-                    {clienteSeleccionado.telefono || "N/A"}
-                  </p>
-                </div>
-
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <div className="flex items-center gap-2 mb-1">
-                    <MapPin className="h-3.5 w-3.5 text-blue-600" />
-                    <Label className="text-xs text-gray-500">Ciudad</Label>
-                  </div>
-                  <p className="text-sm font-medium text-gray-900">
-                    {clienteSeleccionado.ciudad || "N/A"}
-                  </p>
-                </div>
-
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <div className="flex items-center gap-2 mb-1">
-                    <MapPin className="h-3.5 w-3.5 text-blue-600" />
-                    <Label className="text-xs text-gray-500">
-                      Departamento
-                    </Label>
-                  </div>
-                  <p className="text-sm font-medium text-gray-900">
-                    {clienteSeleccionado.departamento || "N/A"}
-                  </p>
-                </div>
-
-                <div className="col-span-2 bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <div className="flex items-center gap-2 mb-1">
-                    <MapPin className="h-3.5 w-3.5 text-blue-600" />
-                    <Label className="text-xs text-gray-500">Dirección</Label>
-                  </div>
-                  <p className="text-sm font-medium text-gray-900">
-                    {clienteSeleccionado.direccion || "N/A"}
-                  </p>
-                </div>
-              </div>
+            </div>
+          ) : (
+            <div className="py-8 text-center text-gray-500">
+              No se encontró la información del cliente
             </div>
           )}
 
@@ -1105,38 +1196,77 @@ export default function Clientes() {
                 )}
               </div>
 
-              <div>
-                <Label htmlFor="create-ciudad">Ciudad / Municipio *</Label>
-                <Select
-                  value={formMunicipioId}
-                  onValueChange={handleMunicipioChange}
-                >
-                  <SelectTrigger id="create-ciudad">
-                    <SelectValue placeholder="Selecciona un municipio" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {municipios.map((municipio) => (
-                      <SelectItem key={municipio.id} value={String(municipio.id)}>
-                        {municipio.nombre} - {municipio.departamento}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.municipio && touched.municipio && (
-                  <p className="text-red-500 text-xs mt-1">{errors.municipio}</p>
-                )}
-              </div>
-            </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <Label htmlFor="departamento">Departamento *</Label>
+                  <Select
+                    value={formDepartamentoId}
+                    onValueChange={handleDepartamentoChange}
+                  >
+                    <SelectTrigger id="departamento">
+                      <SelectValue placeholder="Selecciona un departamento" />
+                    </SelectTrigger>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Departamento</Label>
-                <Input value={departamentoSeleccionado} disabled />
-              </div>
+                    <SelectContent>
+                      {departamentos.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-gray-500">
+                          No hay departamentos disponibles
+                        </div>
+                      ) : (
+                        departamentos.map((departamento) => (
+                          <SelectItem
+                            key={departamento.id}
+                            value={String(departamento.id)}
+                          >
+                            {departamento.nombre}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div>
-                <Label>Ciudad</Label>
-                <Input value={ciudadSeleccionada} disabled />
+                <div>
+                  <Label htmlFor="municipio">Ciudad / Municipio *</Label>
+                  <Select
+                    value={formMunicipioId}
+                    onValueChange={handleMunicipioChange}
+                    disabled={!formDepartamentoId || isLoadingMunicipios}
+                  >
+                    <SelectTrigger
+                      id="municipio"
+                      className={errors.municipio && touched.municipio ? "border-red-500" : ""}
+                    >
+                      <SelectValue
+                        placeholder={
+                          !formDepartamentoId
+                            ? "Selecciona primero un departamento"
+                            : isLoadingMunicipios
+                              ? "Cargando municipios..."
+                              : "Selecciona una ciudad / municipio"
+                        }
+                      />
+                    </SelectTrigger>
+
+                    <SelectContent>
+                      {municipios.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-gray-500">
+                          No hay municipios disponibles
+                        </div>
+                      ) : (
+                        municipios.map((municipio) => (
+                          <SelectItem key={municipio.id} value={String(municipio.id)}>
+                            {municipio.nombre}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+
+                  {errors.municipio && touched.municipio && (
+                    <p className="mt-1 text-sm text-red-500">{errors.municipio}</p>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1297,38 +1427,77 @@ export default function Clientes() {
                 )}
               </div>
 
-              <div>
-                <Label htmlFor="edit-ciudad">Ciudad / Municipio *</Label>
-                <Select
-                  value={formMunicipioId}
-                  onValueChange={handleMunicipioChange}
-                >
-                  <SelectTrigger id="edit-ciudad">
-                    <SelectValue placeholder="Selecciona un municipio" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {municipios.map((municipio) => (
-                      <SelectItem key={municipio.id} value={String(municipio.id)}>
-                        {municipio.nombre} - {municipio.departamento}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.municipio && touched.municipio && (
-                  <p className="text-red-500 text-xs mt-1">{errors.municipio}</p>
-                )}
-              </div>
-            </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <Label htmlFor="edit-departamento">Departamento *</Label>
+                  <Select
+                    value={formDepartamentoId}
+                    onValueChange={handleDepartamentoChange}
+                  >
+                    <SelectTrigger id="edit-departamento">
+                      <SelectValue placeholder="Selecciona un departamento" />
+                    </SelectTrigger>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Departamento</Label>
-                <Input value={departamentoSeleccionado} disabled />
-              </div>
+                    <SelectContent>
+                      {departamentos.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-gray-500">
+                          No hay departamentos disponibles
+                        </div>
+                      ) : (
+                        departamentos.map((departamento) => (
+                          <SelectItem
+                            key={departamento.id}
+                            value={String(departamento.id)}
+                          >
+                            {departamento.nombre}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div>
-                <Label>Ciudad</Label>
-                <Input value={ciudadSeleccionada} disabled />
+                <div>
+                  <Label htmlFor="edit-municipio">Ciudad / Municipio *</Label>
+                  <Select
+                    value={formMunicipioId}
+                    onValueChange={handleMunicipioChange}
+                    disabled={!formDepartamentoId || isLoadingMunicipios}
+                  >
+                    <SelectTrigger
+                      id="edit-municipio"
+                      className={errors.municipio && touched.municipio ? "border-red-500" : ""}
+                    >
+                      <SelectValue
+                        placeholder={
+                          !formDepartamentoId
+                            ? "Selecciona primero un departamento"
+                            : isLoadingMunicipios
+                              ? "Cargando municipios..."
+                              : "Selecciona una ciudad / municipio"
+                        }
+                      />
+                    </SelectTrigger>
+
+                    <SelectContent>
+                      {municipios.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-gray-500">
+                          No hay municipios disponibles
+                        </div>
+                      ) : (
+                        municipios.map((municipio) => (
+                          <SelectItem key={municipio.id} value={String(municipio.id)}>
+                            {municipio.nombre}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+
+                  {errors.municipio && touched.municipio && (
+                    <p className="mt-1 text-sm text-red-500">{errors.municipio}</p>
+                  )}
+                </div>
               </div>
             </div>
 

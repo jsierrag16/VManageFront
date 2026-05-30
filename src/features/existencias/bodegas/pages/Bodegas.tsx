@@ -843,7 +843,7 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                 <TableHead>Municipio</TableHead>
                 <TableHead>Dirección</TableHead>
                 <TableHead className="text-center">Estado</TableHead>
-                <TableHead className="text-right w-32">Acciones</TableHead>
+                <TableHead className="text-center w-32">Acciones</TableHead>
               </TableRow>
             </TableHeader>
 
@@ -906,7 +906,7 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                     </TableCell>
 
                     <TableCell>
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-center gap-2">
                         {canEditBodegas && (
                           <Button
                             variant="ghost"

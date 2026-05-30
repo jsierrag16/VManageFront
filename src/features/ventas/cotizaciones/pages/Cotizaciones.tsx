@@ -1577,15 +1577,15 @@ export default function Cotizaciones() {
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50">
-                <TableHead className="w-16">#</TableHead>
+                <TableHead className="w-14">#</TableHead>
                 <TableHead>N° Cotización</TableHead>
                 <TableHead>Cliente</TableHead>
                 <TableHead>Documento / NIT</TableHead>
                 <TableHead>Fecha</TableHead>
                 <TableHead>Vencimiento</TableHead>
-                <TableHead>Items</TableHead>
+                <TableHead className="text-center">Items</TableHead>
                 <TableHead className="text-center">Estado</TableHead>
-                <TableHead className="text-center">Acciones</TableHead>
+                <TableHead className="text-center w-32">Acciones</TableHead>
               </TableRow>
             </TableHeader>
 
@@ -1619,7 +1619,7 @@ export default function Cotizaciones() {
                     <TableCell>
                       {formatDateDisplay(cotizacion.fechaVencimiento)}
                     </TableCell>
-                    <TableCell>{cotizacion.items}</TableCell>
+                    <TableCell className="text-center">{cotizacion.items}</TableCell>
                     <TableCell className="text-center">
                       <Button
                         variant="ghost"

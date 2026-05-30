@@ -902,14 +902,14 @@ export default function Proveedores() {
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50">
-                <TableHead className="w-14 text-center">#</TableHead>
-                <TableHead className="text-center">Código</TableHead>
+                <TableHead className="w-14">#</TableHead>
+                <TableHead>Código</TableHead>
                 <TableHead>Nombre</TableHead>
-                <TableHead className="text-center">Documento / NIT</TableHead>
+                <TableHead>Documento / NIT</TableHead>
                 <TableHead>Ciudad / Municipio</TableHead>
                 <TableHead>Email</TableHead>
-                <TableHead className="text-center">Teléfono</TableHead>
-                <TableHead className="text-center">Tipo Proveedor</TableHead>
+                <TableHead>Teléfono</TableHead>
+                <TableHead>Tipo Proveedor</TableHead>
                 <TableHead className="text-center">Estado</TableHead>
                 <TableHead className="w-32 text-center">Acciones</TableHead>
               </TableRow>
@@ -934,11 +934,11 @@ export default function Proveedores() {
               ) : (
                 proveedores.map((proveedor, index) => (
                   <TableRow key={proveedor.id} className="hover:bg-gray-50">
-                    <TableCell className="text-center text-gray-600">
+                    <TableCell className="text-gray-600">
                       {(currentPage - 1) * ITEMS_PER_PAGE + index + 1}
                     </TableCell>
 
-                    <TableCell className="text-center font-mono text-sm">
+                    <TableCell className="font-mono text-sm">
                       {proveedor.codigo || "—"}
                     </TableCell>
 
@@ -946,7 +946,7 @@ export default function Proveedores() {
                       {proveedor.nombre || "—"}
                     </TableCell>
 
-                    <TableCell className="text-center">
+                    <TableCell className="text-gray-700">
                       <span className="font-medium">
                         {getTipoDocumentoLabel(proveedor)}:
                       </span>{" "}
@@ -963,11 +963,11 @@ export default function Proveedores() {
                       {proveedor.email || "—"}
                     </TableCell>
 
-                    <TableCell className="text-center text-gray-700">
+                    <TableCell className="text-gray-700">
                       {proveedor.telefono || "—"}
                     </TableCell>
 
-                    <TableCell className="text-center">
+                    <TableCell className="">
                       <Badge
                         variant="outline"
                         className="border-blue-200 bg-blue-50 text-blue-700"

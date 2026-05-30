@@ -1245,7 +1245,7 @@ export default function Traslados({
               </Label>
 
               <Search
-                className="absolute left-3 top-10.5 -translate-y-1/2 text-gray-400"
+                className="absolute left-3 top-12 -translate-y-1/2 text-gray-400"
                 size={20}
               />
 
@@ -1311,7 +1311,7 @@ export default function Traslados({
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50">
-                <TableHead className="w-16">#</TableHead>
+                <TableHead className="w-14">#</TableHead>
                 <TableHead>Codigo</TableHead>
                 <TableHead>Fecha</TableHead>
                 <TableHead>Bodega Origen</TableHead>
@@ -1359,7 +1359,7 @@ export default function Traslados({
                       </TableCell>
 
                       <TableCell>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 ">
                           <Building2 size={16} className="text-blue-600" />
                           {traslado.bodegaOrigen}
                         </div>

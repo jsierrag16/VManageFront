@@ -1,5 +1,10 @@
 import api from "@/shared/services/api";
-import type { ClienteApi, ClienteFormPayload } from "../types/clientes.types";
+import type {
+  ClienteApi,
+  ClienteFormPayload,
+  DepartamentoOption,
+  MunicipioOption,
+} from "../types/clientes.types";
 
 export const clientesService = {
   async getAll(params?: { q?: string; incluirInactivos?: boolean }) {
@@ -11,6 +16,50 @@ export const clientesService = {
     });
 
     return response.data;
+  },
+
+  async getDepartamentos() {
+    const response = await api.get<DepartamentoOption[]>("/departamentos");
+
+    return response.data.map((item: any) => ({
+      id: item.id_departamento ?? item.id,
+      nombre:
+        item.nombre_departamento ??
+        item.nombre ??
+        item.departamento ??
+        "Sin nombre",
+    }));
+  },
+
+  async getMunicipiosByDepartamento(idDepartamento: number) {
+    const response = await api.get<MunicipioOption[]>("/municipios", {
+      params: {
+        id_departamento: idDepartamento,
+      },
+    });
+
+    return response.data.map((item: any) => {
+      const departamentoRef = item.departamentos ?? item.departamento ?? null;
+
+      return {
+        id: item.id_municipio ?? item.id,
+        nombre:
+          item.nombre_municipio ??
+          item.nombre ??
+          item.municipio ??
+          "Sin nombre",
+        idDepartamento: Number(
+          item.id_departamento ??
+          departamentoRef?.id_departamento ??
+          0
+        ),
+        departamento:
+          departamentoRef?.nombre_departamento ??
+          departamentoRef?.nombre ??
+          departamentoRef?.departamento ??
+          "",
+      };
+    });
   },
 
   async getById(id: number) {

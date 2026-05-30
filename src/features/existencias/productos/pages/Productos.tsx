@@ -870,13 +870,13 @@ export default function Productos({
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50">
-                <TableHead className="w-16">#</TableHead>
+                <TableHead className="w-14">#</TableHead>
                 <TableHead>Nombre</TableHead>
                 <TableHead>Categoría</TableHead>
                 <TableHead className="text-center">IVA</TableHead>
                 <TableHead className="text-center">Stock</TableHead>
                 <TableHead className="text-center">Estado</TableHead>
-                <TableHead className="text-right w-40">Acciones</TableHead>
+                <TableHead className="text-center w-32">Acciones</TableHead>
               </TableRow>
             </TableHeader>
 

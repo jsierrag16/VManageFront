@@ -1569,24 +1569,26 @@ export default function Compras() {
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1">
-          <Search
-            className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-            size={20}
-          />
-          <Input
-            placeholder="Buscar por número de orden, proveedor, estado o número de items..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+        <div className="flex items-center gap-4">
+          <div className="relative flex-1">
+            <Search
+              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+              size={20}
+            />
+            <Input
+              placeholder="Buscar por número de orden, proveedor, estado o número de items..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
 
-        <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
-          <Plus size={18} className="mr-2" />
-          Nueva Orden
-        </Button>
+          <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
+            <Plus size={18} className="mr-2" />
+            Nueva Orden
+          </Button>
+        </div>
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
@@ -1594,14 +1596,14 @@ export default function Compras() {
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50">
-                <TableHead className="w-16">#</TableHead>
+                <TableHead className="w-14">#</TableHead>
                 <TableHead>N° Orden</TableHead>
                 <TableHead>Proveedor</TableHead>
                 <TableHead>Fecha</TableHead>
                 <TableHead>Fecha Entrega</TableHead>
-                <TableHead>Items</TableHead>
+                <TableHead className="text-center">Items</TableHead>
                 <TableHead className="text-center">Estado</TableHead>
-                <TableHead className="text-center">Acciones</TableHead>
+                <TableHead className="w-32 text-center">Acciones</TableHead>
               </TableRow>
             </TableHeader>
 
@@ -1642,7 +1644,9 @@ export default function Compras() {
                         ? new Date(compra.fechaEntrega).toLocaleDateString("es-CO")
                         : "-"}
                     </TableCell>
-                    <TableCell>{compra.items}</TableCell>
+                    <TableCell className="text-center">
+                      {compra.items}
+                    </TableCell>
                     <TableCell className="text-center">
                       <Button
                         variant="ghost"
