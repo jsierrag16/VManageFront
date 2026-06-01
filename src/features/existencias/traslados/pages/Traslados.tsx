@@ -1500,12 +1500,12 @@ export default function Traslados({
         }}
       >
         <DialogContent
-          className="w-[96vw] max-w-5xl max-h-[92vh] overflow-y-auto"
+          className="w-[96vw] max-w-6xl max-h-[90vh] overflow-y-auto"
           onPointerDownOutside={(e) => e.preventDefault()}
           onInteractOutside={(e) => e.preventDefault()}
           aria-describedby="traslado-details-description"
         >
-          <DialogHeader>
+          <DialogHeader className="space-y-2 pb-3">
             <DialogTitle>Detalles del Traslado</DialogTitle>
             <DialogDescription id="traslado-details-description">
               Información completa del traslado de productos entre bodegas
@@ -1517,135 +1517,184 @@ export default function Traslados({
               Cargando traslado...
             </div>
           ) : (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-6 py-2">
+              <div className="grid grid-cols-1 gap-x-10 gap-y-5 rounded-lg bg-gray-50 p-5 md:grid-cols-2">
                 <div>
-                  <Label className="text-gray-600">Código</Label>
-                  <p className="font-medium">{trasladoSeleccionado.codigo}</p>
+                  <p className="text-sm text-gray-600">Código</p>
+                  <p className="font-medium text-blue-600">
+                    {trasladoSeleccionado.codigo || "-"}
+                  </p>
                 </div>
 
                 <div>
-                  <Label className="text-gray-600">Fecha</Label>
+                  <p className="text-sm text-gray-600">Estado</p>
+                  <div className="mt-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const siguienteEstado = getSiguienteEstado(
+                          trasladoSeleccionado.estado
+                        );
+
+                        if (siguienteEstado) {
+                          handleEstadoClick(trasladoSeleccionado);
+                        }
+                      }}
+                      disabled={
+                        !getSiguienteEstado(trasladoSeleccionado.estado) ||
+                        !canChangeEstadoTraslados
+                      }
+                      className={`h-7 px-3 ${getEstadoBadge(trasladoSeleccionado.estado).class
+                        } ${!getSiguienteEstado(trasladoSeleccionado.estado) ||
+                          !canChangeEstadoTraslados
+                          ? "cursor-default opacity-100"
+                          : ""
+                        }`}
+                    >
+                      {(() => {
+                        const EstadoIcon = getEstadoBadge(
+                          trasladoSeleccionado.estado
+                        ).icon;
+
+                        return <EstadoIcon size={14} className="mr-1" />;
+                      })()}
+                      {trasladoSeleccionado.estado}
+                    </Button>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-sm text-gray-600">Fecha</p>
                   <p className="font-medium">
                     {formatFecha(trasladoSeleccionado.fecha)}
                   </p>
                 </div>
 
                 <div>
-                  <Label className="text-gray-600">Bodega Origen</Label>
-                  <div className="flex items-center gap-2">
-                    <Building2 size={16} className="text-blue-600" />
-                    <p className="font-medium">{trasladoSeleccionado.bodegaOrigen}</p>
-                  </div>
-                </div>
-
-                <div>
-                  <Label className="text-gray-600">Bodega Destino</Label>
-                  <div className="flex items-center gap-2">
-                    <Building2 size={16} className="text-green-600" />
-                    <p className="font-medium">
-                      {trasladoSeleccionado.bodegaDestino}
-                    </p>
-                  </div>
-                </div>
-
-                <div>
-                  <Label className="text-gray-600">Responsable</Label>
-                  <p className="font-medium">{trasladoSeleccionado.responsable}</p>
-                </div>
-
-                <div className="mt-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      const siguienteEstado = getSiguienteEstado(
-                        trasladoSeleccionado.estado
-                      );
-                      if (siguienteEstado) handleEstadoClick(trasladoSeleccionado);
-                    }}
-                    disabled={
-                      !getSiguienteEstado(trasladoSeleccionado.estado) ||
-                      !canChangeEstadoTraslados
-                    }
-                    className={`h-7 px-3 ${getEstadoBadge(trasladoSeleccionado.estado).class
-                      } ${!getSiguienteEstado(trasladoSeleccionado.estado) ||
-                        !canChangeEstadoTraslados
-                        ? "opacity-100 cursor-default"
-                        : ""
-                      }`}
-                  >
-                    {(() => {
-                      const EstadoIcon = getEstadoBadge(
-                        trasladoSeleccionado.estado
-                      ).icon;
-                      return <EstadoIcon size={14} className="mr-1" />;
-                    })()}
-                    {trasladoSeleccionado.estado}
-                  </Button>
-                </div>
-              </div>
-
-              {trasladoSeleccionado.observaciones && (
-                <div>
-                  <Label className="text-gray-600">Observaciones</Label>
-                  <p className="text-sm bg-gray-50 p-3 rounded-lg whitespace-pre-wrap">
-                    {trasladoSeleccionado.observaciones}
+                  <p className="text-sm text-gray-600">Responsable</p>
+                  <p className="font-medium">
+                    {trasladoSeleccionado.responsable || "No registrado"}
                   </p>
                 </div>
-              )}
 
-              <div className="border-t pt-4">
-                <Label className="text-gray-900 mb-3 block">
-                  Productos del Traslado
-                </Label>
-
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-gray-50">
-                      <TableHead className="w-12">#</TableHead>
-                      <TableHead>Producto</TableHead>
-                      <TableHead>Lote</TableHead>
-                      <TableHead className="text-right">Cantidad</TableHead>
-                    </TableRow>
-                  </TableHeader>
-
-                  <TableBody>
-                    {trasladoSeleccionado.items.map((item, index) => (
-                      <TableRow key={`${item.idExistencia}-${index}`}>
-                        <TableCell>{index + 1}</TableCell>
-                        <TableCell className="font-medium">
-                          {item.productoNombre}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className="bg-blue-50 text-blue-700 border-blue-200"
-                          >
-                            {item.loteNumero}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right font-medium">
-                          {item.cantidad}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-
-                <div className="flex justify-end mt-4 pt-4 border-t">
-                  <div className="text-right">
-                    <Label className="text-gray-600">Total de Unidades</Label>
-                    <p className="text-xl font-bold text-purple-600">
-                      {calcularTotalItems(trasladoSeleccionado.items)}
+                <div>
+                  <p className="text-sm text-gray-600">Bodega origen</p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <Building2 size={16} className="text-blue-600" />
+                    <p className="font-medium">
+                      {trasladoSeleccionado.bodegaOrigen || "-"}
                     </p>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-sm text-gray-600">Bodega destino</p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <Building2 size={16} className="text-green-600" />
+                    <p className="font-medium">
+                      {trasladoSeleccionado.bodegaDestino || "-"}
+                    </p>
+                  </div>
+                </div>
+
+                {trasladoSeleccionado.observaciones && (
+                  <div className="md:col-span-2">
+                    <p className="text-sm text-gray-600">Observaciones</p>
+                    <p className="font-medium whitespace-pre-wrap">
+                      {trasladoSeleccionado.observaciones}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">
+                      Productos del Traslado
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      {trasladoSeleccionado.items.length} producto
+                      {trasladoSeleccionado.items.length !== 1 ? "s" : ""} registrado
+                      {trasladoSeleccionado.items.length !== 1 ? "s" : ""}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="overflow-hidden rounded-lg border border-gray-200">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-gray-50">
+                        <TableHead className="w-14 text-center">#</TableHead>
+                        <TableHead>Producto</TableHead>
+                        <TableHead>Lote</TableHead>
+                        <TableHead className="text-center">Cantidad</TableHead>
+                      </TableRow>
+                    </TableHeader>
+
+                    <TableBody>
+                      {trasladoSeleccionado.items.length === 0 ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={4}
+                            className="py-6 text-center text-gray-500"
+                          >
+                            No hay productos registrados en este traslado
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        trasladoSeleccionado.items.map((item, index) => (
+                          <TableRow key={`${item.idExistencia}-${index}`}>
+                            <TableCell className="text-center text-gray-600">
+                              {index + 1}
+                            </TableCell>
+
+                            <TableCell className="font-medium text-gray-900">
+                              {item.productoNombre || "-"}
+                            </TableCell>
+
+                            <TableCell>
+                              <Badge
+                                variant="outline"
+                                className="border-blue-200 bg-blue-50 text-blue-700"
+                              >
+                                {item.loteNumero || "-"}
+                              </Badge>
+                            </TableCell>
+
+                            <TableCell className="text-center font-medium">
+                              {item.cantidad}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+
+                  <div className="flex justify-end border-t bg-gray-50 px-4 py-3">
+                    <div className="w-full max-w-xs space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Total productos:</span>
+                        <span className="font-medium">
+                          {trasladoSeleccionado.items.length}
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between border-t pt-2 text-sm">
+                        <span className="font-semibold">Total unidades:</span>
+                        <span className="font-bold text-purple-600">
+                          {calcularTotalItems(trasladoSeleccionado.items)}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="mt-2 border-t pt-4">
             <Button variant="outline" onClick={closeToList}>
               Cerrar
             </Button>
@@ -1660,15 +1709,13 @@ export default function Traslados({
         }}
       >
         <DialogContent
-          className="w-[96vw] max-w-5xl max-h-[92vh] overflow-y-auto"
+          className="w-[96vw] max-w-6xl max-h-[90vh] overflow-y-auto"
           onPointerDownOutside={(e) => e.preventDefault()}
           onInteractOutside={(e) => e.preventDefault()}
           aria-describedby="traslado-create-description"
         >
-          <DialogHeader>
-            <DialogTitle>
-              {isEditar ? "Editar Traslado" : "Nuevo Traslado"}
-            </DialogTitle>
+          <DialogHeader className="space-y-2 pb-3">
+            <DialogTitle>{isEditar ? "Editar Traslado" : "Nuevo Traslado"}</DialogTitle>
             <DialogDescription id="traslado-create-description">
               {isEditar
                 ? "Modifica la información del traslado antes de enviarlo"
@@ -1681,7 +1728,7 @@ export default function Traslados({
               Cargando formulario...
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-6 py-2">
               {isEditar && trasladoSeleccionado && (
                 <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
                   Estás editando el traslado{" "}
@@ -1697,108 +1744,133 @@ export default function Traslados({
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="traslado-origen">Bodega Origen *</Label>
-                  <Select
-                    value={formBodegaOrigenId === "" ? "" : String(formBodegaOrigenId)}
-                    onValueChange={handleBodegaOrigenChange}
-                    disabled={trasladoItems.length > 0 || isLoadingCatalogos}
-                  >
-                    <SelectTrigger id="traslado-origen">
-                      <SelectValue placeholder="Selecciona bodega origen" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {bodegasCatalogo.map((bodega) => (
-                        <SelectItem key={bodega.id} value={String(bodega.id)}>
-                          {bodega.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {errors.bodegaOrigen && touched.bodegaOrigen && (
-                    <p className="text-sm text-red-500 mt-1">
-                      {errors.bodegaOrigen}
-                    </p>
-                  )}
+              <div className="rounded-lg bg-gray-50 p-5">
+                <div className="mb-4">
+                  <h3 className="font-semibold text-gray-900">
+                    Información general
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    Selecciona las bodegas involucradas en el traslado
+                  </p>
                 </div>
 
-                <div>
-                  <Label htmlFor="traslado-destino">Bodega Destino *</Label>
-                  <Select
-                    value={
-                      formBodegaDestinoId === "" ? "" : String(formBodegaDestinoId)
-                    }
-                    onValueChange={handleBodegaDestinoChange}
-                    disabled={trasladoItems.length > 0 || isLoadingCatalogos}
-                  >
-                    <SelectTrigger id="traslado-destino">
-                      <SelectValue placeholder="Selecciona bodega destino" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {bodegasCatalogo
-                        .filter((bodega) => bodega.id !== formBodegaOrigenId)
-                        .map((bodega) => (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="traslado-origen">Bodega Origen *</Label>
+                    <Select
+                      value={
+                        formBodegaOrigenId === "" ? "" : String(formBodegaOrigenId)
+                      }
+                      onValueChange={handleBodegaOrigenChange}
+                      disabled={trasladoItems.length > 0 || isLoadingCatalogos}
+                    >
+                      <SelectTrigger id="traslado-origen">
+                        <SelectValue placeholder="Selecciona bodega origen" />
+                      </SelectTrigger>
+
+                      <SelectContent>
+                        {bodegasCatalogo.map((bodega) => (
                           <SelectItem key={bodega.id} value={String(bodega.id)}>
                             {bodega.nombre}
                           </SelectItem>
                         ))}
-                    </SelectContent>
-                  </Select>
-                  {errors.bodegaDestino && touched.bodegaDestino && (
-                    <p className="text-sm text-red-500 mt-1">
-                      {errors.bodegaDestino}
-                    </p>
-                  )}
+                      </SelectContent>
+                    </Select>
+
+                    {errors.bodegaOrigen && touched.bodegaOrigen && (
+                      <p className="text-sm text-red-500">
+                        {errors.bodegaOrigen}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="traslado-destino">Bodega Destino *</Label>
+                    <Select
+                      value={
+                        formBodegaDestinoId === "" ? "" : String(formBodegaDestinoId)
+                      }
+                      onValueChange={handleBodegaDestinoChange}
+                      disabled={trasladoItems.length > 0 || isLoadingCatalogos}
+                    >
+                      <SelectTrigger id="traslado-destino">
+                        <SelectValue placeholder="Selecciona bodega destino" />
+                      </SelectTrigger>
+
+                      <SelectContent>
+                        {bodegasCatalogo
+                          .filter((bodega) => bodega.id !== formBodegaOrigenId)
+                          .map((bodega) => (
+                            <SelectItem key={bodega.id} value={String(bodega.id)}>
+                              {bodega.nombre}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+
+                    {errors.bodegaDestino && touched.bodegaDestino && (
+                      <p className="text-sm text-red-500">
+                        {errors.bodegaDestino}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              <div className="border-t pt-4">
-                <h3 className="font-medium text-gray-900 mb-3">
-                  Agregar Productos al Traslado
-                </h3>
+              <div>
+                <div className="mb-3">
+                  <h3 className="font-semibold text-gray-900">
+                    Productos del traslado
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    Selecciona producto, lote y cantidad a trasladar
+                  </p>
+                </div>
 
-                <div className="bg-gray-50 p-4 rounded-lg space-y-4 mb-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <div className="space-y-2">
                       <Label htmlFor="current-producto">Producto *</Label>
                       <Select
-                        value={currentProductoId === "" ? "" : String(currentProductoId)}
+                        value={
+                          currentProductoId === "" ? "" : String(currentProductoId)
+                        }
                         onValueChange={handleCurrentProductoChange}
                         disabled={isLoadingExistencias}
                       >
                         <SelectTrigger id="current-producto">
                           <SelectValue placeholder="Selecciona un producto" />
                         </SelectTrigger>
+
                         <SelectContent>
                           {productosDisponibles.length === 0 ? (
-                            <div className="px-2 py-2 text-sm text-gray-500">
+                            <div className="px-3 py-2 text-sm text-gray-500">
                               No hay productos disponibles en la bodega activa
                             </div>
                           ) : (
                             productosDisponibles.map((producto) => (
-                              <SelectItem
-                                key={producto.id}
-                                value={String(producto.id)}
-                              >
+                              <SelectItem key={producto.id} value={String(producto.id)}>
                                 {producto.nombre}
                               </SelectItem>
                             ))
                           )}
                         </SelectContent>
                       </Select>
+
                       {errors.currentProducto && touched.currentProducto && (
-                        <p className="text-sm text-red-500 mt-1">
+                        <p className="text-sm text-red-500">
                           {errors.currentProducto}
                         </p>
                       )}
                     </div>
 
-                    <div>
+                    <div className="space-y-2">
                       <Label htmlFor="current-lote">Lote *</Label>
                       <Select
                         value={
-                          currentExistenciaId === "" ? "" : String(currentExistenciaId)
+                          currentExistenciaId === ""
+                            ? ""
+                            : String(currentExistenciaId)
                         }
                         onValueChange={handleCurrentLoteChange}
                         disabled={!currentProductoId}
@@ -1806,9 +1878,10 @@ export default function Traslados({
                         <SelectTrigger id="current-lote">
                           <SelectValue placeholder="Selecciona un lote" />
                         </SelectTrigger>
+
                         <SelectContent>
                           {lotesDisponibles.length === 0 ? (
-                            <div className="px-2 py-2 text-sm text-gray-500">
+                            <div className="px-3 py-2 text-sm text-gray-500">
                               No hay lotes disponibles
                             </div>
                           ) : (
@@ -1817,20 +1890,22 @@ export default function Traslados({
                                 key={existencia.idExistencia}
                                 value={String(existencia.idExistencia)}
                               >
-                                {existencia.lote} - Disp: {existencia.cantidadDisponible}
+                                {existencia.lote} - Disp:{" "}
+                                {existencia.cantidadDisponible}
                               </SelectItem>
                             ))
                           )}
                         </SelectContent>
                       </Select>
+
                       {errors.currentLote && touched.currentLote && (
-                        <p className="text-sm text-red-500 mt-1">
+                        <p className="text-sm text-red-500">
                           {errors.currentLote}
                         </p>
                       )}
                     </div>
 
-                    <div>
+                    <div className="space-y-2">
                       <Label htmlFor="current-cantidad">Cantidad *</Label>
                       <Input
                         id="current-cantidad"
@@ -1846,13 +1921,13 @@ export default function Traslados({
                             : ""
                         }
                       />
+
                       {currentExistenciaId && !errors.currentCantidad && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          Máx: {cantidadMaxima}
-                        </p>
+                        <p className="text-xs text-gray-500">Máx: {cantidadMaxima}</p>
                       )}
+
                       {errors.currentCantidad && touched.currentCantidad && (
-                        <p className="text-sm text-red-500 mt-1">
+                        <p className="text-sm text-red-500">
                           {errors.currentCantidad}
                         </p>
                       )}
@@ -1861,7 +1936,7 @@ export default function Traslados({
 
                   <Button
                     onClick={handleAddItem}
-                    className="w-full bg-green-600 hover:bg-green-700"
+                    className="mt-4 h-11 w-full bg-green-600 hover:bg-green-700"
                     type="button"
                     disabled={!formBodegaOrigenId}
                   >
@@ -1871,35 +1946,42 @@ export default function Traslados({
                 </div>
 
                 {trasladoItems.length > 0 && (
-                  <div className="border rounded-lg overflow-hidden">
+                  <div className="mt-4 overflow-hidden rounded-lg border border-gray-200">
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-gray-50">
-                          <TableHead className="w-12">#</TableHead>
+                          <TableHead className="w-14 text-center">#</TableHead>
                           <TableHead>Producto</TableHead>
                           <TableHead>Lote</TableHead>
-                          <TableHead className="text-right">Cantidad</TableHead>
+                          <TableHead className="text-center">Cantidad</TableHead>
                           <TableHead className="w-20 text-center">Acción</TableHead>
                         </TableRow>
                       </TableHeader>
+
                       <TableBody>
                         {trasladoItems.map((item, index) => (
                           <TableRow key={`${item.idExistencia}-${index}`}>
-                            <TableCell>{index + 1}</TableCell>
-                            <TableCell className="font-medium">
+                            <TableCell className="text-center text-gray-600">
+                              {index + 1}
+                            </TableCell>
+
+                            <TableCell className="font-medium text-gray-900">
                               {item.productoNombre}
                             </TableCell>
+
                             <TableCell>
                               <Badge
                                 variant="outline"
-                                className="bg-blue-50 text-blue-700 border-blue-200"
+                                className="border-blue-200 bg-blue-50 text-blue-700"
                               >
                                 {item.loteNumero}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-right font-medium">
+
+                            <TableCell className="text-center font-medium">
                               {item.cantidad}
                             </TableCell>
+
                             <TableCell className="text-center">
                               <Button
                                 variant="ghost"
@@ -1915,42 +1997,41 @@ export default function Traslados({
                       </TableBody>
                     </Table>
 
-                    <div className="bg-gray-50 px-4 py-2 border-t flex justify-between items-center">
-                      <span className="text-xs text-gray-600">
-                        Total de productos:
-                      </span>
-                      <span className="font-bold text-purple-600 text-sm">
-                        {trasladoItems.length}
-                      </span>
-                    </div>
+                    <div className="flex justify-end border-t bg-gray-50 px-4 py-3">
+                      <div className="w-full max-w-xs space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Total productos:</span>
+                          <span className="font-medium">{trasladoItems.length}</span>
+                        </div>
 
-                    <div className="bg-gray-50 px-4 py-2 border-t flex justify-between items-center">
-                      <span className="text-xs text-gray-600">
-                        Total de unidades:
-                      </span>
-                      <span className="font-bold text-purple-600 text-sm">
-                        {calcularTotalItems(trasladoItems)}
-                      </span>
+                        <div className="flex justify-between border-t pt-2 text-sm">
+                          <span className="font-semibold">Total unidades:</span>
+                          <span className="font-bold text-purple-600">
+                            {calcularTotalItems(trasladoItems)}
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
               </div>
 
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-2">
-                <div className="flex items-center gap-2">
-                  <div className="bg-blue-100 p-1.5 rounded-full">
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-full bg-blue-100 p-2">
                     <Package size={16} className="text-blue-600" />
                   </div>
-                  <div className="leading-tight">
-                    <p className="text-[11px] text-blue-900">Responsable</p>
-                    <p className="font-medium text-blue-700 text-xs">
+
+                  <div>
+                    <p className="text-xs text-blue-900">Responsable</p>
+                    <p className="font-medium text-blue-700">
                       {usuario?.nombre || "Usuario"}
                     </p>
                   </div>
                 </div>
               </div>
 
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="traslado-observaciones">Observaciones</Label>
                 <Textarea
                   id="traslado-observaciones"
@@ -1960,8 +2041,9 @@ export default function Traslados({
                   rows={3}
                   onBlur={handleObservacionesBlur}
                 />
+
                 {errors.observaciones && touched.observaciones && (
-                  <p className="text-sm text-red-500 mt-1">
+                  <p className="text-sm text-red-500">
                     {errors.observaciones}
                   </p>
                 )}
@@ -1969,7 +2051,7 @@ export default function Traslados({
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="mt-2 border-t pt-4">
             <Button variant="outline" onClick={handleCloseCreateModal}>
               Cancelar
             </Button>

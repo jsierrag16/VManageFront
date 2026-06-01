@@ -1006,19 +1006,20 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
         }}
       >
         <DialogContent
-          className="max-w-2xl max-h-[90vh] overflow-y-auto"
+          className="max-w-3xl max-h-[90vh] overflow-y-auto"
+          onPointerDownOutside={(e: any) => e.preventDefault()}
           onInteractOutside={(e: any) => e.preventDefault()}
           onEscapeKeyDown={(e: any) => e.preventDefault()}
         >
-          <DialogHeader>
+          <DialogHeader className="space-y-2 pb-3">
             <DialogTitle>Crear Nueva Bodega</DialogTitle>
             <DialogDescription>
               Completa la información para registrar una nueva bodega en el sistema
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div>
+          <div className="space-y-5 py-2">
+            <div className="space-y-2">
               <Label htmlFor="create-nombre">Nombre de la Bodega *</Label>
               <Input
                 id="create-nombre"
@@ -1029,12 +1030,12 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                 className={errors.nombre ? "border-red-500" : ""}
               />
               {errors.nombre && (
-                <p className="text-red-500 text-sm mt-1">{errors.nombre}</p>
+                <p className="text-sm text-red-500">{errors.nombre}</p>
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="space-y-2">
                 <Label htmlFor="create-departamento">Departamento *</Label>
                 <Select
                   value={formDepartamentoId === "" ? "" : String(formDepartamentoId)}
@@ -1050,23 +1051,37 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                         : ""
                     }
                   >
-                    <SelectValue placeholder="Selecciona un departamento" />
+                    <SelectValue
+                      placeholder={
+                        isLoadingCatalogos
+                          ? "Cargando departamentos..."
+                          : "Selecciona un departamento"
+                      }
+                    />
                   </SelectTrigger>
+
                   <SelectContent>
-                    {departamentosCatalogo.map((dept) => (
-                      <SelectItem key={dept.id} value={String(dept.id)}>
-                        {dept.nombre}
-                      </SelectItem>
-                    ))}
+                    {departamentosCatalogo.length === 0 ? (
+                      <div className="px-3 py-2 text-sm text-gray-500">
+                        No hay departamentos disponibles
+                      </div>
+                    ) : (
+                      departamentosCatalogo.map((dept) => (
+                        <SelectItem key={dept.id} value={String(dept.id)}>
+                          {dept.nombre}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
+
                 {errors.departamento && touched.departamento && (
-                  <p className="text-red-500 text-sm mt-1">{errors.departamento}</p>
+                  <p className="text-sm text-red-500">{errors.departamento}</p>
                 )}
               </div>
 
-              <div>
-                <Label htmlFor="create-municipio">Municipio *</Label>
+              <div className="space-y-2">
+                <Label htmlFor="create-municipio">Ciudad / Municipio *</Label>
                 <Select
                   value={formMunicipioId === "" ? "" : String(formMunicipioId)}
                   onValueChange={handleMunicipioChange}
@@ -1079,23 +1094,37 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                       errors.municipio && touched.municipio ? "border-red-500" : ""
                     }
                   >
-                    <SelectValue placeholder="Selecciona un municipio" />
+                    <SelectValue
+                      placeholder={
+                        !formDepartamentoId
+                          ? "Selecciona primero un departamento"
+                          : "Selecciona una ciudad / municipio"
+                      }
+                    />
                   </SelectTrigger>
+
                   <SelectContent>
-                    {municipiosDisponibles.map((municipio) => (
-                      <SelectItem key={municipio.id} value={String(municipio.id)}>
-                        {municipio.nombre}
-                      </SelectItem>
-                    ))}
+                    {municipiosDisponibles.length === 0 ? (
+                      <div className="px-3 py-2 text-sm text-gray-500">
+                        No hay municipios disponibles
+                      </div>
+                    ) : (
+                      municipiosDisponibles.map((municipio) => (
+                        <SelectItem key={municipio.id} value={String(municipio.id)}>
+                          {municipio.nombre}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
+
                 {errors.municipio && touched.municipio && (
-                  <p className="text-red-500 text-sm mt-1">{errors.municipio}</p>
+                  <p className="text-sm text-red-500">{errors.municipio}</p>
                 )}
               </div>
             </div>
 
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="create-direccion">Dirección *</Label>
               <Input
                 id="create-direccion"
@@ -1106,15 +1135,16 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                 className={errors.direccion ? "border-red-500" : ""}
               />
               {errors.direccion && (
-                <p className="text-red-500 text-sm mt-1">{errors.direccion}</p>
+                <p className="text-sm text-red-500">{errors.direccion}</p>
               )}
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="mt-2 border-t pt-4">
             <Button variant="outline" onClick={goList} disabled={isCreatingBodega}>
               Cancelar
             </Button>
+
             <Button
               onClick={confirmCreate}
               className="bg-blue-600 hover:bg-blue-700"
@@ -1135,17 +1165,20 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
         }}
       >
         <DialogContent
-          className="max-w-2xl max-h-[90vh] overflow-y-auto"
+          className="max-w-3xl max-h-[90vh] overflow-y-auto"
+          onPointerDownOutside={(e: any) => e.preventDefault()}
           onInteractOutside={(e: any) => e.preventDefault()}
           onEscapeKeyDown={(e: any) => e.preventDefault()}
         >
-          <DialogHeader>
+          <DialogHeader className="space-y-2 pb-3">
             <DialogTitle>Editar Bodega</DialogTitle>
-            <DialogDescription>Modifica la información de la bodega</DialogDescription>
+            <DialogDescription>
+              Modifica la información de la bodega
+            </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div>
+          <div className="space-y-5 py-2">
+            <div className="space-y-2">
               <Label htmlFor="edit-nombre">Nombre de la Bodega *</Label>
               <Input
                 id="edit-nombre"
@@ -1156,12 +1189,12 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                 className={errors.nombre ? "border-red-500" : ""}
               />
               {errors.nombre && (
-                <p className="text-red-500 text-sm mt-1">{errors.nombre}</p>
+                <p className="text-sm text-red-500">{errors.nombre}</p>
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="space-y-2">
                 <Label htmlFor="edit-departamento">Departamento *</Label>
                 <Select
                   value={formDepartamentoId === "" ? "" : String(formDepartamentoId)}
@@ -1177,23 +1210,37 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                         : ""
                     }
                   >
-                    <SelectValue placeholder="Selecciona un departamento" />
+                    <SelectValue
+                      placeholder={
+                        isLoadingCatalogos
+                          ? "Cargando departamentos..."
+                          : "Selecciona un departamento"
+                      }
+                    />
                   </SelectTrigger>
+
                   <SelectContent>
-                    {departamentosCatalogo.map((dept) => (
-                      <SelectItem key={dept.id} value={String(dept.id)}>
-                        {dept.nombre}
-                      </SelectItem>
-                    ))}
+                    {departamentosCatalogo.length === 0 ? (
+                      <div className="px-3 py-2 text-sm text-gray-500">
+                        No hay departamentos disponibles
+                      </div>
+                    ) : (
+                      departamentosCatalogo.map((dept) => (
+                        <SelectItem key={dept.id} value={String(dept.id)}>
+                          {dept.nombre}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
+
                 {errors.departamento && touched.departamento && (
-                  <p className="text-red-500 text-sm mt-1">{errors.departamento}</p>
+                  <p className="text-sm text-red-500">{errors.departamento}</p>
                 )}
               </div>
 
-              <div>
-                <Label htmlFor="edit-municipio">Municipio *</Label>
+              <div className="space-y-2">
+                <Label htmlFor="edit-municipio">Ciudad / Municipio *</Label>
                 <Select
                   value={formMunicipioId === "" ? "" : String(formMunicipioId)}
                   onValueChange={handleMunicipioChange}
@@ -1206,23 +1253,37 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                       errors.municipio && touched.municipio ? "border-red-500" : ""
                     }
                   >
-                    <SelectValue placeholder="Selecciona un municipio" />
+                    <SelectValue
+                      placeholder={
+                        !formDepartamentoId
+                          ? "Selecciona primero un departamento"
+                          : "Selecciona una ciudad / municipio"
+                      }
+                    />
                   </SelectTrigger>
+
                   <SelectContent>
-                    {municipiosDisponibles.map((municipio) => (
-                      <SelectItem key={municipio.id} value={String(municipio.id)}>
-                        {municipio.nombre}
-                      </SelectItem>
-                    ))}
+                    {municipiosDisponibles.length === 0 ? (
+                      <div className="px-3 py-2 text-sm text-gray-500">
+                        No hay municipios disponibles
+                      </div>
+                    ) : (
+                      municipiosDisponibles.map((municipio) => (
+                        <SelectItem key={municipio.id} value={String(municipio.id)}>
+                          {municipio.nombre}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
+
                 {errors.municipio && touched.municipio && (
-                  <p className="text-red-500 text-sm mt-1">{errors.municipio}</p>
+                  <p className="text-sm text-red-500">{errors.municipio}</p>
                 )}
               </div>
             </div>
 
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="edit-direccion">Dirección *</Label>
               <Input
                 id="edit-direccion"
@@ -1233,15 +1294,16 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
                 className={errors.direccion ? "border-red-500" : ""}
               />
               {errors.direccion && (
-                <p className="text-red-500 text-sm mt-1">{errors.direccion}</p>
+                <p className="text-sm text-red-500">{errors.direccion}</p>
               )}
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="mt-2 border-t pt-4">
             <Button variant="outline" onClick={goList} disabled={isUpdatingBodega}>
               Cancelar
             </Button>
+
             <Button
               onClick={confirmEdit}
               className="bg-orange-600 hover:bg-orange-700"

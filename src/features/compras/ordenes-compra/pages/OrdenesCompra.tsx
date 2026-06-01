@@ -71,7 +71,6 @@ import {
   type BasicOption,
   type Compra,
   type CompraEstado,
-  type IvaOption,
   type ProductoOrden,
   type CompraCreatePayload,
   type ProveedorOption,
@@ -267,10 +266,6 @@ export default function Compras() {
   const [proveedores, setProveedores] = useState<ProveedorOption[]>([]);
   const [productosCatalogo, setProductosCatalogo] = useState<BasicOption[]>([]);
   const [terminosPago, setTerminosPago] = useState<BasicOption[]>([]);
-  const [ivas, setIvas] = useState<IvaOption[]>([]);
-  const [showNuevoIvaModal, setShowNuevoIvaModal] = useState(false);
-  const [nuevoIvaPorcentaje, setNuevoIvaPorcentaje] = useState("");
-  const [isSavingIva, setIsSavingIva] = useState(false);
   const [bodegas, setBodegas] = useState<BasicOption[]>([]);
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -413,58 +408,6 @@ export default function Compras() {
     navigate(`/app/ordenes-compra/${c.id}/anular`);
   };
 
-  const handleCrearIva = async () => {
-    const porcentaje = Number(nuevoIvaPorcentaje.replace(",", "."));
-
-    if (!nuevoIvaPorcentaje.trim() || Number.isNaN(porcentaje)) {
-      toast.error("El porcentaje del IVA es obligatorio");
-      return;
-    }
-
-    if (porcentaje < 0 || porcentaje > 100) {
-      toast.error("El porcentaje del IVA debe estar entre 0 y 100");
-      return;
-    }
-
-    const ivaDuplicado = ivas.some(
-      (iva) => Number(iva.porcentaje) === porcentaje
-    );
-
-    if (ivaDuplicado) {
-      toast.error(`Ya existe un IVA del ${formatIvaPorcentaje(porcentaje)}%`);
-      return;
-    }
-
-    try {
-      setIsSavingIva(true);
-
-      const nuevoIva = await comprasService.createIva({
-        porcentaje,
-      });
-
-      setIvas((prev) =>
-        [...prev, nuevoIva].sort(
-          (a, b) => Number(a.porcentaje) - Number(b.porcentaje)
-        )
-      );
-
-      setSelectedIvaId(String(nuevoIva.id));
-
-      toast.success("IVA creado correctamente");
-      resetNuevoIvaForm();
-      setShowNuevoIvaModal(false);
-    } catch (error: any) {
-      console.error("Error creando IVA:", error);
-      toast.error(
-        error?.response?.data?.message ||
-        error?.message ||
-        "No se pudo crear el IVA"
-      );
-    } finally {
-      setIsSavingIva(false);
-    }
-  };
-
   const handleCantidadProductoChange = (value: string) => {
     const limpio = value.replace(/\D/g, "");
 
@@ -531,7 +474,6 @@ export default function Compras() {
   });
 
   const [selectedProductoId, setSelectedProductoId] = useState("");
-  const [selectedIvaId, setSelectedIvaId] = useState("");
   const [cantidadProductoInput, setCantidadProductoInput] = useState("");
   const [precioProducto, setPrecioProducto] = useState<string>("");
   const [productosOrden, setProductosOrden] = useState<ProductoOrden[]>([]);
@@ -551,10 +493,6 @@ export default function Compras() {
   const terminosPagoActivos = useMemo(() => {
     return terminosPago.filter((t) => t.estado !== false);
   }, [terminosPago]);
-
-  const ivasActivos = useMemo(() => {
-    return ivas.filter((i) => i.estado !== false);
-  }, [ivas]);
 
   const calcularTotales = useMemo(() => {
     const subtotal = productosOrden.reduce((sum, item) => sum + item.subtotal, 0);
@@ -612,7 +550,6 @@ export default function Compras() {
       setProveedores(result.proveedores);
       setProductosCatalogo(result.productos);
       setTerminosPago(result.terminosPago);
-      setIvas(result.ivas);
       setBodegas(result.bodegas ?? []);
 
       if (result.huboError) {
@@ -1172,7 +1109,6 @@ export default function Compras() {
     });
 
     setSelectedProductoId("");
-    setSelectedIvaId("");
     setCantidadProductoInput("");
     setPrecioProducto("");
     setProductosOrden([]);
@@ -1194,22 +1130,21 @@ export default function Compras() {
     if (!compraDetalle) return;
 
     setFormData({
-      numeroOrden: compraDetalle.numeroOrden,
+      numeroOrden: compraDetalle.numeroOrden || "",
       proveedorId: String(compraDetalle.proveedorId || ""),
       proveedorTipoDocumento: compraDetalle.proveedorTipoDocumento || "",
       proveedorNumeroDocumento: compraDetalle.proveedorNumeroDocumento || "",
       terminoPagoId: String(compraDetalle.terminoPagoId || ""),
-      fecha: compraDetalle.fecha,
-      fechaEntrega: compraDetalle.fechaEntrega,
+      fecha: toDateInputValue(compraDetalle.fecha),
+      fechaEntrega: toDateInputValue(compraDetalle.fechaEntrega),
       estado: compraDetalle.estado,
-      observaciones: compraDetalle.observaciones,
+      observaciones: compraDetalle.observaciones || "",
       bodega: compraDetalle.bodega || "",
       bodegaId: String(compraDetalle.bodegaId || ""),
     });
 
     setProductosOrden(compraDetalle.productos ?? []);
     setSelectedProductoId("");
-    setSelectedIvaId("");
     setCantidadProductoInput("");
     setPrecioProducto("");
   }, [isEditar, compraDetalle]);
@@ -1275,11 +1210,6 @@ export default function Compras() {
       return;
     }
 
-    if (!selectedIvaId) {
-      toast.error("Selecciona un IVA");
-      return;
-    }
-
     if (
       !precioProducto.trim() ||
       Number.isNaN(precioNormalizado) ||
@@ -1298,12 +1228,13 @@ export default function Compras() {
       return;
     }
 
-    const ivaSeleccionado = ivasActivos.find(
-      (iva) => String(iva.id) === selectedIvaId
-    );
+    const idIvaProducto = Number(productoSeleccionado.idIva || 0);
+    const ivaPorcentajeProducto = Number(productoSeleccionado.ivaPorcentaje || 0);
 
-    if (!ivaSeleccionado) {
-      toast.error("El IVA seleccionado no es válido");
+    if (!idIvaProducto) {
+      toast.error(
+        `El producto "${productoSeleccionado.nombre}" no tiene IVA configurado`
+      );
       return;
     }
 
@@ -1323,15 +1254,15 @@ export default function Compras() {
       cantidad: cantidadNormalizada,
       precio: precioNormalizado,
       subtotal,
-      idIva: ivaSeleccionado.id,
-      ivaNombre: getIvaLabel(ivaSeleccionado),
-      ivaPorcentaje: ivaSeleccionado.porcentaje,
+      idIva: idIvaProducto,
+      ivaNombre:
+        productoSeleccionado.ivaNombre || `IVA ${ivaPorcentajeProducto}%`,
+      ivaPorcentaje: ivaPorcentajeProducto,
     };
 
     setProductosOrden((prev) => [...prev, nuevoProducto]);
 
     setSelectedProductoId("");
-    setSelectedIvaId("");
     setCantidadProductoInput("");
     setPrecioProducto("");
   };
@@ -1465,6 +1396,59 @@ export default function Compras() {
     }
   };
 
+  const formatCop = (value: unknown) => {
+    return `COP$${Number(value || 0).toLocaleString("es-CO")}`;
+  };
+
+  const getIvasCompra = (compra?: Compra | null) => {
+    return calcularIvasPorPorcentaje(compra?.productos ?? []);
+  };
+
+  const calcularIvasPorPorcentaje = (
+    items: Array<{
+      subtotal: number;
+      ivaPorcentaje?: number | string;
+    }>
+  ) => {
+    const impuestosMap = new Map<number, number>();
+
+    items.forEach((item) => {
+      const subtotal = Number(item.subtotal || 0);
+      const porcentaje = Number(item.ivaPorcentaje || 0);
+
+      if (!Number.isFinite(subtotal) || !Number.isFinite(porcentaje)) return;
+      if (porcentaje <= 0) return;
+
+      const valorIva = (subtotal * porcentaje) / 100;
+
+      impuestosMap.set(
+        porcentaje,
+        (impuestosMap.get(porcentaje) ?? 0) + valorIva
+      );
+    });
+
+    return Array.from(impuestosMap.entries())
+      .map(([porcentaje, valor]) => ({
+        porcentaje,
+        valor: Number(valor.toFixed(2)),
+      }))
+      .sort((a, b) => a.porcentaje - b.porcentaje);
+  };
+
+  const impuestosPorPorcentaje = useMemo(() => {
+    return calcularIvasPorPorcentaje(productosOrden);
+  }, [productosOrden]);
+
+  const getDocumentoProveedorTexto = () => {
+    const tipoDocumento = formData.proveedorTipoDocumento?.trim();
+    const numeroDocumento = formData.proveedorNumeroDocumento?.trim();
+
+    if (!tipoDocumento && !numeroDocumento) return "";
+    if (!numeroDocumento) return tipoDocumento || "";
+
+    return `${tipoDocumento || "Documento"}: ${numeroDocumento}`;
+  };
+
   const formatIvaPorcentaje = (value: unknown) => {
     const porcentaje = Number(value ?? 0);
 
@@ -1476,18 +1460,49 @@ export default function Compras() {
     });
   };
 
-  const getIvaLabel = (iva?: IvaOption | null) => {
-    if (!iva) return "IVA 0%";
+  const formatFechaVista = (value?: string | Date | null) => {
+    if (!value) return "-";
 
-    return `IVA ${formatIvaPorcentaje(iva.porcentaje)}%`;
+    if (typeof value === "string") {
+      const soloFecha = value.split("T")[0];
+
+      if (/^\d{4}-\d{2}-\d{2}$/.test(soloFecha)) {
+        const [year, month, day] = soloFecha.split("-");
+        return `${day}/${month}/${year}`;
+      }
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "-";
+
+    return date.toLocaleDateString("es-CO");
   };
 
-  const formatCop = (value: unknown) => {
-    return `COP$${Number(value || 0).toLocaleString("es-CO")}`;
+  const getProductoOrdenLabel = (producto: BasicOption) => {
+    const iva = formatIvaPorcentaje(producto.ivaPorcentaje ?? 0);
+    return `${producto.nombre} — IVA ${iva}%`;
   };
 
-  const resetNuevoIvaForm = () => {
-    setNuevoIvaPorcentaje("");
+  const toDateInputValue = (value?: string | Date | null) => {
+    if (!value) return "";
+
+    if (typeof value === "string") {
+      const soloFecha = value.split("T")[0];
+
+      if (/^\d{4}-\d{2}-\d{2}$/.test(soloFecha)) {
+        return soloFecha;
+      }
+    }
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) return "";
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
   };
 
   const compraSeleccionada = compraDetalle;
@@ -1634,16 +1649,9 @@ export default function Compras() {
                       {compra.numeroOrden}
                     </TableCell>
                     <TableCell>{compra.proveedor}</TableCell>
-                    <TableCell>
-                      {compra.fecha
-                        ? new Date(compra.fecha).toLocaleDateString("es-CO")
-                        : "-"}
-                    </TableCell>
-                    <TableCell>
-                      {compra.fechaEntrega
-                        ? new Date(compra.fechaEntrega).toLocaleDateString("es-CO")
-                        : "-"}
-                    </TableCell>
+                    <TableCell>{formatFechaVista(compra.fecha)}</TableCell>
+
+                    <TableCell>{formatFechaVista(compra.fechaEntrega)}</TableCell>
                     <TableCell className="text-center">
                       {compra.items}
                     </TableCell>
@@ -1799,7 +1807,7 @@ export default function Compras() {
           aria-describedby="create-order-description"
           onInteractOutside={(e) => e.preventDefault()}
         >
-          <DialogHeader>
+          <DialogHeader className="space-y-2 pb-3">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <DialogTitle>Nueva Orden de Compra</DialogTitle>
@@ -1822,15 +1830,25 @@ export default function Compras() {
             </div>
           </DialogHeader>
 
-          <div className="space-y-5 py-4">
-            <div className="space-y-4">
-              <div className="flex items-center justify-end border-b pb-2">
-                <p className="text-sm font-semibold text-green-600">
-                  {formData.fecha}
+          <div className="space-y-6 py-2">
+            <div className="rounded-lg bg-gray-50 p-5">
+              <div className="mb-4">
+                <h3 className="font-semibold text-gray-900">Información general</h3>
+                <p className="text-sm text-gray-500">
+                  Define la fecha de entrega y la bodega de la compra
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div className="space-y-2">
+                  <Label>Fecha de Orden</Label>
+                  <Input
+                    value={formData.fecha || getFechaActual()}
+                    readOnly
+                    className={readonlyFieldClass}
+                  />
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="fechaEntrega">Fecha de Entrega *</Label>
                   <Input
@@ -1845,7 +1863,7 @@ export default function Compras() {
                   />
                 </div>
 
-                <div className="space-y-2 md:col-span-2">
+                <div className="space-y-2">
                   <Label htmlFor="bodega">Bodega *</Label>
                   <Select
                     value={formData.bodegaId}
@@ -1864,6 +1882,7 @@ export default function Compras() {
                     <SelectTrigger id="bodega" className={fieldClass}>
                       <SelectValue placeholder="Selecciona una bodega" />
                     </SelectTrigger>
+
                     <SelectContent>
                       {bodegasActivas.length === 0 ? (
                         <div className="px-3 py-2 text-sm text-gray-500">
@@ -1882,13 +1901,13 @@ export default function Compras() {
               </div>
             </div>
 
-            <div className="border-t pt-6 mt-6">
-              <div className="space-y-1 mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Proveedor y Condiciones
+            <div className="rounded-lg bg-gray-50 p-5">
+              <div className="mb-4">
+                <h3 className="font-semibold text-gray-900">
+                  Proveedor y condiciones
                 </h3>
                 <p className="text-sm text-gray-500">
-                  Selecciona proveedor y término de pago
+                  Selecciona el proveedor y el término de pago
                 </p>
               </div>
 
@@ -1902,6 +1921,7 @@ export default function Compras() {
                     <SelectTrigger id="proveedor" className={fieldClass}>
                       <SelectValue placeholder="Selecciona un proveedor" />
                     </SelectTrigger>
+
                     <SelectContent>
                       {proveedoresActivos.length === 0 ? (
                         <div className="px-3 py-2 text-sm text-gray-500">
@@ -1909,10 +1929,7 @@ export default function Compras() {
                         </div>
                       ) : (
                         proveedoresActivos.map((proveedor) => (
-                          <SelectItem
-                            key={proveedor.id}
-                            value={String(proveedor.id)}
-                          >
+                          <SelectItem key={proveedor.id} value={String(proveedor.id)}>
                             {proveedor.nombre}
                           </SelectItem>
                         ))
@@ -1921,7 +1938,7 @@ export default function Compras() {
                   </Select>
                 </div>
 
-                <div className="flex items-end lg:pt-7">
+                <div className="flex items-end">
                   <Button
                     type="button"
                     variant="outline"
@@ -1936,29 +1953,16 @@ export default function Compras() {
 
               <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="proveedorTipoDocumento">Tipo de Documento</Label>
+                  <Label htmlFor="proveedorDocumento">Documento / NIT</Label>
                   <Input
-                    id="proveedorTipoDocumento"
-                    value={formData.proveedorTipoDocumento}
+                    id="proveedorDocumento"
+                    value={getDocumentoProveedorTexto()}
                     readOnly
                     className={readonlyFieldClass}
                     placeholder="Se completa al seleccionar proveedor"
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="proveedorNumeroDocumento">Documento / NIT</Label>
-                  <Input
-                    id="proveedorNumeroDocumento"
-                    value={formData.proveedorNumeroDocumento}
-                    readOnly
-                    className={readonlyFieldClass}
-                    placeholder="Se completa al seleccionar proveedor"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="terminoPago">Término de Pago *</Label>
                   <Select
@@ -1970,6 +1974,7 @@ export default function Compras() {
                     <SelectTrigger id="terminoPago" className={fieldClass}>
                       <SelectValue placeholder="Selecciona un término de pago" />
                     </SelectTrigger>
+
                     <SelectContent>
                       {terminosPagoActivos.length === 0 ? (
                         <div className="px-3 py-2 text-sm text-gray-500">
@@ -1988,16 +1993,21 @@ export default function Compras() {
               </div>
             </div>
 
-            <div className="border-t pt-6 mt-6">
-              <div className="flex items-center gap-2 mb-4">
+            <div>
+              <div className="mb-3 flex items-center gap-2">
                 <Package size={20} className="text-blue-600" />
-                <h3 className="font-semibold text-gray-900">
-                  Productos de la Orden
-                </h3>
+                <div>
+                  <h3 className="font-semibold text-gray-900">
+                    Productos de la Orden
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    El IVA se toma automáticamente del producto seleccionado
+                  </p>
+                </div>
               </div>
 
-              <div className="bg-gray-50 p-4 rounded-lg space-y-4 mb-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1.5fr)_180px_220px]">
                   <div className="space-y-2">
                     <Label htmlFor="producto">Producto *</Label>
                     <Select
@@ -2007,12 +2017,19 @@ export default function Compras() {
                       <SelectTrigger id="producto" className={fieldClass}>
                         <SelectValue placeholder="Selecciona un producto" />
                       </SelectTrigger>
+
                       <SelectContent>
-                        {productosActivos.map((producto) => (
-                          <SelectItem key={producto.id} value={String(producto.id)}>
-                            {producto.nombre}
-                          </SelectItem>
-                        ))}
+                        {productosActivos.length === 0 ? (
+                          <div className="px-3 py-2 text-sm text-gray-500">
+                            No hay productos disponibles
+                          </div>
+                        ) : (
+                          productosActivos.map((producto) => (
+                            <SelectItem key={producto.id} value={String(producto.id)}>
+                              {getProductoOrdenLabel(producto)}
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -2024,52 +2041,12 @@ export default function Compras() {
                       type="text"
                       inputMode="numeric"
                       value={cantidadProductoInput}
-                      onChange={(e) =>
-                        handleCantidadProductoChange(e.target.value)
-                      }
+                      onChange={(e) => handleCantidadProductoChange(e.target.value)}
                       onBlur={handleCantidadProductoBlur}
                       placeholder="Ej: 50"
                       className={numberFieldClass}
                     />
-                    <p className="text-xs text-gray-500">
-                      Máximo 1000 unidades.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="iva">IVA *</Label>
-
-                    <div className="flex gap-2">
-                      <Select value={selectedIvaId} onValueChange={setSelectedIvaId}>
-                        <SelectTrigger id="iva" className={fieldClass}>
-                          <SelectValue placeholder="Selecciona IVA" />
-                        </SelectTrigger>
-
-                        <SelectContent>
-                          {ivasActivos.length === 0 ? (
-                            <div className="px-3 py-2 text-sm text-gray-500">
-                              No hay IVAs disponibles
-                            </div>
-                          ) : (
-                            ivasActivos.map((iva) => (
-                              <SelectItem key={iva.id} value={String(iva.id)}>
-                                {getIvaLabel(iva)}
-                              </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
-
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setShowNuevoIvaModal(true)}
-                        className="h-11 shrink-0 border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
-                      >
-                        <Plus size={16} className="mr-1" />
-                        Nuevo IVA
-                      </Button>
-                    </div>
+                    <p className="text-xs text-gray-500">Máximo 1000 unidades.</p>
                   </div>
 
                   <div className="space-y-2">
@@ -2079,9 +2056,7 @@ export default function Compras() {
                       type="text"
                       inputMode="decimal"
                       value={precioProducto}
-                      onChange={(e) =>
-                        handlePrecioProductoChange(e.target.value)
-                      }
+                      onChange={(e) => handlePrecioProductoChange(e.target.value)}
                       placeholder="Ej: 25000"
                       className={numberFieldClass}
                     />
@@ -2091,7 +2066,7 @@ export default function Compras() {
                 <Button
                   type="button"
                   onClick={handleAgregarProducto}
-                  className="bg-green-600 hover:bg-green-700 w-full h-11"
+                  className="mt-4 h-11 w-full bg-green-600 hover:bg-green-700"
                 >
                   <Plus size={16} className="mr-2" />
                   Agregar Producto
@@ -2099,66 +2074,103 @@ export default function Compras() {
               </div>
 
               {productosOrden.length > 0 ? (
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="max-h-65 overflow-y-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-gray-50">
-                          <TableHead>Producto</TableHead>
-                          <TableHead className="text-center">Cantidad</TableHead>
-                          <TableHead className="text-center">IVA</TableHead>
-                          <TableHead className="text-right">Precio Unitario</TableHead>
-                          <TableHead className="text-right">Subtotal</TableHead>
-                          <TableHead className="w-16"></TableHead>
-                        </TableRow>
-                      </TableHeader>
+                <div className="mt-4 overflow-hidden rounded-lg border border-gray-200">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-gray-50">
+                        <TableHead>Producto</TableHead>
+                        <TableHead className="text-center">Cantidad</TableHead>
+                        <TableHead className="text-center">IVA</TableHead>
+                        <TableHead className="text-right">Precio Unitario</TableHead>
+                        <TableHead className="text-right">Subtotal</TableHead>
+                        <TableHead className="w-16 text-center">Acción</TableHead>
+                      </TableRow>
+                    </TableHeader>
 
-                      <TableBody>
-                        {productosOrden.map((item) => (
-                          <TableRow key={item.producto.id}>
-                            <TableCell>{item.producto.nombre}</TableCell>
-                            <TableCell className="text-center">
-                              {item.cantidad}
-                            </TableCell>
-                            <TableCell className="text-center">
-                              {item.ivaNombre}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {formatCop(item.precio)}
-                            </TableCell>
-                            <TableCell className="text-right font-medium">
-                              {formatCop(item.subtotal)}
-                            </TableCell>
-                            <TableCell>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() =>
-                                  handleEliminarProducto(item.producto.id)
-                                }
-                                className="hover:bg-red-50"
-                              >
-                                <Trash2 size={16} className="text-red-600" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                    <TableBody>
+                      {productosOrden.map((item) => (
+                        <TableRow key={item.producto.id}>
+                          <TableCell className="font-medium text-gray-900">
+                            {item.producto.nombre}
+                          </TableCell>
 
-                        <TableRow className="bg-gray-50">
-                          <TableCell colSpan={4} className="text-right font-semibold">
-                            Total
+                          <TableCell className="text-center">
+                            {item.cantidad}
                           </TableCell>
-                          <TableCell className="text-right font-semibold text-blue-600">
-                            {formatCop(calcularTotales.total)}
+
+                          <TableCell className="text-center">
+                            {formatIvaPorcentaje(item.ivaPorcentaje)}%
                           </TableCell>
-                          <TableCell />
+
+                          <TableCell className="text-right">
+                            {formatCop(item.precio)}
+                          </TableCell>
+
+                          <TableCell className="text-right font-medium">
+                            {formatCop(item.subtotal)}
+                          </TableCell>
+
+                          <TableCell className="text-center">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEliminarProducto(item.producto.id)}
+                              className="hover:bg-red-50"
+                            >
+                              <Trash2 size={16} className="text-red-600" />
+                            </Button>
+                          </TableCell>
                         </TableRow>
-                      </TableBody>
-                    </Table>
+                      ))}
+                    </TableBody>
+                  </Table>
+
+                  <div className="flex justify-end border-t bg-gray-50 px-4 py-3">
+                    <div className="w-full max-w-sm space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">N° de Items:</span>
+                        <span className="font-medium">{calcularTotales.items}</span>
+                      </div>
+
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Subtotal:</span>
+                        <span className="font-medium">
+                          {formatCop(calcularTotales.subtotal)}
+                        </span>
+                      </div>
+
+                      {impuestosPorPorcentaje.length > 0 ? (
+                        impuestosPorPorcentaje.map((iva) => (
+                          <div
+                            key={iva.porcentaje}
+                            className="flex justify-between text-sm"
+                          >
+                            <span className="text-gray-600">
+                              IVA {formatIvaPorcentaje(iva.porcentaje)}%:
+                            </span>
+                            <span className="font-medium">
+                              {formatCop(iva.valor)}
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">IVA:</span>
+                          <span className="font-medium">{formatCop(0)}</span>
+                        </div>
+                      )}
+
+                      <div className="flex justify-between border-t pt-2 text-base">
+                        <span className="font-semibold">Total:</span>
+                        <span className="font-bold text-blue-600">
+                          {formatCop(calcularTotales.total)}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               ) : (
-                <div className="text-center py-8 text-gray-500 border rounded-lg border-dashed">
+                <div className="mt-4 rounded-lg border border-dashed py-8 text-center text-gray-500">
                   <Package size={44} className="mx-auto mb-2 text-gray-300" />
                   <p>No hay productos agregados</p>
                   <p className="text-sm">
@@ -2166,80 +2178,50 @@ export default function Compras() {
                   </p>
                 </div>
               )}
-
-              <div className="mt-4 ml-auto w-full max-w-sm rounded-lg border bg-gray-50 p-4">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">N° de Items</span>
-                    <span className="font-medium">{calcularTotales.items}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Subtotal</span>
-                    <span className="font-medium">
-                      {formatCop(calcularTotales.subtotal)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">IVA</span>
-                    <span className="font-medium">
-                      {formatCop(calcularTotales.impuestos)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between border-t pt-3 mt-3">
-                    <span className="font-semibold">Total</span>
-                    <span className="font-semibold text-blue-600">
-                      {formatCop(calcularTotales.total)}
-                    </span>
-                  </div>
-                </div>
-              </div>
             </div>
 
-            <div className="border-t pt-6 mt-6">
-              <div className="space-y-4">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    Observaciones
-                  </h3>
-                  <p className="text-sm text-gray-500">
-                    Notas adicionales para esta orden
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="observaciones">Notas adicionales</Label>
-                  <Textarea
-                    id="observaciones"
-                    value={formData.observaciones}
-                    onChange={(e) => {
-                      const value = e.target.value;
-
-                      if (value.length > MAX_OBSERVACIONES_LENGTH) {
-                        toast.error(`Máximo ${MAX_OBSERVACIONES_LENGTH} caracteres en observaciones`);
-                        return;
-                      }
-
-                      setFormData({
-                        ...formData,
-                        observaciones: value,
-                      });
-                    }}
-                    placeholder="Escribe cualquier observación sobre la orden de compra..."
-                    rows={4}
-                    className="rounded-lg border-gray-300 resize-none shadow-none focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:border-blue-500"
-                  />
-                  <p className="text-xs text-gray-500 text-right">
-                    {formData.observaciones.length}/{MAX_OBSERVACIONES_LENGTH}
-                  </p>
-                </div>
+            <div className="space-y-2">
+              <div>
+                <h3 className="font-semibold text-gray-900">Observaciones</h3>
+                <p className="text-sm text-gray-500">
+                  Notas adicionales para esta orden
+                </p>
               </div>
+
+              <Textarea
+                id="observaciones"
+                value={formData.observaciones}
+                onChange={(e) => {
+                  const value = e.target.value;
+
+                  if (value.length > MAX_OBSERVACIONES_LENGTH) {
+                    toast.error(
+                      `Máximo ${MAX_OBSERVACIONES_LENGTH} caracteres en observaciones`
+                    );
+                    return;
+                  }
+
+                  setFormData({
+                    ...formData,
+                    observaciones: value,
+                  });
+                }}
+                placeholder="Escribe cualquier observación sobre la orden de compra..."
+                rows={4}
+                className="resize-none rounded-lg border-gray-300 shadow-none focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/20"
+              />
+
+              <p className="text-right text-xs text-gray-500">
+                {formData.observaciones.length}/{MAX_OBSERVACIONES_LENGTH}
+              </p>
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="mt-2 border-t pt-4">
             <Button variant="outline" onClick={closeToList} disabled={isSaving}>
               Cancelar
             </Button>
+
             <Button
               onClick={confirmCreate}
               className="bg-blue-600 hover:bg-blue-700"
@@ -2258,11 +2240,11 @@ export default function Compras() {
         }}
       >
         <DialogContent
-          className="max-w-6xl max-h-[85vh] overflow-y-auto"
+          className="max-w-6xl max-h-[90vh] overflow-y-auto"
           aria-describedby="view-order-description"
           onInteractOutside={(e) => e.preventDefault()}
         >
-          <DialogHeader>
+          <DialogHeader className="space-y-2 pb-3">
             <DialogTitle>Detalles de la Orden de Compra</DialogTitle>
             <DialogDescription id="view-order-description">
               Información completa de la orden de compra
@@ -2274,15 +2256,17 @@ export default function Compras() {
               Cargando detalle de la orden...
             </div>
           ) : compraSeleccionada ? (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-6 py-2">
+              <div className="grid grid-cols-1 gap-x-10 gap-y-5 rounded-lg bg-gray-50 p-5 md:grid-cols-2">
                 <div>
-                  <Label className="text-gray-600">N° de Orden</Label>
-                  <p className="font-medium">{compraSeleccionada.numeroOrden}</p>
+                  <p className="text-sm text-gray-600">N° de Orden</p>
+                  <p className="font-medium text-blue-600">
+                    {compraSeleccionada.numeroOrden || "-"}
+                  </p>
                 </div>
 
                 <div>
-                  <Label className="text-gray-600">Estado</Label>
+                  <p className="text-sm text-gray-600">Estado</p>
                   <div className="mt-1">
                     <Button
                       variant="ghost"
@@ -2302,134 +2286,178 @@ export default function Compras() {
                 </div>
 
                 <div>
-                  <Label className="text-gray-600">Proveedor</Label>
-                  <p className="font-medium">{compraSeleccionada.proveedor}</p>
-                </div>
-
-                <div>
-                  <Label className="text-gray-600">Tipo de Documento</Label>
+                  <p className="text-sm text-gray-600">Proveedor</p>
                   <p className="font-medium">
-                    {compraSeleccionada.proveedorTipoDocumento || "-"}
+                    {compraSeleccionada.proveedor || "-"}
                   </p>
                 </div>
 
                 <div>
-                  <Label className="text-gray-600">Documento / NIT</Label>
-                  <p className="font-medium">
-                    {compraSeleccionada.proveedorNumeroDocumento || "-"}
+                  <p className="text-sm text-gray-600">Documento / NIT</p>
+                  <p>
+                    {compraSeleccionada.proveedorNumeroDocumento ? (
+                      <>
+                        <span className="font-medium">
+                          {compraSeleccionada.proveedorTipoDocumento || "Documento"}:
+                        </span>{" "}
+                        <span className="font-mono text-sm">
+                          {compraSeleccionada.proveedorNumeroDocumento}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="font-medium">-</span>
+                    )}
                   </p>
                 </div>
 
                 <div>
-                  <Label className="text-gray-600">Bodega</Label>
-                  <p className="font-medium">{compraSeleccionada.bodega || "-"}</p>
+                  <p className="text-sm text-gray-600">Bodega</p>
+                  <p className="font-medium">
+                    {compraSeleccionada.bodega || "-"}
+                  </p>
                 </div>
 
                 <div>
-                  <Label className="text-gray-600">Término de Pago</Label>
+                  <p className="text-sm text-gray-600">Término de Pago</p>
                   <p className="font-medium">
                     {compraSeleccionada.terminoPago || "-"}
                   </p>
                 </div>
 
                 <div>
-                  <Label className="text-gray-600">Fecha de Orden</Label>
+                  <p className="text-sm text-gray-600">Fecha de Orden</p>
                   <p className="font-medium">
-                    {compraSeleccionada.fecha
-                      ? new Date(compraSeleccionada.fecha).toLocaleDateString(
-                        "es-CO"
-                      )
-                      : "-"}
+                    {formatFechaVista(compraSeleccionada.fecha)}
                   </p>
                 </div>
 
                 <div>
-                  <Label className="text-gray-600">Fecha de Entrega</Label>
+                  <p className="text-sm text-gray-600">Fecha de Entrega</p>
                   <p className="font-medium">
-                    {compraSeleccionada.fechaEntrega
-                      ? new Date(
-                        compraSeleccionada.fechaEntrega
-                      ).toLocaleDateString("es-CO")
-                      : "-"}
+                    {formatFechaVista(compraSeleccionada.fechaEntrega)}
                   </p>
                 </div>
               </div>
 
-              {compraSeleccionada.productos &&
-                compraSeleccionada.productos.length > 0 && (
-                  <div className="border-t pt-4">
-                    <Label className="text-gray-600 mb-2 block">
-                      Productos
-                    </Label>
-                    <div className="border rounded-lg overflow-hidden">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="bg-gray-50">
-                            <TableHead>Producto</TableHead>
-                            <TableHead className="text-center">Cantidad</TableHead>
-                            <TableHead className="text-center">IVA</TableHead>
-                            <TableHead className="text-right">Precio Unit.</TableHead>
-                            <TableHead className="text-right">Subtotal</TableHead>
+              <div>
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">
+                      Productos de la Orden
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      {compraSeleccionada.productos?.length || 0} producto
+                      {(compraSeleccionada.productos?.length || 0) !== 1 ? "s" : ""} registrado
+                      {(compraSeleccionada.productos?.length || 0) !== 1 ? "s" : ""}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="overflow-hidden rounded-lg border border-gray-200">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-gray-50">
+                        <TableHead>Producto</TableHead>
+                        <TableHead className="text-center">Cantidad</TableHead>
+                        <TableHead className="text-center">IVA</TableHead>
+                        <TableHead className="text-right">Precio Unit.</TableHead>
+                        <TableHead className="text-right">Subtotal</TableHead>
+                      </TableRow>
+                    </TableHeader>
+
+                    <TableBody>
+                      {!compraSeleccionada.productos ||
+                        compraSeleccionada.productos.length === 0 ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={5}
+                            className="py-6 text-center text-gray-500"
+                          >
+                            No hay productos registrados
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        compraSeleccionada.productos.map((item, index) => (
+                          <TableRow key={`${item.producto.id}-${index}`}>
+                            <TableCell className="font-medium text-gray-900">
+                              {item.producto.nombre || "-"}
+                            </TableCell>
+
+                            <TableCell className="text-center">
+                              {item.cantidad}
+                            </TableCell>
+
+                            <TableCell className="text-center">
+                              {formatIvaPorcentaje(item.ivaPorcentaje)}%
+                            </TableCell>
+
+                            <TableCell className="text-right">
+                              {formatCop(item.precio)}
+                            </TableCell>
+
+                            <TableCell className="text-right font-medium">
+                              {formatCop(item.subtotal)}
+                            </TableCell>
                           </TableRow>
-                        </TableHeader>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
 
-                        <TableBody>
-                          {compraSeleccionada.productos.map((item, index) => (
-                            <TableRow key={`${item.producto.id}-${index}`}>
-                              <TableCell className="font-medium">
-                                {item.producto.nombre}
-                              </TableCell>
-                              <TableCell className="text-center">
-                                {item.cantidad}
-                              </TableCell>
-                              <TableCell className="text-center">
-                                {item.ivaNombre}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {formatCop(item.precio)}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {formatCop(item.subtotal)}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                  <div className="flex justify-end border-t bg-gray-50 px-4 py-3">
+                    <div className="w-full max-w-sm space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">N° de Items:</span>
+                        <span className="font-medium">
+                          {compraSeleccionada.items}
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Subtotal:</span>
+                        <span className="font-medium">
+                          {formatCop(compraSeleccionada.subtotal)}
+                        </span>
+                      </div>
+
+                      {getIvasCompra(compraSeleccionada).length > 0 ? (
+                        getIvasCompra(compraSeleccionada).map((iva) => (
+                          <div
+                            key={iva.porcentaje}
+                            className="flex justify-between text-sm"
+                          >
+                            <span className="text-gray-600">
+                              IVA {formatIvaPorcentaje(iva.porcentaje)}%:
+                            </span>
+                            <span className="font-medium">
+                              {formatCop(iva.valor)}
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">IVA:</span>
+                          <span className="font-medium">{formatCop(0)}</span>
+                        </div>
+                      )}
+
+                      <div className="flex justify-between border-t pt-2 text-base">
+                        <span className="font-semibold">Total:</span>
+                        <span className="font-bold text-blue-600">
+                          {formatCop(compraSeleccionada.total)}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                )}
-
-              <div className="border-t pt-4">
-                <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">N° de Items:</span>
-                    <span className="font-medium">{compraSeleccionada.items}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Subtotal:</span>
-                    <span className="font-medium">
-                      {formatCop(compraSeleccionada.subtotal)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">IVA:</span>
-                    <span className="font-medium">
-                      {formatCop(compraSeleccionada.impuestos)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-lg border-t pt-2 mt-2">
-                    <span className="font-semibold">Total:</span>
-                    <span className="font-bold text-blue-600">
-                      {formatCop(compraSeleccionada.total)}
-                    </span>
                   </div>
                 </div>
               </div>
 
               {compraSeleccionada.observaciones && (
-                <div>
-                  <Label className="text-gray-600">Observaciones</Label>
-                  <p className="text-sm bg-gray-50 p-3 rounded-lg">
+                <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+                  <p className="mb-1 text-sm font-semibold text-yellow-800">
+                    Observaciones
+                  </p>
+                  <p className="whitespace-pre-wrap text-sm text-yellow-900">
                     {compraSeleccionada.observaciones}
                   </p>
                 </div>
@@ -2441,7 +2469,7 @@ export default function Compras() {
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="mt-2 border-t pt-4">
             {compraSeleccionada && (
               <Button
                 onClick={() => handleOpenPdfOptions(compraSeleccionada)}
@@ -2451,8 +2479,458 @@ export default function Compras() {
                 Descargar PDF
               </Button>
             )}
+
             <Button variant="outline" onClick={closeToList}>
               Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isEditar}
+        onOpenChange={(open) => {
+          if (!open) closeToList();
+        }}
+      >
+        <DialogContent
+          className="max-w-6xl max-h-[90vh] overflow-y-auto"
+          aria-describedby="edit-order-description"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
+          <DialogHeader className="space-y-2 pb-3">
+            <DialogTitle>Editar Orden de Compra</DialogTitle>
+            <DialogDescription id="edit-order-description">
+              Modifica la información de la orden de compra
+            </DialogDescription>
+          </DialogHeader>
+
+          {isLoadingDetail ? (
+            <div className="py-8 text-center text-gray-500">
+              Cargando información de la orden...
+            </div>
+          ) : (
+            <div className="space-y-6 py-2">
+              <div className="rounded-lg bg-gray-50 p-5">
+                <div className="mb-4 flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">
+                      Información general
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      Define la fecha de entrega y la bodega de la compra
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <Badge
+                      variant="outline"
+                      className="border-blue-200 bg-blue-50 text-blue-700"
+                    >
+                      {formData.numeroOrden || "Sin número"}
+                    </Badge>
+
+                    <Badge
+                      variant="outline"
+                      className={
+                        formData.estado === "Aprobada"
+                          ? "border-blue-200 bg-blue-50 text-blue-700"
+                          : formData.estado === "Anulada"
+                            ? "border-red-200 bg-red-50 text-red-700"
+                            : "border-yellow-200 bg-yellow-50 text-yellow-700"
+                      }
+                    >
+                      {formData.estado}
+                    </Badge>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-fecha">Fecha de Orden</Label>
+                    <Input
+                      id="edit-fecha"
+                      type="date"
+                      value={formData.fecha}
+                      readOnly
+                      disabled
+                      className={readonlyFieldClass}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-fechaEntrega">Fecha de Entrega *</Label>
+                    <Input
+                      id="edit-fechaEntrega"
+                      type="date"
+                      min={getFechaActual()}
+                      value={formData.fechaEntrega}
+                      onChange={(e) =>
+                        setFormData({ ...formData, fechaEntrega: e.target.value })
+                      }
+                      className={fieldClass}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-bodega">Bodega *</Label>
+                    <Select
+                      value={formData.bodegaId}
+                      onValueChange={(value: string) => {
+                        const bodegaSeleccionada = bodegasActivas.find(
+                          (bodega) => String(bodega.id) === value
+                        );
+
+                        setFormData({
+                          ...formData,
+                          bodegaId: value,
+                          bodega: bodegaSeleccionada?.nombre || "",
+                        });
+                      }}
+                    >
+                      <SelectTrigger id="edit-bodega" className={fieldClass}>
+                        <SelectValue placeholder="Selecciona una bodega" />
+                      </SelectTrigger>
+
+                      <SelectContent>
+                        {bodegasActivas.length === 0 ? (
+                          <div className="px-3 py-2 text-sm text-gray-500">
+                            No hay bodegas disponibles
+                          </div>
+                        ) : (
+                          bodegasActivas.map((bodega) => (
+                            <SelectItem key={bodega.id} value={String(bodega.id)}>
+                              {bodega.nombre}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg bg-gray-50 p-5">
+                <div className="mb-4">
+                  <h3 className="font-semibold text-gray-900">
+                    Proveedor y condiciones
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    Selecciona el proveedor y el término de pago
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-proveedor">Proveedor *</Label>
+                    <Select
+                      value={formData.proveedorId}
+                      onValueChange={handleProveedorChange}
+                    >
+                      <SelectTrigger id="edit-proveedor" className={fieldClass}>
+                        <SelectValue placeholder="Selecciona un proveedor" />
+                      </SelectTrigger>
+
+                      <SelectContent>
+                        {proveedoresActivos.length === 0 ? (
+                          <div className="px-3 py-2 text-sm text-gray-500">
+                            No hay proveedores activos disponibles
+                          </div>
+                        ) : (
+                          proveedoresActivos.map((proveedor) => (
+                            <SelectItem key={proveedor.id} value={String(proveedor.id)}>
+                              {proveedor.nombre}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-proveedorDocumento">Documento / NIT</Label>
+                    <Input
+                      id="edit-proveedorDocumento"
+                      value={getDocumentoProveedorTexto()}
+                      readOnly
+                      className={readonlyFieldClass}
+                      placeholder="Se completa al seleccionar proveedor"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-terminoPago">Término de Pago *</Label>
+                    <Select
+                      value={formData.terminoPagoId}
+                      onValueChange={(value: string) =>
+                        setFormData({ ...formData, terminoPagoId: value })
+                      }
+                    >
+                      <SelectTrigger id="edit-terminoPago" className={fieldClass}>
+                        <SelectValue placeholder="Selecciona un término de pago" />
+                      </SelectTrigger>
+
+                      <SelectContent>
+                        {terminosPagoActivos.length === 0 ? (
+                          <div className="px-3 py-2 text-sm text-gray-500">
+                            No hay términos de pago disponibles
+                          </div>
+                        ) : (
+                          terminosPagoActivos.map((termino) => (
+                            <SelectItem key={termino.id} value={String(termino.id)}>
+                              {termino.nombre}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-3 flex items-center gap-2">
+                  <Package size={20} className="text-blue-600" />
+                  <div>
+                    <h3 className="font-semibold text-gray-900">
+                      Productos de la Orden
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      El IVA se toma automáticamente del producto seleccionado
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1.5fr)_180px_220px]">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-producto">Producto</Label>
+                      <Select
+                        value={selectedProductoId}
+                        onValueChange={setSelectedProductoId}
+                      >
+                        <SelectTrigger id="edit-producto" className={fieldClass}>
+                          <SelectValue placeholder="Selecciona un producto" />
+                        </SelectTrigger>
+
+                        <SelectContent>
+                          {productosActivos.length === 0 ? (
+                            <div className="px-3 py-2 text-sm text-gray-500">
+                              No hay productos disponibles
+                            </div>
+                          ) : (
+                            productosActivos.map((producto) => (
+                              <SelectItem key={producto.id} value={String(producto.id)}>
+                                {getProductoOrdenLabel(producto)}
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-cantidad">Cantidad</Label>
+                      <Input
+                        id="edit-cantidad"
+                        type="text"
+                        inputMode="numeric"
+                        value={cantidadProductoInput}
+                        onChange={(e) => handleCantidadProductoChange(e.target.value)}
+                        onBlur={handleCantidadProductoBlur}
+                        placeholder="Ej: 50"
+                        className={numberFieldClass}
+                      />
+                      <p className="text-xs text-gray-500">
+                        Máximo 1000 unidades.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-precio">Precio Unitario</Label>
+                      <Input
+                        id="edit-precio"
+                        type="text"
+                        inputMode="decimal"
+                        value={precioProducto}
+                        onChange={(e) => handlePrecioProductoChange(e.target.value)}
+                        placeholder="Ej: 25000"
+                        className={numberFieldClass}
+                      />
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    onClick={handleAgregarProducto}
+                    className="mt-4 h-11 w-full bg-green-600 hover:bg-green-700"
+                  >
+                    <Plus size={16} className="mr-2" />
+                    Agregar Producto
+                  </Button>
+                </div>
+
+                {productosOrden.length > 0 ? (
+                  <div className="mt-4 overflow-hidden rounded-lg border border-gray-200">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-gray-50">
+                          <TableHead>Producto</TableHead>
+                          <TableHead className="text-center">Cantidad</TableHead>
+                          <TableHead className="text-center">IVA</TableHead>
+                          <TableHead className="text-right">Precio Unitario</TableHead>
+                          <TableHead className="text-right">Subtotal</TableHead>
+                          <TableHead className="w-16 text-center">Acción</TableHead>
+                        </TableRow>
+                      </TableHeader>
+
+                      <TableBody>
+                        {productosOrden.map((item) => (
+                          <TableRow key={item.producto.id}>
+                            <TableCell className="font-medium text-gray-900">
+                              {item.producto.nombre}
+                            </TableCell>
+
+                            <TableCell className="text-center">
+                              {item.cantidad}
+                            </TableCell>
+
+                            <TableCell className="text-center">
+                              {formatIvaPorcentaje(item.ivaPorcentaje)}%
+                            </TableCell>
+
+                            <TableCell className="text-right">
+                              {formatCop(item.precio)}
+                            </TableCell>
+
+                            <TableCell className="text-right font-medium">
+                              {formatCop(item.subtotal)}
+                            </TableCell>
+
+                            <TableCell className="text-center">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEliminarProducto(item.producto.id)}
+                                className="hover:bg-red-50"
+                              >
+                                <Trash2 size={16} className="text-red-600" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+
+                    <div className="flex justify-end border-t bg-gray-50 px-4 py-3">
+                      <div className="w-full max-w-sm space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">N° de Items:</span>
+                          <span className="font-medium">{calcularTotales.items}</span>
+                        </div>
+
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Subtotal:</span>
+                          <span className="font-medium">
+                            {formatCop(calcularTotales.subtotal)}
+                          </span>
+                        </div>
+
+                        {impuestosPorPorcentaje.length > 0 ? (
+                          impuestosPorPorcentaje.map((iva) => (
+                            <div
+                              key={iva.porcentaje}
+                              className="flex justify-between text-sm"
+                            >
+                              <span className="text-gray-600">
+                                IVA {formatIvaPorcentaje(iva.porcentaje)}%:
+                              </span>
+                              <span className="font-medium">
+                                {formatCop(iva.valor)}
+                              </span>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">IVA:</span>
+                            <span className="font-medium">{formatCop(0)}</span>
+                          </div>
+                        )}
+
+                        <div className="flex justify-between border-t pt-2 text-base">
+                          <span className="font-semibold">Total:</span>
+                          <span className="font-bold text-orange-600">
+                            {formatCop(calcularTotales.total)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-lg border border-dashed py-8 text-center text-gray-500">
+                    <Package size={44} className="mx-auto mb-2 text-gray-300" />
+                    <p>No hay productos agregados</p>
+                    <p className="text-sm">
+                      Selecciona un producto y agrégalo a la orden
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <div>
+                  <h3 className="font-semibold text-gray-900">Observaciones</h3>
+                  <p className="text-sm text-gray-500">
+                    Notas adicionales para esta orden
+                  </p>
+                </div>
+
+                <Textarea
+                  id="edit-observaciones"
+                  value={formData.observaciones}
+                  onChange={(e) => {
+                    const value = e.target.value;
+
+                    if (value.length > MAX_OBSERVACIONES_LENGTH) {
+                      toast.error(
+                        `Máximo ${MAX_OBSERVACIONES_LENGTH} caracteres en observaciones`
+                      );
+                      return;
+                    }
+
+                    setFormData({
+                      ...formData,
+                      observaciones: value,
+                    });
+                  }}
+                  placeholder="Escribe cualquier observación sobre la orden de compra..."
+                  rows={3}
+                  className="resize-none rounded-lg border-gray-300 shadow-none focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/20"
+                />
+
+                <p className="text-right text-xs text-gray-500">
+                  {formData.observaciones.length}/{MAX_OBSERVACIONES_LENGTH}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="mt-2 border-t pt-4">
+            <Button variant="outline" onClick={closeToList} disabled={isSaving}>
+              Cancelar
+            </Button>
+
+            <Button
+              onClick={confirmEdit}
+              disabled={
+                isSaving ||
+                isLoadingDetail ||
+                compraDetalle?.estado === "Aprobada" ||
+                compraDetalle?.estado === "Anulada"
+              }
+              className="bg-orange-600 hover:bg-orange-700"
+            >
+              {isSaving ? "Actualizando..." : "Guardar Cambios"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2495,416 +2973,6 @@ export default function Compras() {
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={isEditar}
-        onOpenChange={(open) => {
-          if (!open) closeToList();
-        }}
-      >
-        <DialogContent
-          className="max-w-6xl max-h-[85vh] overflow-y-auto"
-          aria-describedby="edit-order-description"
-          onInteractOutside={(e) => e.preventDefault()}
-        >
-          <DialogHeader>
-            <DialogTitle>Editar Orden de Compra</DialogTitle>
-            <DialogDescription id="edit-order-description">
-              Modifica la información de la orden de compra
-            </DialogDescription>
-          </DialogHeader>
-
-          {isLoadingDetail ? (
-            <div className="py-8 text-center text-gray-500">
-              Cargando información de la orden...
-            </div>
-          ) : (
-            <div className="space-y-6 py-4 px-2">
-              <div className="grid grid-cols-4 gap-6">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-numeroOrden">Número de Orden</Label>
-                  <Input
-                    id="edit-numeroOrden"
-                    value={formData.numeroOrden}
-                    disabled
-                    className="bg-gray-100 h-12"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="edit-fecha">Fecha</Label>
-                  <Input
-                    id="edit-fecha"
-                    type="date"
-                    value={formData.fecha}
-                    disabled
-                    className="bg-gray-100 h-12"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="edit-fechaEntrega">Fecha de Entrega *</Label>
-                  <Input
-                    id="edit-fechaEntrega"
-                    type="date"
-                    min={getFechaActual()}
-                    value={formData.fechaEntrega}
-                    onChange={(e) =>
-                      setFormData({ ...formData, fechaEntrega: e.target.value })
-                    }
-                    className="h-12"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="edit-estado">Estado *</Label>
-                  <Select
-                    value={formData.estado}
-                    onValueChange={(value) =>
-                      setFormData({
-                        ...formData,
-                        estado: value as CompraEstado,
-                      })
-                    }
-                  >
-                    <SelectTrigger id="edit-estado" className="h-12">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Pendiente">Pendiente</SelectItem>
-                      <SelectItem value="Aprobada">Aprobada</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-6">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-proveedor">Proveedor *</Label>
-                  <Select
-                    value={formData.proveedorId}
-                    onValueChange={handleProveedorChange}
-                  >
-                    <SelectTrigger id="edit-proveedor" className="h-12">
-                      <SelectValue placeholder="Selecciona un proveedor" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {proveedoresActivos.map((proveedor) => (
-                        <SelectItem key={proveedor.id} value={String(proveedor.id)}>
-                          {proveedor.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="edit-terminoPago">Término de Pago *</Label>
-                  <Select
-                    value={formData.terminoPagoId}
-                    onValueChange={(value: string) =>
-                      setFormData({ ...formData, terminoPagoId: value })
-                    }
-                  >
-                    <SelectTrigger id="edit-terminoPago" className="h-12">
-                      <SelectValue placeholder="Selecciona un término de pago" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {terminosPagoActivos.map((termino) => (
-                        <SelectItem key={termino.id} value={String(termino.id)}>
-                          {termino.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="edit-bodega">Bodega *</Label>
-                  <Select
-                    value={formData.bodegaId}
-                    onValueChange={(value: string) => {
-                      const bodegaSeleccionada = bodegasActivas.find(
-                        (bodega) => String(bodega.id) === value
-                      );
-
-                      setFormData({
-                        ...formData,
-                        bodegaId: value,
-                        bodega: bodegaSeleccionada?.nombre || "",
-                      });
-                    }}
-                  >
-                    <SelectTrigger id="edit-bodega" className="h-12">
-                      <SelectValue placeholder="Selecciona una bodega" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {bodegasActivas.length === 0 ? (
-                        <div className="px-2 py-2 text-sm text-gray-500">
-                          No hay bodegas disponibles
-                        </div>
-                      ) : (
-                        bodegasActivas.map((bodega) => (
-                          <SelectItem key={bodega.id} value={String(bodega.id)}>
-                            {bodega.nombre}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-proveedorTipoDocumento">
-                    Tipo de Documento
-                  </Label>
-                  <Input
-                    id="edit-proveedorTipoDocumento"
-                    value={formData.proveedorTipoDocumento}
-                    readOnly
-                    className="bg-gray-100 h-12"
-                    placeholder="Se completa al seleccionar proveedor"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="edit-proveedorNumeroDocumento">
-                    Documento / NIT
-                  </Label>
-                  <Input
-                    id="edit-proveedorNumeroDocumento"
-                    value={formData.proveedorNumeroDocumento}
-                    readOnly
-                    className="bg-gray-100 h-12"
-                    placeholder="Se completa al seleccionar proveedor"
-                  />
-                </div>
-              </div>
-
-              <div className="border-t pt-10 mt-10">
-                <Label className="text-lg mb-4 block">Productos de la Orden</Label>
-
-                <div className="grid grid-cols-12 gap-4">
-                  <div className="col-span-3 space-y-2">
-                    <Label htmlFor="edit-producto">Producto</Label>
-                    <Select
-                      value={selectedProductoId}
-                      onValueChange={setSelectedProductoId}
-                    >
-                      <SelectTrigger id="edit-producto" className="h-12">
-                        <SelectValue placeholder="Selecciona un producto" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {productosActivos.map((producto) => (
-                          <SelectItem key={producto.id} value={String(producto.id)}>
-                            {producto.nombre}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="col-span-2 space-y-2">
-                    <Label htmlFor="edit-cantidad">Cantidad</Label>
-                    <Input
-                      id="edit-cantidad"
-                      type="text"
-                      inputMode="numeric"
-                      value={cantidadProductoInput}
-                      onChange={(e) => handleCantidadProductoChange(e.target.value)}
-                      onBlur={handleCantidadProductoBlur}
-                      placeholder="Ej: 50"
-                      className={numberFieldClass}
-                    />
-                  </div>
-
-                  <div className="col-span-3 space-y-2">
-                    <Label htmlFor="edit-iva">IVA</Label>
-
-                    <div className="flex gap-2">
-                      <Select value={selectedIvaId} onValueChange={setSelectedIvaId}>
-                        <SelectTrigger id="edit-iva" className="h-12 min-w-0">
-                          <SelectValue placeholder="Selecciona IVA" />
-                        </SelectTrigger>
-
-                        <SelectContent>
-                          {ivasActivos.length === 0 ? (
-                            <div className="px-3 py-2 text-sm text-gray-500">
-                              No hay IVAs disponibles
-                            </div>
-                          ) : (
-                            ivasActivos.map((iva) => (
-                              <SelectItem key={iva.id} value={String(iva.id)}>
-                                {getIvaLabel(iva)}
-                              </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
-
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setShowNuevoIvaModal(true)}
-                        className="h-12 w-28 shrink-0 border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
-                      >
-                        <Plus size={16} className="mr-1" />
-                        Nuevo
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="col-span-2 space-y-2">
-                    <Label htmlFor="edit-precio">Precio Unitario</Label>
-                    <Input
-                      id="edit-precio"
-                      type="number"
-                      value={precioProducto}
-                      onChange={(e) => setPrecioProducto(e.target.value)}
-                      min="0"
-                      step="0.01"
-                      placeholder="0.00"
-                      className="h-12 sin-flechas"
-                    />
-                  </div>
-
-                  <div className="col-span-2 flex items-end">
-                    <Button
-                      type="button"
-                      onClick={handleAgregarProducto}
-                      className="w-full bg-green-600 hover:bg-green-700 h-12"
-                    >
-                      <Plus size={18} className="mr-2" />
-                      Agregar
-                    </Button>
-                  </div>
-                </div>
-
-                {productosOrden.length > 0 && (
-                  <div className="mt-4 border rounded-lg overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-gray-50">
-                          <TableHead>Producto</TableHead>
-                          <TableHead className="text-center">Cantidad</TableHead>
-                          <TableHead className="text-center">IVA</TableHead>
-                          <TableHead className="text-right">Precio Unit.</TableHead>
-                          <TableHead className="text-right">Subtotal</TableHead>
-                          <TableHead className="text-center">Acciones</TableHead>
-                        </TableRow>
-                      </TableHeader>
-
-                      <TableBody>
-                        {productosOrden.map((item) => (
-                          <TableRow key={item.producto.id}>
-                            <TableCell className="font-medium">
-                              {item.producto.nombre}
-                            </TableCell>
-                            <TableCell className="text-center">
-                              {item.cantidad}
-                            </TableCell>
-                            <TableCell className="text-center">
-                              {item.ivaNombre}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {formatCop(item.precio)}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {formatCop(item.subtotal)}
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() =>
-                                  handleEliminarProducto(item.producto.id)
-                                }
-                                className="hover:bg-red-50"
-                              >
-                                <Trash2 size={16} className="text-red-600" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-
-                <div className="mt-4 bg-gray-50 p-4 rounded-lg space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">N° de Items:</span>
-                    <span className="font-medium">{calcularTotales.items}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Subtotal:</span>
-                    <span className="font-medium">
-                      {formatCop(calcularTotales.subtotal)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">IVA:</span>
-                    <span className="font-medium">
-                      {formatCop(calcularTotales.impuestos)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-lg border-t pt-2">
-                    <span className="font-semibold">Total:</span>
-                    <span className="font-bold text-yellow-600">
-                      {formatCop(calcularTotales.total)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <Label htmlFor="edit-observaciones">Observaciones</Label>
-                <Textarea
-                  id="edit-observaciones"
-                  value={formData.observaciones}
-                  onChange={(e) => {
-                    const value = e.target.value;
-
-                    if (value.length > MAX_OBSERVACIONES_LENGTH) {
-                      toast.error(`Máximo ${MAX_OBSERVACIONES_LENGTH} caracteres en observaciones`);
-                      return;
-                    }
-
-                    setFormData({
-                      ...formData,
-                      observaciones: value,
-                    });
-                  }}
-                  placeholder="Escribe cualquier observación sobre la orden de compra..."
-                  rows={3}
-                />
-                <p className="text-xs text-gray-500 text-right">
-                  {formData.observaciones.length}/{MAX_OBSERVACIONES_LENGTH}
-                </p>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={closeToList}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={confirmEdit}
-              disabled={
-                isSaving ||
-                isLoadingDetail ||
-                compraDetalle?.estado === "Aprobada" ||
-                compraDetalle?.estado === "Anulada"
-              }
-              className="bg-yellow-600 hover:bg-yellow-700"
-            >
-              {isSaving ? "Actualizando..." : "Actualizar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog
         open={isAnular}
@@ -3088,79 +3156,6 @@ export default function Compras() {
               Aceptar
             </Button>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={showNuevoIvaModal}
-        onOpenChange={(open) => {
-          setShowNuevoIvaModal(open);
-
-          if (!open) {
-            resetNuevoIvaForm();
-          }
-        }}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Nuevo IVA</DialogTitle>
-            <DialogDescription>
-              Registra un nuevo porcentaje de IVA para usarlo en la orden de compra.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="nuevoIvaPorcentaje">Porcentaje *</Label>
-              <Input
-                id="nuevoIvaPorcentaje"
-                type="text"
-                inputMode="decimal"
-                value={nuevoIvaPorcentaje}
-                onChange={(e) => {
-                  const value = e.target.value
-                    .replace(",", ".")
-                    .replace(/[^\d.]/g, "");
-
-                  const partes = value.split(".");
-                  if (partes.length > 2) return;
-                  if ((partes[1] ?? "").length > 2) return;
-
-                  setNuevoIvaPorcentaje(value);
-                }}
-                placeholder="Ej: 19"
-                className={numberFieldClass}
-              />
-              <p className="text-xs text-gray-500">
-                Ingresa solo el número. Ejemplo: 19 para IVA 19%.
-              </p>
-            </div>
-
-            {nuevoIvaPorcentaje && !Number.isNaN(Number(nuevoIvaPorcentaje)) && (
-              <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700">
-                Se creará como:{" "}
-                <strong>IVA {formatIvaPorcentaje(nuevoIvaPorcentaje)}%</strong>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowNuevoIvaModal(false)}
-              disabled={isSavingIva}
-            >
-              Cancelar
-            </Button>
-
-            <Button
-              onClick={handleCrearIva}
-              disabled={isSavingIva}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              {isSavingIva ? "Creando..." : "Crear IVA"}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

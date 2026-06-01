@@ -982,8 +982,8 @@ export default function Proveedores() {
                         size="sm"
                         onClick={() => handleToggleEstado(proveedor)}
                         className={`h-7 ${proveedor.estado === "Activo"
-                            ? "bg-green-100 text-green-800 hover:bg-green-200"
-                            : "bg-red-100 text-red-800 hover:bg-red-200"
+                          ? "bg-green-100 text-green-800 hover:bg-green-200"
+                          : "bg-red-100 text-red-800 hover:bg-red-200"
                           }`}
                       >
                         {proveedor.estado}
@@ -1087,11 +1087,11 @@ export default function Proveedores() {
         }}
       >
         <DialogContent
-          className="max-w-6xl max-h-[85vh] overflow-y-auto"
+          className="max-w-6xl max-h-[90vh] overflow-y-auto"
           aria-describedby="view-proveedor-description"
           onInteractOutside={(e) => e.preventDefault()}
         >
-          <DialogHeader>
+          <DialogHeader className="space-y-2 pb-3">
             <DialogTitle>Detalles del Proveedor</DialogTitle>
             <DialogDescription id="view-proveedor-description">
               Información completa del proveedor
@@ -1100,7 +1100,7 @@ export default function Proveedores() {
 
           {renderDetalleBody()}
 
-          <DialogFooter>
+          <DialogFooter className="mt-2 border-t pt-4">
             <Button variant="outline" onClick={closeToList}>
               Cerrar
             </Button>
@@ -1119,14 +1119,14 @@ export default function Proveedores() {
           aria-describedby="create-proveedor-description"
           onInteractOutside={(e) => e.preventDefault()}
         >
-          <DialogHeader>
+          <DialogHeader className="space-y-2 pb-3">
             <DialogTitle>Nuevo Proveedor</DialogTitle>
             <DialogDescription id="create-proveedor-description">
               Completa la información del nuevo proveedor
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="space-y-5 py-2">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="create-tipo-doc">Tipo de Documento *</Label>
@@ -1416,10 +1416,11 @@ export default function Proveedores() {
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={closeToList}>
+          <DialogFooter className="mt-2 border-t pt-4">
+            <Button variant="outline" onClick={closeToList} disabled={isSubmitting}>
               Cancelar
             </Button>
+
             <Button
               onClick={confirmCreate}
               className="bg-blue-600 hover:bg-blue-700"
@@ -1443,7 +1444,7 @@ export default function Proveedores() {
           aria-describedby="edit-proveedor-description"
           onInteractOutside={(e) => e.preventDefault()}
         >
-          <DialogHeader>
+          <DialogHeader className="space-y-2 pb-3">
             <DialogTitle>Editar Proveedor</DialogTitle>
             <DialogDescription id="edit-proveedor-description">
               Modifica la información del proveedor
@@ -1456,7 +1457,7 @@ export default function Proveedores() {
               Cargando proveedor...
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-5 py-2">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="edit-tipo-doc">Tipo de Documento *</Label>
@@ -1735,10 +1736,11 @@ export default function Proveedores() {
             </div>
           )}
 
-          <DialogFooter>
-            <Button variant="outline" onClick={closeToList}>
+          <DialogFooter className="mt-2 border-t pt-4">
+            <Button variant="outline" onClick={closeToList} disabled={isSubmitting}>
               Cancelar
             </Button>
+
             <Button
               onClick={confirmEdit}
               className="bg-orange-600 hover:bg-orange-700"

@@ -13,3 +13,12 @@ export const getIvas = async (): Promise<IvaBackend[]> => {
   const { data } = await api.get("/iva");
   return data;
 };
+
+export type CreateIvaPayload = {
+  porcentaje: number;
+};
+
+export const createIva = async (payload: CreateIvaPayload) => {
+  const { data } = await api.post("/iva", payload);
+  return data?.data ?? data;
+};

@@ -4,6 +4,9 @@ export type BasicOption = {
   id: number;
   nombre: string;
   estado?: boolean;
+  idIva?: number;
+  ivaPorcentaje?: number;
+  ivaNombre?: string;
 };
 
 export type ProveedorOption = BasicOption & {
@@ -177,6 +180,29 @@ async function patchRequestFirstSuccess(
 }
 
 const mapBasicOption = (raw: RawRecord): BasicOption => {
+  const ivaRef = raw?.iva ?? null;
+
+  const idIvaRaw =
+    raw?.id_iva ??
+    raw?.idIva ??
+    ivaRef?.id_iva ??
+    ivaRef?.id;
+
+  const porcentajeRaw =
+    raw?.iva_porcentaje ??
+    raw?.ivaPorcentaje ??
+    ivaRef?.porcentaje;
+
+  const idIva =
+    idIvaRaw === null || idIvaRaw === undefined
+      ? undefined
+      : toNumber(idIvaRaw);
+
+  const ivaPorcentaje =
+    porcentajeRaw === null || porcentajeRaw === undefined
+      ? 0
+      : toNumber(porcentajeRaw);
+
   return {
     id: toNumber(
       raw?.id ??
@@ -193,6 +219,9 @@ const mapBasicOption = (raw: RawRecord): BasicOption => {
       raw?.nombre_empresa
     ),
     estado: toBooleanSafe(raw?.estado, true),
+    idIva,
+    ivaPorcentaje,
+    ivaNombre: idIva ? `IVA ${ivaPorcentaje}%` : "IVA 0%",
   };
 };
 
@@ -392,7 +421,14 @@ export const comprasService = {
       bodegasRes,
     ] = await Promise.allSettled([
       getRequestFirstSuccess([{ url: "/proveedor" }]),
-      getRequestFirstSuccess([{ url: "/producto" }]),
+      getRequestFirstSuccess([
+        {
+          url: "/producto",
+          params: {
+            includeRefs: "true",
+          },
+        },
+      ]),
       getRequestFirstSuccess([{ url: "/termino-pago" }]),
       getRequestFirstSuccess([{ url: "/iva" }]),
       getRequestFirstSuccess([{ url: "/bodega" }]),

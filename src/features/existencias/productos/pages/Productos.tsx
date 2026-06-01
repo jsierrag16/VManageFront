@@ -59,6 +59,7 @@ import {
 import {
   getCategoriasProducto,
   getIvas,
+  createIva,
 } from "../services/productos-catalogos.service";
 import {
   productoFormToCreatePayload,
@@ -103,6 +104,10 @@ export default function Productos({
 
   const [productos, setProductos] = useState<ProductoVistaUI[]>([]);
   const [isLoadingProductos, setIsLoadingProductos] = useState(false);
+
+  const [showNuevoIvaModal, setShowNuevoIvaModal] = useState(false);
+  const [nuevoIvaPorcentaje, setNuevoIvaPorcentaje] = useState("");
+  const [isSavingIva, setIsSavingIva] = useState(false);
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
@@ -506,6 +511,74 @@ export default function Productos({
       : "bg-red-100 text-red-800 border-red-200";
   };
 
+  const formatIvaPorcentaje = (value: unknown) => {
+    const porcentaje = Number(value ?? 0);
+
+    if (!Number.isFinite(porcentaje)) return "0";
+
+    return porcentaje.toLocaleString("es-CO", {
+      minimumFractionDigits: porcentaje % 1 === 0 ? 0 : 2,
+      maximumFractionDigits: 2,
+    });
+  };
+
+  const resetNuevoIvaForm = () => {
+    setNuevoIvaPorcentaje("");
+  };
+
+  const handleCrearIva = async () => {
+    const porcentaje = Number(nuevoIvaPorcentaje.replace(",", "."));
+
+    if (!nuevoIvaPorcentaje.trim() || Number.isNaN(porcentaje)) {
+      toast.error("El porcentaje del IVA es obligatorio");
+      return;
+    }
+
+    if (porcentaje < 0 || porcentaje > 100) {
+      toast.error("El porcentaje del IVA debe estar entre 0 y 100");
+      return;
+    }
+
+    const ivaDuplicado = ivasCatalogo.some(
+      (iva) => Number(iva.nombre.replace(/[^\d.]/g, "")) === porcentaje
+    );
+
+    if (ivaDuplicado) {
+      toast.error(`Ya existe un IVA del ${formatIvaPorcentaje(porcentaje)}%`);
+      return;
+    }
+
+    try {
+      setIsSavingIva(true);
+
+      const nuevoIvaRaw = await createIva({ porcentaje });
+      const nuevoIva = ivaBackendToOption(nuevoIvaRaw);
+
+      setIvasCatalogo((prev) =>
+        [...prev, nuevoIva].sort((a, b) => {
+          const pa = Number(String(a.nombre).replace(/[^\d.]/g, ""));
+          const pb = Number(String(b.nombre).replace(/[^\d.]/g, ""));
+          return pa - pb;
+        })
+      );
+
+      setFormIvaId(Number(nuevoIva.id));
+
+      toast.success("IVA creado correctamente");
+      resetNuevoIvaForm();
+      setShowNuevoIvaModal(false);
+    } catch (error: any) {
+      console.error("Error creando IVA:", error);
+      toast.error(
+        error?.response?.data?.message ||
+        error?.message ||
+        "No se pudo crear el IVA"
+      );
+    } finally {
+      setIsSavingIva(false);
+    }
+  };
+
   // =========================================================
   // Handlers de formulario
   // =========================================================
@@ -826,7 +899,7 @@ export default function Productos({
       </div>
 
       {/* Search Bar and Action Buttons */}
-      
+
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
         <div className="flex items-center gap-4">
           <div className="relative flex-1">
@@ -1261,29 +1334,31 @@ export default function Productos({
         }}
       >
         <DialogContent
-          className="max-w-7xl max-h-[90vh] overflow-y-auto"
+          className="max-w-6xl max-h-[90vh] overflow-y-auto"
           onInteractOutside={(e: any) => e.preventDefault()}
           onEscapeKeyDown={(e: any) => e.preventDefault()}
           onPointerDownOutside={(e: any) => e.preventDefault()}
           aria-describedby="dialog-description"
         >
-          <DialogHeader>
+          <DialogHeader className="space-y-2 pb-3">
             <DialogTitle>Detalles del Producto</DialogTitle>
             <DialogDescription id="dialog-description">
               Información completa del producto y sus existencias
             </DialogDescription>
           </DialogHeader>
 
-          {productoSeleccionado && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+          {productoSeleccionado ? (
+            <div className="space-y-6 py-2">
+              <div className="grid grid-cols-1 gap-x-10 gap-y-5 rounded-lg bg-gray-50 p-5 md:grid-cols-2">
                 <div>
-                  <Label className="text-gray-500">ID</Label>
-                  <p className="font-semibold">{productoSeleccionado.id}</p>
+                  <p className="text-sm text-gray-600">Producto</p>
+                  <p className="font-medium text-blue-600">
+                    {productoSeleccionado.nombre || "-"}
+                  </p>
                 </div>
 
                 <div>
-                  <Label className="text-gray-500">Estado</Label>
+                  <p className="text-sm text-gray-600">Estado</p>
                   <div className="mt-1">
                     <Badge
                       variant="outline"
@@ -1293,63 +1368,68 @@ export default function Productos({
                     </Badge>
                   </div>
                 </div>
-              </div>
 
-              <div>
-                <Label className="text-gray-500">Nombre</Label>
-                <p className="font-semibold">{productoSeleccionado.nombre}</p>
-              </div>
-
-              <div>
-                <Label className="text-gray-500">Categoría</Label>
-                <div className="mt-1">
-                  <Badge
-                    variant="outline"
-                    className="bg-blue-50 text-blue-700 border-blue-200"
-                  >
-                    {productoSeleccionado.categoria}
-                  </Badge>
-                </div>
-              </div>
-
-              <div>
-                <Label className="text-gray-500">Descripción</Label>
-                <p className="text-gray-700">{productoSeleccionado.descripcion}</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-gray-500">IVA</Label>
-                  <p className="font-semibold text-lg">
+                  <p className="text-sm text-gray-600">Categoría</p>
+                  <div className="mt-1">
+                    <Badge
+                      variant="outline"
+                      className="border-blue-200 bg-blue-50 text-blue-700"
+                    >
+                      {productoSeleccionado.categoria || "-"}
+                    </Badge>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-sm text-gray-600">IVA</p>
+                  <p className="font-medium">
                     {productoSeleccionado.iva || 0}%
                   </p>
                 </div>
 
                 <div>
-                  <Label className="text-gray-500">Stock Total</Label>
-                  <p className="font-semibold text-lg">
+                  <p className="text-sm text-gray-600">Stock Total</p>
+                  <p
+                    className={
+                      productoSeleccionado.stockTotal < 100
+                        ? "font-medium text-red-600"
+                        : "font-medium text-gray-900"
+                    }
+                  >
                     {productoSeleccionado.stockTotal} unidades
+                  </p>
+                </div>
+
+                <div className="md:col-span-2">
+                  <p className="text-sm text-gray-600">Descripción</p>
+                  <p className="font-medium text-gray-900">
+                    {productoSeleccionado.descripcion || "No registrada"}
                   </p>
                 </div>
               </div>
 
-              {/* Lista de lotes */}
               <div>
-                <Label className="text-gray-500 mb-2 block">
-                  Lotes Disponibles ({modalLotes.length} total
-                  {modalLotes.length !== 1 ? "es" : ""})
-                </Label>
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">
+                      Lotes Disponibles
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      {modalLotes.length} lote{modalLotes.length !== 1 ? "s" : ""} registrado
+                      {modalLotes.length !== 1 ? "s" : ""}
+                    </p>
+                  </div>
+                </div>
 
-                <div className="border rounded-lg overflow-hidden">
+                <div className="overflow-hidden rounded-lg border border-gray-200">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-gray-50">
-                        <TableHead className="text-xs">N° Lote</TableHead>
-                        <TableHead className="text-xs text-center">
-                          Cantidad
-                        </TableHead>
-                        <TableHead className="text-xs">Vencimiento</TableHead>
-                        <TableHead className="text-xs">Bodega</TableHead>
+                        <TableHead>N° Lote</TableHead>
+                        <TableHead className="text-center">Cantidad</TableHead>
+                        <TableHead className="text-center">Vencimiento</TableHead>
+                        <TableHead>Bodega</TableHead>
                       </TableRow>
                     </TableHeader>
 
@@ -1358,7 +1438,7 @@ export default function Productos({
                         <TableRow>
                           <TableCell
                             colSpan={4}
-                            className="text-center py-4 text-gray-500 text-sm"
+                            className="py-6 text-center text-gray-500"
                           >
                             No hay lotes registrados
                           </TableCell>
@@ -1367,7 +1447,7 @@ export default function Productos({
                         currentModalLotes.map((lote) => (
                           <TableRow key={lote.id} className="text-sm">
                             <TableCell className="font-mono">
-                              {lote.numeroLote}
+                              {lote.numeroLote || "-"}
                             </TableCell>
 
                             <TableCell className="text-center">
@@ -1380,7 +1460,7 @@ export default function Productos({
                               </span>
                             </TableCell>
 
-                            <TableCell>
+                            <TableCell className="text-center">
                               <span
                                 className={getVencimientoColor(
                                   lote.fechaVencimiento
@@ -1392,7 +1472,7 @@ export default function Productos({
 
                             <TableCell>
                               <Badge variant="outline" className="text-xs">
-                                {lote.bodega}
+                                {lote.bodega || "-"}
                               </Badge>
                             </TableCell>
                           </TableRow>
@@ -1401,9 +1481,8 @@ export default function Productos({
                     </TableBody>
                   </Table>
 
-                  {/* Paginación de lotes en modal */}
                   {modalLotes.length > lotesPerPage && (
-                    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
+                    <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-4 py-3">
                       <div className="text-xs text-gray-600">
                         Mostrando {modalLotesStartIndex + 1} -{" "}
                         {Math.min(modalLotesEndIndex, modalLotes.length)} de{" "}
@@ -1461,9 +1540,13 @@ export default function Productos({
                 </div>
               </div>
             </div>
+          ) : (
+            <div className="py-8 text-center text-gray-500">
+              No se encontró la información del producto
+            </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="mt-2 border-t pt-4">
             <Button onClick={closeToList} variant="outline">
               Cerrar
             </Button>
@@ -1480,7 +1563,7 @@ export default function Productos({
         }}
       >
         <DialogContent
-          className="max-w-2xl"
+          className="max-w-3xl max-h-[90vh] overflow-y-auto"
           onPointerDownOutside={(e: any) => e.preventDefault()}
           onInteractOutside={(e: any) => e.preventDefault()}
           onEscapeKeyDown={(e: any) => e.preventDefault()}
@@ -1495,14 +1578,14 @@ export default function Productos({
             <span className="sr-only">Cerrar</span>
           </button>
 
-          <DialogHeader>
+          <DialogHeader className="space-y-2 pb-3">
             <DialogTitle>Crear Nuevo Producto</DialogTitle>
             <DialogDescription id="create-product-description">
               Registra un nuevo producto en el sistema
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="space-y-5 py-2">
             <div>
               <Label htmlFor="product-nombre">Nombre del Producto *</Label>
               <Input
@@ -1565,35 +1648,57 @@ export default function Productos({
               )}
             </div>
 
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="product-iva">IVA (%) *</Label>
-              <Select
-                value={formIvaId === "" ? "" : String(formIvaId)}
-                onValueChange={handleIvaChange}
-                onOpenChange={(open: boolean) => !open && handleIvaBlur()}
-                disabled={isLoadingCatalogos}
-              >
-                <SelectTrigger
-                  id="product-iva"
-                  className={errors.iva && touched.iva ? "border-red-500" : ""}
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+                <Select
+                  value={formIvaId === "" ? "" : String(formIvaId)}
+                  onValueChange={handleIvaChange}
+                  onOpenChange={(open: boolean) => !open && handleIvaBlur()}
+                  disabled={isLoadingCatalogos}
                 >
-                  <SelectValue placeholder="Selecciona el IVA" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ivasCatalogo.map((iva) => (
-                    <SelectItem key={iva.id} value={String(iva.id)}>
-                      {iva.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                  <SelectTrigger
+                    id="product-iva"
+                    className={`h-11 ${errors.iva && touched.iva ? "border-red-500" : ""
+                      }`}
+                  >
+                    <SelectValue placeholder="Selecciona el IVA" />
+                  </SelectTrigger>
+
+                  <SelectContent>
+                    {ivasCatalogo.length === 0 ? (
+                      <div className="px-3 py-2 text-sm text-gray-500">
+                        No hay IVAs disponibles
+                      </div>
+                    ) : (
+                      ivasCatalogo.map((iva) => (
+                        <SelectItem key={iva.id} value={String(iva.id)}>
+                          {iva.nombre}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowNuevoIvaModal(true)}
+                  className="h-11 shrink-0 border-blue-200 bg-blue-50 px-4 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
+                >
+                  <Plus size={16} className="mr-2" />
+                  Nuevo IVA
+                </Button>
+              </div>
+
               {errors.iva && touched.iva && (
                 <p className="text-red-500 text-sm mt-1">{errors.iva}</p>
               )}
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="mt-2 border-t pt-4">
             <Button
               variant="outline"
               onClick={closeToList}
@@ -1601,6 +1706,7 @@ export default function Productos({
             >
               Cancelar
             </Button>
+
             <Button
               onClick={confirmCreateProduct}
               className="bg-blue-600 hover:bg-blue-700"
@@ -1621,7 +1727,7 @@ export default function Productos({
         }}
       >
         <DialogContent
-          className="max-w-2xl"
+          className="max-w-3xl max-h-[90vh] overflow-y-auto"
           onPointerDownOutside={(e: any) => e.preventDefault()}
           onInteractOutside={(e: any) => e.preventDefault()}
           onEscapeKeyDown={(e: any) => e.preventDefault()}
@@ -1636,14 +1742,14 @@ export default function Productos({
             <span className="sr-only">Cerrar</span>
           </button>
 
-          <DialogHeader>
+          <DialogHeader className="space-y-2 pb-3">
             <DialogTitle>Editar Producto</DialogTitle>
             <DialogDescription id="edit-product-description">
               Modifica la información del producto
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="space-y-5 py-2">
             <div>
               <Label htmlFor="edit-product-nombre">Nombre del Producto *</Label>
               <Input
@@ -1706,35 +1812,57 @@ export default function Productos({
               )}
             </div>
 
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="edit-product-iva">IVA (%) *</Label>
-              <Select
-                value={formIvaId === "" ? "" : String(formIvaId)}
-                onValueChange={handleIvaChange}
-                onOpenChange={(open: boolean) => !open && handleIvaBlur()}
-                disabled={isLoadingCatalogos}
-              >
-                <SelectTrigger
-                  id="edit-product-iva"
-                  className={errors.iva && touched.iva ? "border-red-500" : ""}
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+                <Select
+                  value={formIvaId === "" ? "" : String(formIvaId)}
+                  onValueChange={handleIvaChange}
+                  onOpenChange={(open: boolean) => !open && handleIvaBlur()}
+                  disabled={isLoadingCatalogos}
                 >
-                  <SelectValue placeholder="Selecciona el IVA" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ivasCatalogo.map((iva) => (
-                    <SelectItem key={iva.id} value={String(iva.id)}>
-                      {iva.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                  <SelectTrigger
+                    id="edit-product-iva"
+                    className={`h-11 ${errors.iva && touched.iva ? "border-red-500" : ""
+                      }`}
+                  >
+                    <SelectValue placeholder="Selecciona el IVA" />
+                  </SelectTrigger>
+
+                  <SelectContent>
+                    {ivasCatalogo.length === 0 ? (
+                      <div className="px-3 py-2 text-sm text-gray-500">
+                        No hay IVAs disponibles
+                      </div>
+                    ) : (
+                      ivasCatalogo.map((iva) => (
+                        <SelectItem key={iva.id} value={String(iva.id)}>
+                          {iva.nombre}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowNuevoIvaModal(true)}
+                  className="h-11 shrink-0 border-blue-200 bg-blue-50 px-4 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
+                >
+                  <Plus size={16} className="mr-2" />
+                  Nuevo IVA
+                </Button>
+              </div>
+
               {errors.iva && touched.iva && (
                 <p className="text-red-500 text-sm mt-1">{errors.iva}</p>
               )}
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="mt-2 border-t pt-4">
             <Button
               variant="outline"
               onClick={closeToList}
@@ -1742,6 +1870,7 @@ export default function Productos({
             >
               Cancelar
             </Button>
+
             <Button
               onClick={confirmEditProduct}
               className="bg-green-600 hover:bg-green-700"
@@ -1871,6 +2000,78 @@ export default function Productos({
               Aceptar
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={showNuevoIvaModal}
+        onOpenChange={(open) => {
+          setShowNuevoIvaModal(open);
+
+          if (!open) {
+            resetNuevoIvaForm();
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Nuevo IVA</DialogTitle>
+            <DialogDescription>
+              Registra un nuevo porcentaje de IVA para parametrizar productos.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="nuevoIvaPorcentaje">Porcentaje *</Label>
+              <Input
+                id="nuevoIvaPorcentaje"
+                type="text"
+                inputMode="decimal"
+                value={nuevoIvaPorcentaje}
+                onChange={(e) => {
+                  const value = e.target.value
+                    .replace(",", ".")
+                    .replace(/[^\d.]/g, "");
+
+                  const partes = value.split(".");
+                  if (partes.length > 2) return;
+                  if ((partes[1] ?? "").length > 2) return;
+
+                  setNuevoIvaPorcentaje(value);
+                }}
+                placeholder="Ej: 19"
+                className="h-11 rounded-lg border-gray-300 bg-white text-right shadow-none [appearance:textfield] focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:border-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+              <p className="text-xs text-gray-500">
+                Ingresa solo el número. Ejemplo: 19 para IVA 19%.
+              </p>
+            </div>
+
+            {nuevoIvaPorcentaje && !Number.isNaN(Number(nuevoIvaPorcentaje)) && (
+              <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+                Se creará como:{" "}
+                <strong>IVA {formatIvaPorcentaje(nuevoIvaPorcentaje)}%</strong>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowNuevoIvaModal(false)}
+              disabled={isSavingIva}
+            >
+              Cancelar
+            </Button>
+
+            <Button
+              onClick={handleCrearIva}
+              disabled={isSavingIva}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {isSavingIva ? "Creando..." : "Crear IVA"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
