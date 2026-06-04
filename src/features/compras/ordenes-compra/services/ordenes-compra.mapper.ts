@@ -18,6 +18,41 @@ const toStringSafe = (value: unknown, fallback = "") => {
   return String(value);
 };
 
+const toNumberSafe = (value: unknown, fallback = 0) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+};
+
+const formatDateOnly = (value: unknown) => {
+  if (!value) return "";
+
+  if (typeof value === "string") {
+    const soloFecha = value.split("T")[0];
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(soloFecha)) {
+      return soloFecha;
+    }
+  }
+
+  const date = new Date(String(value));
+
+  if (Number.isNaN(date.getTime())) return "";
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+};
+
+const getUsuarioNombre = (usuario?: any) => {
+  const nombre = toStringSafe(usuario?.nombre).trim();
+  const apellido = toStringSafe(usuario?.apellido).trim();
+  const email = toStringSafe(usuario?.email).trim();
+
+  return `${nombre} ${apellido}`.trim() || email || "";
+};
+
 export const ESTADO_COMPRA_IDS = {
   Pendiente: 1,
   Aprobada: 2,
@@ -51,17 +86,17 @@ export const mapBasicOption = (raw: RawRecord): BasicOption => {
   return {
     id: toNumber(
       raw?.id ??
-        raw?.id_producto ??
-        raw?.id_bodega ??
-        raw?.id_termino_pago ??
-        raw?.id_proveedor
+      raw?.id_producto ??
+      raw?.id_bodega ??
+      raw?.id_termino_pago ??
+      raw?.id_proveedor
     ),
     nombre: toStringSafe(
       raw?.nombre ??
-        raw?.nombre_producto ??
-        raw?.nombre_bodega ??
-        raw?.nombre_termino ??
-        raw?.nombre_empresa
+      raw?.nombre_producto ??
+      raw?.nombre_bodega ??
+      raw?.nombre_termino ??
+      raw?.nombre_empresa
     ),
     estado:
       raw?.estado === undefined || raw?.estado === null
@@ -118,7 +153,6 @@ export const mapCompra = (raw: RawRecord): Compra => {
     id: toNumber(raw?.id_compra ?? raw?.id),
     numeroOrden: toStringSafe(raw?.codigo_compra ?? raw?.numeroOrden),
     fecha: toStringSafe(raw?.fecha_solicitud ?? raw?.fecha),
-    fechaEntrega: toStringSafe(raw?.fecha_entrega),
     estado: toStringSafe(
       raw?.estado_compra?.nombre_estado ?? raw?.estado
     ) as Compra["estado"],
@@ -144,6 +178,32 @@ export const mapCompra = (raw: RawRecord): Compra => {
 
     bodegaId: toNumber(raw?.id_bodega ?? raw?.bodega?.id_bodega),
     bodega: toStringSafe(raw?.bodega?.nombre_bodega),
+
+    fechaAprobacion: formatDateOnly(
+      raw?.fecha_aprobacion ?? raw?.fechaAprobacion
+    ),
+
+    idUsuarioAprobo:
+      raw?.id_usuario_aprobo === null || raw?.id_usuario_aprobo === undefined
+        ? null
+        : toNumberSafe(raw?.id_usuario_aprobo),
+
+    usuarioAprobo: getUsuarioNombre(
+      raw?.usuario_aprobo ?? raw?.usuarioAprobo
+    ),
+
+    fechaAnulacion: formatDateOnly(
+      raw?.fecha_anulacion ?? raw?.fechaAnulacion
+    ),
+
+    idUsuarioAnulo:
+      raw?.id_usuario_anulo === null || raw?.id_usuario_anulo === undefined
+        ? null
+        : toNumberSafe(raw?.id_usuario_anulo),
+
+    usuarioAnulo: getUsuarioNombre(
+      raw?.usuario_anulo ?? raw?.usuarioAnulo
+    ),
 
     productos,
   };

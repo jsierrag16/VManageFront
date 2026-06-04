@@ -945,6 +945,7 @@ export default function Productos({
               <TableRow className="bg-gray-50">
                 <TableHead className="w-14">#</TableHead>
                 <TableHead>Nombre</TableHead>
+                <TableHead>Descripción</TableHead>
                 <TableHead>Categoría</TableHead>
                 <TableHead className="text-center">IVA</TableHead>
                 <TableHead className="text-center">Stock</TableHead>
@@ -957,7 +958,7 @@ export default function Productos({
               {isLoadingProductos ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="text-center py-8 text-gray-500"
                   >
                     Cargando productos...
@@ -994,6 +995,14 @@ export default function Productos({
                           <div>
                             <p className="font-medium text-gray-900">
                               {producto.nombre}
+                            </p>
+                          </div>
+                        </TableCell>
+
+                        <TableCell>
+                          <div>
+                            <p className="font-medium text-gray-900">
+                              {producto.descripcion}
                             </p>
                           </div>
                         </TableCell>
@@ -1102,7 +1111,7 @@ export default function Productos({
                       {/* Fila expandida */}
                       {expandedRows.has(producto.id) && (
                         <TableRow>
-                          <TableCell colSpan={7} className="bg-gray-50 p-0">
+                          <TableCell colSpan={8} className="bg-gray-50 p-0">
                             <div className="p-4">
                               <h4 className="text-sm font-semibold text-gray-700 mb-3">
                                 Lotes Disponibles ({producto.lotes.length} total
@@ -1119,11 +1128,14 @@ export default function Productos({
                                       <TableHead className="text-xs text-center">
                                         Cantidad por Lote
                                       </TableHead>
-                                      <TableHead className="text-xs">
+                                      <TableHead className="text-xs text-center">
                                         Fecha de Vencimiento
                                       </TableHead>
                                       <TableHead className="text-xs">
                                         Bodega Asignada
+                                      </TableHead>
+                                      <TableHead className="text-xs">
+                                        Nota
                                       </TableHead>
                                     </TableRow>
                                   </TableHeader>
@@ -1161,7 +1173,7 @@ export default function Productos({
                                             )}
                                           </TableCell>
 
-                                          <TableCell>
+                                          <TableCell className="text-center">
                                             <span
                                               className={getVencimientoColor(
                                                 lote.fechaVencimiento
@@ -1177,6 +1189,14 @@ export default function Productos({
                                               className="text-xs"
                                             >
                                               {lote.bodega}
+                                            </Badge>
+                                          </TableCell>
+                                          <TableCell>
+                                            <Badge
+                                              variant="outline"
+                                              className="text-xs"
+                                            >
+                                              {lote.nota || "Sin nota"}
                                             </Badge>
                                           </TableCell>
                                         </TableRow>
@@ -1430,6 +1450,7 @@ export default function Productos({
                         <TableHead className="text-center">Cantidad</TableHead>
                         <TableHead className="text-center">Vencimiento</TableHead>
                         <TableHead>Bodega</TableHead>
+                        <TableHead>Nota</TableHead>
                       </TableRow>
                     </TableHeader>
 
@@ -1437,7 +1458,7 @@ export default function Productos({
                       {modalLotes.length === 0 ? (
                         <TableRow>
                           <TableCell
-                            colSpan={4}
+                            colSpan={5}
                             className="py-6 text-center text-gray-500"
                           >
                             No hay lotes registrados
@@ -1451,21 +1472,13 @@ export default function Productos({
                             </TableCell>
 
                             <TableCell className="text-center">
-                              <span
-                                className={getCantidadColor(
-                                  lote.cantidadDisponible
-                                )}
-                              >
+                              <span className={getCantidadColor(lote.cantidadDisponible)}>
                                 {lote.cantidadDisponible}
                               </span>
                             </TableCell>
 
                             <TableCell className="text-center">
-                              <span
-                                className={getVencimientoColor(
-                                  lote.fechaVencimiento
-                                )}
-                              >
+                              <span className={getVencimientoColor(lote.fechaVencimiento)}>
                                 {formatFecha(lote.fechaVencimiento)}
                               </span>
                             </TableCell>
@@ -1474,6 +1487,12 @@ export default function Productos({
                               <Badge variant="outline" className="text-xs">
                                 {lote.bodega || "-"}
                               </Badge>
+                            </TableCell>
+
+                            <TableCell className="max-w-xs text-gray-700">
+                              <span className="line-clamp-2">
+                                {lote.nota?.trim() || "Sin nota"}
+                              </span>
                             </TableCell>
                           </TableRow>
                         ))

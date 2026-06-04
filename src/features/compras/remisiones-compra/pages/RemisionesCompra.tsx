@@ -1075,8 +1075,6 @@ export default function RemisionesCompra() {
     };
   }, [items]);
 
-  const totalFormulario = resumenFormulario.total;
-
   const handleProveedorChange = (idProveedorValue: string) => {
     const proveedorSeleccionado = proveedoresConComprasPendientes.find(
       (proveedor) => String(proveedor.id) === idProveedorValue
@@ -1550,6 +1548,107 @@ export default function RemisionesCompra() {
     navigate("/app/remisiones-compra", { replace: true });
   };
 
+  type ResumenIva = {
+    porcentaje: number;
+    valor: number;
+  };
+
+  type ResumenRemision = {
+    items: number;
+    subtotal: number;
+    ivas: ResumenIva[];
+    totalIva: number;
+    total: number;
+  };
+
+  const getDocumentoProveedorTextoRemision = (
+    remision?: RemisionCompraUI | null
+  ) => {
+    if (!remision) return "";
+
+    const tipo = remision.proveedorTipoDocumento?.trim();
+    const numero = remision.proveedorNumeroDocumento?.trim();
+
+    if (!tipo && !numero) return "";
+
+    return `${tipo || "Documento"}${numero ? `: ${numero}` : ""}`;
+  };
+
+  const calcularResumenRemisionItems = (
+    listaItems: Array<{
+      cantidad: number | string;
+      precio_unitario: number;
+      ivaPorcentaje: number;
+    }>
+  ): ResumenRemision => {
+    const subtotal = listaItems.reduce((acc, item) => {
+      const cantidad = Number(item.cantidad || 0);
+      const precio = Number(item.precio_unitario || 0);
+
+      return acc + cantidad * precio;
+    }, 0);
+
+    const ivaMap = new Map<number, number>();
+
+    listaItems.forEach((item) => {
+      const cantidad = Number(item.cantidad || 0);
+      const precio = Number(item.precio_unitario || 0);
+      const porcentaje = Number(item.ivaPorcentaje || 0);
+
+      const subtotalItem = cantidad * precio;
+      const valorIva = subtotalItem * (porcentaje / 100);
+
+      if (porcentaje > 0) {
+        ivaMap.set(porcentaje, (ivaMap.get(porcentaje) || 0) + valorIva);
+      }
+    });
+
+    const ivas: ResumenIva[] = Array.from(ivaMap.entries())
+      .map(([porcentaje, valor]) => ({
+        porcentaje,
+        valor,
+      }))
+      .sort((a, b) => a.porcentaje - b.porcentaje);
+
+    const totalIva = ivas.reduce((acc, iva) => acc + iva.valor, 0);
+    const total = subtotal + totalIva;
+
+    return {
+      items: listaItems.length,
+      subtotal,
+      ivas,
+      totalIva,
+      total,
+    };
+  };
+
+  const getGestionEstadoRemision = (remision: RemisionCompraUI) => {
+    const remisionGestion = remision as RemisionCompraUI & {
+      fechaAnulacion?: string | null;
+      usuarioAnulo?: string | null;
+    };
+
+    if (remision.estadoKey === "APLICADA") {
+      const usuario = remision.usuarioAplicoExistencias || "—";
+      const fecha = getFechaAprobadaRemision(remision);
+
+      return fecha
+        ? `${usuario} - ${formatDate(fecha)}`
+        : `${usuario}`;
+    }
+
+    if (remision.estadoKey === "ANULADA") {
+      const usuario = remisionGestion.usuarioAnulo || "—";
+      const fecha = remisionGestion.fechaAnulacion || "";
+
+      return fecha
+        ? `${usuario} - ${formatDate(fecha)}`
+        : `${usuario}`;
+    }
+
+    return "Pendiente de aprobación";
+  };
+
   const generateRemisionPDF = async (
     remision: RemisionCompraUI,
     includePrices: boolean = true
@@ -1582,16 +1681,47 @@ export default function RemisionesCompra() {
     };
 
     const formatMoneyPdf = (value: number) =>
-      `$${Number(value || 0).toLocaleString("es-CO", {
+      `COP$${Number(value || 0).toLocaleString("es-CO", {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       })}`;
 
-    const formatDatePdf = (value?: string | null) =>
-      value ? new Date(value).toLocaleDateString("es-CO") : "-";
+    const formatDatePdf = (value?: string | Date | null) => {
+      if (!value) return "-";
+
+      if (typeof value === "string") {
+        const soloFecha = value.split("T")[0];
+
+        if (/^\d{4}-\d{2}-\d{2}$/.test(soloFecha)) {
+          const [year, month, day] = soloFecha.split("-");
+          return `${day}/${month}/${year}`;
+        }
+      }
+
+      if (value instanceof Date) {
+        const year = value.getFullYear();
+        const month = String(value.getMonth() + 1).padStart(2, "0");
+        const day = String(value.getDate()).padStart(2, "0");
+
+        return `${day}/${month}/${year}`;
+      }
+
+      return "-";
+    };
+
+    const formatIvaPorcentajePdf = (value: unknown) => {
+      const porcentaje = Number(value ?? 0);
+
+      if (!Number.isFinite(porcentaje)) return "0";
+
+      return porcentaje.toLocaleString("es-CO", {
+        minimumFractionDigits: porcentaje % 1 === 0 ? 0 : 2,
+        maximumFractionDigits: 2,
+      });
+    };
 
     const getEstadoStyle = (estado: string) => {
-      const normalized = (estado || "").toLowerCase();
+      const normalized = normalizeText(estado);
 
       if (
         normalized.includes("aplic") ||
@@ -1602,7 +1732,7 @@ export default function RemisionesCompra() {
         return {
           bg: [...COLORS.successBg] as const,
           text: [...COLORS.successText] as const,
-          label: estado,
+          label: estado || "Aprobada",
         };
       }
 
@@ -1610,7 +1740,7 @@ export default function RemisionesCompra() {
         return {
           bg: [...COLORS.dangerBg] as const,
           text: [...COLORS.dangerText] as const,
-          label: estado,
+          label: estado || "Anulada",
         };
       }
 
@@ -1622,25 +1752,16 @@ export default function RemisionesCompra() {
     };
 
     let logo: PdfImageInfo | null = null;
+
     try {
       logo = await loadImageInfoAsDataUrl(logoVManage);
     } catch (error) {
       console.warn("No se pudo cargar el logo para el PDF:", error);
     }
 
-    const subtotalGeneral = remision.items.reduce(
-      (acc, item) =>
-        acc + Number(item.cantidad || 0) * Number(item.precio_unitario || 0),
-      0
-    );
-
-    const ivaGeneral = remision.items.reduce((acc, item) => {
-      const subtotal =
-        Number(item.cantidad || 0) * Number(item.precio_unitario || 0);
-      return acc + subtotal * (Number(item.ivaPorcentaje || 0) / 100);
-    }, 0);
-
-    const totalGeneral = subtotalGeneral + ivaGeneral;
+    const resumenPdf = calcularResumenRemisionItems(remision.items ?? []);
+    const documentoProveedor = getDocumentoProveedorTextoRemision(remision) || "-";
+    const gestionEstado = getGestionEstadoRemision(remision);
 
     doc.setFillColor(...COLORS.primary);
     doc.rect(0, 0, pageWidth, 34, "F");
@@ -1667,32 +1788,29 @@ export default function RemisionesCompra() {
     doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(18);
-    doc.text("REMISIÓN DE COMPRA", pageWidth / 2, 14.8, { align: "center" });
+    doc.text("REMISIÓN DE COMPRA", pageWidth / 2, 14.8, {
+      align: "center",
+    });
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
-    doc.text(
-      includePrices
-        ? "VManage • Gestión empresarial"
-        : "VManage • Gestión empresarial",
-      pageWidth / 2,
-      21.8,
-      {
-        align: "center",
-      }
-    );
+    doc.text("VManage • Gestión empresarial", pageWidth / 2, 21.8, {
+      align: "center",
+    });
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8.7);
+
     doc.text(`Código: ${remision.numeroRemision || "-"}`, rightX, 11.5, {
       align: "right",
     });
+
     doc.text(`Fecha: ${formatDatePdf(remision.fecha)}`, rightX, 17.8, {
       align: "right",
     });
 
     doc.setFillColor(...COLORS.card);
-    doc.roundedRect(marginX, 42, pageWidth - marginX * 2, 42, 3, 3, "F");
+    doc.roundedRect(marginX, 42, pageWidth - marginX * 2, 48, 3, 3, "F");
 
     doc.setTextColor(...COLORS.text);
     doc.setFont("helvetica", "bold");
@@ -1702,47 +1820,54 @@ export default function RemisionesCompra() {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9.2);
 
-    const proveedorLines = doc.splitTextToSize(remision.proveedor || "-", 64);
+    const proveedorLines = doc.splitTextToSize(remision.proveedor || "-", 62);
+    const gestionLines = doc.splitTextToSize(gestionEstado || "-", 70);
 
     doc.text("Proveedor:", marginX + 4, 56);
-    doc.text(proveedorLines, marginX + 28, 56);
+    doc.text(proveedorLines, marginX + 31, 56);
 
-    doc.text("Tipo Doc.:", marginX + 4, 65);
-    doc.text(remision.proveedorTipoDocumento || "-", marginX + 28, 65);
+    doc.text("Documento / NIT:", marginX + 4, 68);
+    doc.text(documentoProveedor, marginX + 38, 68);
 
-    doc.text("N° Documento:", marginX + 4, 74);
-    doc.text(remision.proveedorNumeroDocumento || "-", marginX + 32, 74);
+    doc.text("Código factura:", marginX + 4, 77);
+    doc.text(remision.codigoFactura || "No registrada", marginX + 36, 77);
 
     doc.text("Bodega:", 112, 56);
-    doc.text(remision.bodega || "-", 128, 56);
+    doc.text(remision.bodega || "-", 130, 56);
 
     doc.text("Orden compra:", 112, 65);
-    doc.text(remision.ordenCompra || "-", 136, 65);
+    doc.text(remision.ordenCompra || "-", 139, 65);
+
+    doc.text("Gestión:", 112, 74);
+    doc.text(gestionLines, 130, 74);
 
     const estadoStyle = getEstadoStyle(remision.estado);
+
     doc.setFillColor(...(estadoStyle.bg as [number, number, number]));
-    doc.roundedRect(112, 69, 44, 9.5, 3, 3, "F");
+    doc.roundedRect(112, 80, 44, 8, 3, 3, "F");
 
     doc.setTextColor(...(estadoStyle.text as [number, number, number]));
     doc.setFont("helvetica", "bold");
-    doc.text(`Estado: ${estadoStyle.label}`, 134, 75.4, { align: "center" });
+    doc.setFontSize(8.6);
+    doc.text(`Estado: ${estadoStyle.label}`, 134, 85.3, {
+      align: "center",
+    });
 
     doc.setDrawColor(...COLORS.primaryLine);
     doc.setLineWidth(0.6);
-    doc.line(marginX, 90, rightX, 90);
+    doc.line(marginX, 96, rightX, 96);
 
     const tableData =
       remision.items?.map((item) => {
-        const subtotal =
-          Number(item.cantidad || 0) * Number(item.precio_unitario || 0);
+        const cantidad = Number(item.cantidad || 0);
+        const precio = Number(item.precio_unitario || 0);
+        const subtotal = cantidad * precio;
 
         const detalleProducto = [
           item.productoNombre || "-",
           item.lote ? `Lote: ${item.lote}` : null,
           item.fecha_vencimiento
-            ? `Vence: ${new Date(item.fecha_vencimiento).toLocaleDateString(
-              "es-CO"
-            )}`
+            ? `Vence: ${formatDatePdf(item.fecha_vencimiento)}`
             : null,
           item.codigo_barras || item.cod_barras
             ? `Cod. barras: ${item.codigo_barras || item.cod_barras}`
@@ -1756,8 +1881,8 @@ export default function RemisionesCompra() {
           return [
             detalleProducto,
             String(item.cantidad ?? 0),
-            `IVA (${Number(item.ivaPorcentaje || 0).toFixed(2)}%)`,
-            formatMoneyPdf(item.precio_unitario || 0),
+            `IVA ${formatIvaPorcentajePdf(item.ivaPorcentaje)}%`,
+            formatMoneyPdf(precio),
             formatMoneyPdf(subtotal),
           ];
         }
@@ -1765,12 +1890,12 @@ export default function RemisionesCompra() {
         return [
           detalleProducto,
           String(item.cantidad ?? 0),
-          `IVA (${Number(item.ivaPorcentaje || 0).toFixed(2)}%)`,
+          `IVA ${formatIvaPorcentajePdf(item.ivaPorcentaje)}%`,
         ];
       }) || [];
 
     autoTable(doc, {
-      startY: 96,
+      startY: 102,
       margin: { left: marginX, right: marginX },
       head: includePrices
         ? [["Producto", "Cantidad", "IVA", "Precio Unit.", "Subtotal"]]
@@ -1820,7 +1945,7 @@ export default function RemisionesCompra() {
         },
     });
 
-    let currentY = ((doc as any).lastAutoTable?.finalY || 96) + 8;
+    let currentY = ((doc as any).lastAutoTable?.finalY || 102) + 8;
 
     const observacionesLines = remision.observaciones
       ? doc.splitTextToSize(
@@ -1833,8 +1958,15 @@ export default function RemisionesCompra() {
       ? Math.max(24, 12 + observacionesLines.length * 4.5)
       : 0;
 
-    const totalsHeight = includePrices ? 31 : 0;
-    const blockHeight = Math.max(observacionesHeight, includePrices ? totalsHeight : 0);
+    const ivaRowsCount = includePrices
+      ? Math.max(resumenPdf.ivas.length, 1)
+      : 0;
+
+    const totalsHeight = includePrices ? 32 + ivaRowsCount * 7 : 0;
+    const blockHeight = Math.max(
+      observacionesHeight,
+      includePrices ? totalsHeight : 0
+    );
 
     if (currentY + Math.max(blockHeight, 24) > pageHeight - 24) {
       doc.addPage();
@@ -1879,35 +2011,50 @@ export default function RemisionesCompra() {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9.5);
 
-      doc.text("Subtotal:", totalsX + 4, currentY + 8);
-      doc.text(
-        formatMoneyPdf(subtotalGeneral),
-        totalsX + totalsWidth - 4,
-        currentY + 8,
-        { align: "right" }
-      );
+      doc.text("N° Items:", totalsX + 4, currentY + 8);
+      doc.text(String(resumenPdf.items), totalsX + totalsWidth - 4, currentY + 8, {
+        align: "right",
+      });
 
-      doc.text("IVA:", totalsX + 4, currentY + 15);
+      doc.text("Subtotal:", totalsX + 4, currentY + 15);
       doc.text(
-        formatMoneyPdf(ivaGeneral),
+        formatMoneyPdf(resumenPdf.subtotal),
         totalsX + totalsWidth - 4,
         currentY + 15,
         { align: "right" }
       );
 
+      const ivaRows =
+        resumenPdf.ivas.length > 0
+          ? resumenPdf.ivas
+          : [{ porcentaje: 0, valor: 0 }];
+
+      ivaRows.forEach((iva: ResumenIva, index: number) => {
+        const rowY = currentY + 22 + index * 7;
+
+        const label =
+          iva.porcentaje > 0
+            ? `IVA ${formatIvaPorcentajePdf(iva.porcentaje)}%:`
+            : "IVA:";
+
+        doc.text(label, totalsX + 4, rowY);
+        doc.text(formatMoneyPdf(iva.valor), totalsX + totalsWidth - 4, rowY, {
+          align: "right",
+        });
+      });
+
+      const totalBoxY = currentY + 27 + ivaRows.length * 7;
+
       doc.setFillColor(...COLORS.primary);
-      doc.roundedRect(totalsX + 2, currentY + 20, totalsWidth - 4, 9, 2, 2, "F");
+      doc.roundedRect(totalsX + 2, totalBoxY, totalsWidth - 4, 9, 2, 2, "F");
 
       doc.setTextColor(255, 255, 255);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(10.5);
-      doc.text("TOTAL", totalsX + 5, currentY + 26);
-      doc.text(
-        formatMoneyPdf(totalGeneral),
-        totalsX + totalsWidth - 4,
-        currentY + 26,
-        { align: "right" }
-      );
+      doc.text("TOTAL", totalsX + 5, totalBoxY + 6);
+      doc.text(formatMoneyPdf(resumenPdf.total), totalsX + totalsWidth - 4, totalBoxY + 6, {
+        align: "right",
+      });
     }
 
     const generatedAt = new Date().toLocaleString("es-CO");
@@ -1930,8 +2077,7 @@ export default function RemisionesCompra() {
     }
 
     doc.save(
-      `Remision_Compra_${remision.numeroRemision}_${includePrices ? "con_precios" : "sin_precios"
-      }.pdf`
+      `Remision_Compra_${remision.numeroRemision}_${includePrices ? "con_precios" : "sin_precios"}.pdf`
     );
   };
 
@@ -1956,32 +2102,10 @@ export default function RemisionesCompra() {
 
       toast.success(
         `PDF de la remisión ${detalle.numeroRemision} descargado exitosamente`
-      );
+      );  
     } catch (error) {
       toast.error(getErrorMessage(error, "Error al descargar la remisión en PDF"));
     }
-  };
-
-  const getGestionEstadoRemision = (remision: RemisionCompraUI) => {
-    if (remision.estadoKey === "APLICADA") {
-      const usuario = remision.usuarioAplicoExistencias || "—";
-      const fecha = getFechaAprobadaRemision(remision);
-
-      return fecha
-        ? `${usuario} - ${formatDate(fecha)}`
-        : `${usuario}`;
-    }
-
-    if (remision.estadoKey === "ANULADA") {
-      const usuario = remision.usuarioAnulo || "—";
-      const fecha = remision.fechaAnulacion;
-
-      return fecha
-        ? `${usuario} - ${formatDate(fecha)}`
-        : `${usuario}`;
-    }
-
-    return "Pendiente de aprobación";
   };
 
   if (loadingPage) {
@@ -3412,147 +3536,292 @@ export default function RemisionesCompra() {
         }}
       >
         <DialogContent
-          className="max-w-4xl"
+          className="max-w-6xl max-h-[90vh] overflow-y-auto"
           aria-describedby="view-remision-compra-description"
           onInteractOutside={(e) => e.preventDefault()}
         >
-          <DialogHeader>
+          <DialogHeader className="space-y-2 pb-3">
             <DialogTitle>Detalle de Remisión de Compra</DialogTitle>
             <DialogDescription
               id="view-remision-compra-description"
-              className="sr-only"
+              className="text-sm text-gray-500"
             >
-              Detalles completos de la remisión de compra
+              Información completa de la remisión de compra
             </DialogDescription>
           </DialogHeader>
 
           {loadingDetalleRemision ? (
-            <div className="flex items-center justify-center py-16 text-gray-600 gap-2">
+            <div className="flex items-center justify-center gap-2 py-16 text-gray-600">
               <Loader2 className="animate-spin" size={18} />
               Cargando detalle...
             </div>
           ) : selectedRemision ? (
-            <div className="space-y-4 py-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-600">Número de Remisión</p>
-                  <p className="font-semibold">{selectedRemision.numeroRemision}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Orden de Compra</p>
-                  <p className="font-semibold">{selectedRemision.ordenCompra}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Proveedor</p>
-                  <p className="font-semibold">{selectedRemision.proveedor}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Tipo de Documento</p>
-                  <p className="font-semibold">
-                    {selectedRemision.proveedorTipoDocumento || "—"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Número de Documento</p>
-                  <p className="font-semibold">
-                    {selectedRemision.proveedorNumeroDocumento || "—"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Fecha de Creación</p>
-                  <p className="font-semibold">{formatDate(selectedRemision.fecha)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Bodega</p>
-                  <p className="font-semibold">
-                    {selectedRemision.bodega || effectiveSelectedBodegaNombre}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Estado</p>
-                  <div className="mt-1">
+            <div className="space-y-6 py-2">
+              <div className="rounded-lg bg-gray-50 p-5">
+                <div className="mb-4 flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">
+                      Información general
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      Datos principales y gestión de la remisión
+                    </p>
+                  </div>
+
+                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                    <Badge
+                      variant="outline"
+                      className="border-blue-200 bg-blue-50 px-3 py-1 text-blue-700"
+                    >
+                      {selectedRemision.numeroRemision}
+                    </Badge>
+
                     <Badge
                       variant="outline"
                       className={getEstadoBadge(selectedRemision.estadoKey).class}
                     >
                       {selectedRemision.estado}
                     </Badge>
+
+                    <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-2 text-right">
+                      <p className="text-xs font-medium text-blue-700">
+                        Fecha de Creación
+                      </p>
+                      <p className="text-sm font-semibold text-blue-900">
+                        {formatDate(selectedRemision.fecha)}
+                      </p>
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <p className="text-sm text-gray-600">Afecta Existencias</p>
-                  <p className="font-semibold">
-                    {selectedRemision.afectaExistencias ? "Sí" : "No"}
-                  </p>
+
+                <div className="grid grid-cols-1 gap-x-10 gap-y-5 md:grid-cols-2">
+                  <div>
+                    <p className="text-sm text-gray-600">Orden de Compra</p>
+                    <p className="font-medium text-gray-900">
+                      {selectedRemision.ordenCompra || "—"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-gray-600">Proveedor</p>
+                    <p className="font-medium text-gray-900">
+                      {selectedRemision.proveedor || "—"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-gray-600">Documento / NIT</p>
+                    <p className="font-medium text-gray-900">
+                      {getDocumentoProveedorTextoRemision(selectedRemision) || "—"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-gray-600">Bodega</p>
+                    <p className="font-medium text-gray-900">
+                      {selectedRemision.bodega || effectiveSelectedBodegaNombre || "—"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-gray-600">Código Factura</p>
+                    <p className="font-medium text-gray-900">
+                      {selectedRemision.codigoFactura || "No registrada"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-gray-600">Gestión</p>
+                    <p className="font-medium text-gray-900">
+                      {getGestionEstadoRemision(selectedRemision)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-gray-600">Afecta Existencias</p>
+                    <p className="font-medium text-gray-900">
+                      {selectedRemision.afectaExistencias ? "Sí" : "No"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-gray-600">Cantidad de Ítems</p>
+                    <p className="font-medium text-gray-900">
+                      {selectedRemision.itemsCount}
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              <div className="border-t pt-4">
-                <div className="flex items-center gap-2 mb-4">
+              <div>
+                <div className="mb-3 flex items-center gap-2">
                   <Package size={20} className="text-blue-600" />
-                  <h3 className="font-semibold">Productos</h3>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">
+                      Productos de la Remisión
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      Productos recibidos con lote, vencimiento y valores
+                    </p>
+                  </div>
                 </div>
 
-                <div className="border rounded-lg overflow-hidden">
+                <div className="overflow-hidden rounded-lg border border-gray-200">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-gray-50">
                         <TableHead>Producto</TableHead>
                         <TableHead>Lote</TableHead>
-                        <TableHead>Cantidad</TableHead>
-                        <TableHead>Precio</TableHead>
-                        <TableHead>IVA</TableHead>
-                        <TableHead>Vencimiento</TableHead>
+                        <TableHead className="text-center">Cantidad</TableHead>
+                        <TableHead className="text-center">IVA</TableHead>
+                        <TableHead className="text-right">Precio Unitario</TableHead>
+                        <TableHead className="text-right">Subtotal</TableHead>
+                        <TableHead className="text-center">Vencimiento</TableHead>
                         <TableHead>Cód. Barras</TableHead>
                         <TableHead>Nota</TableHead>
                       </TableRow>
                     </TableHeader>
+
                     <TableBody>
-                      {selectedRemision.items.map((item, index) => (
-                        <TableRow key={`${item.id_producto}-${index}`}>
-                          <TableCell>{item.productoNombre}</TableCell>
-                          <TableCell>{item.lote || "—"}</TableCell>
-                          <TableCell>{item.cantidad}</TableCell>
-                          <TableCell>{formatMoney(item.precio_unitario)}</TableCell>
-                          <TableCell>{item.ivaPorcentaje}%</TableCell>
-                          <TableCell>{formatDate(item.fecha_vencimiento)}</TableCell>
-                          <TableCell>
-                            {item.codigo_barras || item.cod_barras || "—"}
+                      {selectedRemision.items.length === 0 ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={9}
+                            className="py-8 text-center text-gray-500"
+                          >
+                            No hay productos registrados
                           </TableCell>
-                          <TableCell>{item.nota || "—"}</TableCell>
                         </TableRow>
-                      ))}
-                      <TableRow className="bg-gray-50">
-                        <TableCell colSpan={7} className="text-right font-semibold">
-                          Total
-                        </TableCell>
-                        <TableCell className="font-semibold">
-                          {formatMoney(selectedRemision.total)}
-                        </TableCell>
-                      </TableRow>
+                      ) : (
+                        selectedRemision.items.map((item, index) => {
+                          const subtotalItem =
+                            Number(item.cantidad || 0) *
+                            Number(item.precio_unitario || 0);
+
+                          return (
+                            <TableRow key={`${item.id_producto}-${index}`}>
+                              <TableCell className="font-medium text-gray-900">
+                                {item.productoNombre}
+                              </TableCell>
+
+                              <TableCell>{item.lote || "—"}</TableCell>
+
+                              <TableCell className="text-center">
+                                {item.cantidad}
+                              </TableCell>
+
+                              <TableCell className="text-center">
+                                IVA {formatIvaPorcentaje(item.ivaPorcentaje)}%
+                              </TableCell>
+
+                              <TableCell className="text-right">
+                                {formatMoney(item.precio_unitario)}
+                              </TableCell>
+
+                              <TableCell className="text-right font-medium">
+                                {formatMoney(subtotalItem)}
+                              </TableCell>
+
+                              <TableCell className="text-center">
+                                {formatDate(item.fecha_vencimiento)}
+                              </TableCell>
+
+                              <TableCell>
+                                {item.codigo_barras || item.cod_barras || "—"}
+                              </TableCell>
+
+                              <TableCell>{item.nota || "—"}</TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )}
                     </TableBody>
                   </Table>
+
+                  {(() => {
+                    const resumenVista = calcularResumenRemisionItems(
+                      selectedRemision.items
+                    );
+
+                    return (
+                      <div className="flex justify-end border-t bg-gray-50 px-4 py-3">
+                        <div className="w-full max-w-sm space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">N° de Items:</span>
+                            <span className="font-medium">
+                              {resumenVista.items}
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Subtotal:</span>
+                            <span className="font-medium">
+                              {formatMoney(resumenVista.subtotal)}
+                            </span>
+                          </div>
+
+                          {resumenVista.ivas.length > 0 ? (
+                            resumenVista.ivas.map((iva) => (
+                              <div
+                                key={iva.porcentaje}
+                                className="flex justify-between text-sm"
+                              >
+                                <span className="text-gray-600">
+                                  IVA {formatIvaPorcentaje(iva.porcentaje)}%:
+                                </span>
+                                <span className="font-medium">
+                                  {formatMoney(iva.valor)}
+                                </span>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-600">IVA:</span>
+                              <span className="font-medium">{formatMoney(0)}</span>
+                            </div>
+                          )}
+
+                          <div className="flex justify-between border-t pt-2 text-base">
+                            <span className="font-semibold">Total:</span>
+                            <span className="font-bold text-blue-600">
+                              {formatMoney(resumenVista.total)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
               {selectedRemision.observaciones && (
-                <div className="border-t pt-4">
-                  <p className="text-sm text-gray-600">Observaciones</p>
-                  <p className="mt-1">{selectedRemision.observaciones}</p>
+                <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+                  <p className="mb-1 text-sm font-semibold text-yellow-800">
+                    Observaciones
+                  </p>
+                  <p className="whitespace-pre-wrap text-sm text-yellow-900">
+                    {selectedRemision.observaciones}
+                  </p>
                 </div>
               )}
             </div>
-          ) : null}
+          ) : (
+            <div className="py-10 text-center text-gray-500">
+              No se encontró la remisión de compra
+            </div>
+          )}
 
-          <DialogFooter className="gap-2 sm:justify-end">
-            <Button
-              onClick={() => selectedRemision && handleOpenPdfOptions(selectedRemision)}
-              className="bg-green-600 hover:bg-green-700 text-white"
-              disabled={!selectedRemision || loadingDetalleRemision}
-            >
-              <Download size={16} className="mr-2" />
-              Descargar
-            </Button>
+          <DialogFooter className="mt-2 border-t pt-4">
+            {selectedRemision && (
+              <Button
+                onClick={() => handleOpenPdfOptions(selectedRemision)}
+                className="bg-green-600 hover:bg-green-700 text-white"
+                disabled={loadingDetalleRemision}
+              >
+                <Download size={16} className="mr-2" />
+                Descargar
+              </Button>
+            )}
 
             <Button variant="outline" onClick={closeToList}>
               Cerrar

@@ -165,6 +165,7 @@ export type ProductoVistaBackend = {
         fecha_vencimiento: string | null;
         id_bodega: number;
         nombre_bodega: string;
+        nota?: string | null;
     }[];
 };
 

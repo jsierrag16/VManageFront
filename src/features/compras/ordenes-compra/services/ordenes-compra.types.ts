@@ -33,7 +33,6 @@ export type Compra = {
   id: number;
   numeroOrden: string;
   fecha: string;
-  fechaEntrega: string;
   estado: CompraEstado;
   observaciones: string;
   subtotal: number;
@@ -49,6 +48,14 @@ export type Compra = {
   terminoPagoId: number;
   terminoPago: string;
 
+  fechaAprobacion: string;
+  idUsuarioAprobo: number | null;
+  usuarioAprobo: string;
+
+  fechaAnulacion: string;
+  idUsuarioAnulo: number | null;
+  usuarioAnulo: string;
+
   bodegaId: number;
   bodega: string;
 
@@ -60,7 +67,6 @@ export type CompraCreatePayload = {
   id_proveedor: number;
   id_termino_pago: number;
   descripcion?: string;
-  fecha_entrega?: string;
   detalle: Array<{
     id_producto: number;
     cantidad: number;

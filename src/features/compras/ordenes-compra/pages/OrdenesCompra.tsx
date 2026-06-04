@@ -640,19 +640,19 @@ export default function Compras() {
     try {
       await comprasService.aprobar(compraParaCambioEstado.id);
 
+      toast.success("Orden aprobada exitosamente");
+
+      setShowConfirmEstadoModal(false);
+      setCompraParaCambioEstado(null);
+
       await loadCompras();
 
       if (compraDetalle?.id === compraParaCambioEstado.id) {
         await loadCompraDetalle(compraParaCambioEstado.id);
       }
-
-      toast.success("Orden aprobada exitosamente");
     } catch (error) {
       console.error("Error aprobando compra:", error);
-      toast.error("No se pudo cambiar el estado");
-    } finally {
-      setShowConfirmEstadoModal(false);
-      setCompraParaCambioEstado(null);
+      toast.error("No se pudo aprobar la orden de compra");
     }
   };
 
@@ -1512,6 +1512,26 @@ export default function Compras() {
     return `${tipoDocumento || "Documento"}: ${numeroDocumento}`;
   };
 
+  const getGestionEstadoCompra = (compra: Compra) => {
+    if (compra.estado === "Aprobada") {
+      return compra.fechaAprobacion
+        ? `${compra.usuarioAprobo || "—"} - ${formatFechaVista(
+          compra.fechaAprobacion
+        )}`
+        : `${compra.usuarioAprobo || "—"}`;
+    }
+
+    if (compra.estado === "Anulada") {
+      return compra.fechaAnulacion
+        ? `${compra.usuarioAnulo || "—"} - ${formatFechaVista(
+          compra.fechaAnulacion
+        )}`
+        : `${compra.usuarioAnulo || "—"}`;
+    }
+
+    return "Pendiente de aprobación";
+  };
+
   const formatIvaPorcentaje = (value: unknown) => {
     const porcentaje = Number(value ?? 0);
 
@@ -1700,6 +1720,7 @@ export default function Compras() {
                 <TableHead>Documento / NIT</TableHead>
                 <TableHead>Bodega</TableHead>
                 <TableHead>Fecha</TableHead>
+                <TableHead className="text-center">Aprobación / Anulación</TableHead>
                 <TableHead className="text-center">Items</TableHead>
                 <TableHead className="text-center">Estado</TableHead>
                 <TableHead className="w-32 text-center">Acciones</TableHead>
@@ -1716,7 +1737,7 @@ export default function Compras() {
               ) : filteredCompras.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={9}
+                    colSpan={10}
                     className="text-center py-8 text-gray-500"
                   >
                     <Package size={48} className="mx-auto mb-2 text-gray-300" />
@@ -1740,6 +1761,9 @@ export default function Compras() {
                       {compra.bodega || "—"}
                     </TableCell>
                     <TableCell>{formatFechaVista(compra.fecha)}</TableCell>
+                    <TableCell className="text-gray-700 text-center">
+                      {getGestionEstadoCompra(compra)}
+                    </TableCell>
                     <TableCell className="text-center">
                       {compra.items}
                     </TableCell>
@@ -2823,7 +2847,14 @@ export default function Compras() {
                     {formatFechaVista(compraSeleccionada.fecha)}
                   </p>
                 </div>
+                <div>
+                  <p className="text-sm text-gray-600">Gestión</p>
+                  <p className="font-medium text-gray-900">
+                    {getGestionEstadoCompra(compraSeleccionada)}
+                  </p>
+                </div>
               </div>
+
 
               <div>
                 <div className="mb-3 flex items-center justify-between">

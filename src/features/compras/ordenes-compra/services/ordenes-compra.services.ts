@@ -53,6 +53,14 @@ export type Compra = {
   terminoPagoId: number;
   terminoPago: string;
 
+  fechaAprobacion: string;
+  idUsuarioAprobo: number | null;
+  usuarioAprobo: string;
+
+  fechaAnulacion: string;
+  idUsuarioAnulo: number | null;
+  usuarioAnulo: string;
+
   bodegaId: number;
   bodega: string;
 
@@ -281,6 +289,36 @@ const mapProductoOrden = (raw: RawRecord): ProductoOrden => {
   };
 };
 
+const formatDateOnly = (value: unknown) => {
+  if (!value) return "";
+
+  if (typeof value === "string") {
+    const soloFecha = value.split("T")[0];
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(soloFecha)) {
+      return soloFecha;
+    }
+  }
+
+  const date = new Date(String(value));
+
+  if (Number.isNaN(date.getTime())) return "";
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+};
+
+const getUsuarioNombre = (usuario?: any) => {
+  const nombre = toStringSafe(usuario?.nombre).trim();
+  const apellido = toStringSafe(usuario?.apellido).trim();
+  const email = toStringSafe(usuario?.email).trim();
+
+  return `${nombre} ${apellido}`.trim() || email || "";
+};
+
 const mapCompra = (raw: RawRecord): Compra => {
   const productos = Array.isArray(raw?.detalle_compra)
     ? raw.detalle_compra.map(mapProductoOrden)
@@ -315,6 +353,32 @@ const mapCompra = (raw: RawRecord): Compra => {
 
     bodegaId: toNumber(raw?.id_bodega ?? raw?.bodega?.id_bodega),
     bodega: toStringSafe(raw?.bodega?.nombre_bodega),
+
+    fechaAprobacion: formatDateOnly(
+      raw?.fecha_aprobacion ?? raw?.fechaAprobacion
+    ),
+
+    idUsuarioAprobo:
+      raw?.id_usuario_aprobo === null || raw?.id_usuario_aprobo === undefined
+        ? null
+        : toNumber(raw?.id_usuario_aprobo),
+
+    usuarioAprobo: getUsuarioNombre(
+      raw?.usuario_aprobo ?? raw?.usuarioAprobo
+    ),
+
+    fechaAnulacion: formatDateOnly(
+      raw?.fecha_anulacion ?? raw?.fechaAnulacion
+    ),
+
+    idUsuarioAnulo:
+      raw?.id_usuario_anulo === null || raw?.id_usuario_anulo === undefined
+        ? null
+        : toNumber(raw?.id_usuario_anulo),
+
+    usuarioAnulo: getUsuarioNombre(
+      raw?.usuario_anulo ?? raw?.usuarioAnulo
+    ),
 
     productos,
   };
