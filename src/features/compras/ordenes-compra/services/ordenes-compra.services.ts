@@ -38,7 +38,6 @@ export type Compra = {
   id: number;
   numeroOrden: string;
   fecha: string;
-  fechaEntrega: string;
   estado: CompraEstado;
   observaciones: string;
   subtotal: number;
@@ -65,7 +64,6 @@ export type CompraCreatePayload = {
   id_proveedor: number;
   id_termino_pago: number;
   descripcion?: string;
-  fecha_entrega?: string;
   detalle: Array<{
     id_producto: number;
     cantidad: number;
@@ -292,7 +290,6 @@ const mapCompra = (raw: RawRecord): Compra => {
     id: toNumber(raw?.id_compra ?? raw?.id),
     numeroOrden: toStringSafe(raw?.codigo_compra ?? raw?.numeroOrden),
     fecha: toStringSafe(raw?.fecha_solicitud ?? raw?.fecha),
-    fechaEntrega: toStringSafe(raw?.fecha_entrega),
     estado: toStringSafe(
       raw?.estado_compra?.nombre_estado ?? raw?.estado
     ) as CompraEstado,

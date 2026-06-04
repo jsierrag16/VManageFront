@@ -466,7 +466,6 @@ export default function Compras() {
     proveedorNumeroDocumento: "",
     terminoPagoId: "",
     fecha: "",
-    fechaEntrega: "",
     estado: "Pendiente" as CompraEstado,
     observaciones: "",
     bodega: "",
@@ -619,7 +618,6 @@ export default function Compras() {
       id_proveedor: Number(formData.proveedorId),
       id_termino_pago: Number(formData.terminoPagoId),
       descripcion: formData.observaciones.trim() || undefined,
-      fecha_entrega: formData.fechaEntrega || undefined,
       detalle: productosOrden.map((item) => ({
         id_producto: item.producto.id,
         cantidad: item.cantidad,
@@ -731,11 +729,76 @@ export default function Compras() {
         maximumFractionDigits: 2,
       })}`;
 
+    const formatIvaPorcentajePdf = (value: unknown) => {
+      const porcentaje = Number(value ?? 0);
+
+      if (!Number.isFinite(porcentaje)) return "0";
+
+      return porcentaje.toLocaleString("es-CO", {
+        minimumFractionDigits: porcentaje % 1 === 0 ? 0 : 2,
+        maximumFractionDigits: 2,
+      });
+    };
+
+    const getDocumentoProveedorPdf = () => {
+      const tipoDocumento = safeText(compra.proveedorTipoDocumento, "");
+      const numeroDocumento = safeText(compra.proveedorNumeroDocumento, "");
+
+      if (!tipoDocumento && !numeroDocumento) return "-";
+      if (!numeroDocumento) return tipoDocumento || "-";
+
+      return `${tipoDocumento || "Documento"}: ${numeroDocumento}`;
+    };
+
+    const calcularIvasPorPorcentajePdf = (
+      items: Compra["productos"] = []
+    ) => {
+      const impuestosMap = new Map<number, number>();
+
+      items.forEach((item) => {
+        const subtotal = Number(item.subtotal || 0);
+        const porcentaje = Number(item.ivaPorcentaje || 0);
+
+        if (!Number.isFinite(subtotal) || !Number.isFinite(porcentaje)) return;
+        if (porcentaje <= 0) return;
+
+        const valorIva = (subtotal * porcentaje) / 100;
+
+        impuestosMap.set(
+          porcentaje,
+          (impuestosMap.get(porcentaje) ?? 0) + valorIva
+        );
+      });
+
+      return Array.from(impuestosMap.entries())
+        .map(([porcentaje, valor]) => ({
+          porcentaje,
+          valor: Number(valor.toFixed(2)),
+        }))
+        .sort((a, b) => a.porcentaje - b.porcentaje);
+    };
+
     const formatDatePdf = (value?: string | Date | null) => {
       if (!value) return "-";
-      const date = new Date(value);
-      if (Number.isNaN(date.getTime())) return "-";
-      return date.toLocaleDateString("es-CO");
+
+      if (typeof value === "string") {
+        const soloFecha = value.split("T")[0];
+
+        if (/^\d{4}-\d{2}-\d{2}$/.test(soloFecha)) {
+          const [year, month, day] = soloFecha.split("-");
+          return `${day}/${month}/${year}`;
+        }
+      }
+
+      if (value instanceof Date) {
+        const year = value.getFullYear();
+        const month = String(value.getMonth() + 1).padStart(2, "0");
+        const day = String(value.getDate()).padStart(2, "0");
+
+        return `${day}/${month}/${year}`;
+      }
+
+      return "-";
     };
 
     const safeText = (value: unknown, fallback = "-") => {
@@ -779,6 +842,7 @@ export default function Compras() {
     const subtotalGeneral = Number(compra.subtotal || 0);
     const ivaGeneral = Number(compra.impuestos || 0);
     const totalGeneral = Number(compra.total || 0);
+    const ivasPorPorcentaje = calcularIvasPorPorcentajePdf(compra.productos ?? []);
 
     // Header
     doc.setFillColor(...COLORS.primary);
@@ -825,12 +889,6 @@ export default function Compras() {
     doc.text(`Fecha: ${formatDatePdf(compra.fecha)}`, rightX, 17.8, {
       align: "right",
     });
-    doc.text(
-      `Entrega: ${formatDatePdf(compra.fechaEntrega)}`,
-      rightX,
-      24.1,
-      { align: "right" }
-    );
 
     // Tarjeta información general
     doc.setFillColor(...COLORS.card);
@@ -852,11 +910,8 @@ export default function Compras() {
     doc.text("Proveedor:", marginX + 4, 56);
     doc.text(proveedorLines, marginX + 28, 56);
 
-    doc.text("Tipo Doc.:", marginX + 4, 65);
-    doc.text(safeText(compra.proveedorTipoDocumento), marginX + 28, 65);
-
-    doc.text("N° Documento:", marginX + 4, 74);
-    doc.text(safeText(compra.proveedorNumeroDocumento), marginX + 32, 74);
+    doc.text("Documento / NIT:", marginX + 4, 68);
+    doc.text(getDocumentoProveedorPdf(), marginX + 36, 68);
 
     doc.text("Bodega:", 112, 56);
     doc.text(safeText(compra.bodega), 128, 56);
@@ -894,7 +949,7 @@ export default function Compras() {
           return [
             detalleProducto,
             String(item.cantidad ?? 0),
-            `IVA (${Number(item.ivaPorcentaje || 0).toFixed(2)}%)`,
+            `IVA ${formatIvaPorcentajePdf(item.ivaPorcentaje)}%`,
             formatMoneyPdf(item.precio || 0),
             formatMoneyPdf(item.subtotal || 0),
           ];
@@ -967,7 +1022,11 @@ export default function Compras() {
       ? Math.max(24, 12 + observacionesLines.length * 4.5)
       : 0;
 
-    const totalsHeight = includePrices ? 31 : 0;
+    const ivaRowsCount = includePrices
+      ? Math.max(ivasPorPorcentaje.length, ivaGeneral > 0 ? 1 : 1)
+      : 0;
+
+    const totalsHeight = includePrices ? 32 + ivaRowsCount * 7 : 0;
     const blockHeight = Math.max(observacionesHeight, totalsHeight || 24);
 
     if (currentY + blockHeight > pageHeight - 24) {
@@ -1013,25 +1072,41 @@ export default function Compras() {
         { align: "right" }
       );
 
-      doc.text("IVA:", totalsX + 4, currentY + 15);
-      doc.text(
-        formatMoneyPdf(ivaGeneral),
-        totalsX + totalsWidth - 4,
-        currentY + 15,
-        { align: "right" }
-      );
+      const ivaRows =
+        ivasPorPorcentaje.length > 0
+          ? ivasPorPorcentaje
+          : [{ porcentaje: 0, valor: ivaGeneral }];
+
+      ivaRows.forEach((iva, index) => {
+        const rowY = currentY + 15 + index * 7;
+
+        const label =
+          Number(iva.porcentaje) > 0
+            ? `IVA ${formatIvaPorcentajePdf(iva.porcentaje)}%:`
+            : "IVA:";
+
+        doc.text(label, totalsX + 4, rowY);
+        doc.text(
+          formatMoneyPdf(iva.valor),
+          totalsX + totalsWidth - 4,
+          rowY,
+          { align: "right" }
+        );
+      });
+
+      const totalBoxY = currentY + 20 + ivaRows.length * 7;
 
       doc.setFillColor(...COLORS.primary);
-      doc.roundedRect(totalsX + 2, currentY + 20, totalsWidth - 4, 9, 2, 2, "F");
+      doc.roundedRect(totalsX + 2, totalBoxY, totalsWidth - 4, 9, 2, 2, "F");
 
       doc.setTextColor(255, 255, 255);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(10.5);
-      doc.text("TOTAL", totalsX + 5, currentY + 26);
+      doc.text("TOTAL", totalsX + 5, totalBoxY + 6);
       doc.text(
         formatMoneyPdf(totalGeneral),
         totalsX + totalsWidth - 4,
-        currentY + 26,
+        totalBoxY + 6,
         { align: "right" }
       );
     }
@@ -1096,7 +1171,6 @@ export default function Compras() {
       proveedorNumeroDocumento: "",
       terminoPagoId: "",
       fecha: getFechaActual(),
-      fechaEntrega: "",
       estado: "Pendiente",
       observaciones: "",
       bodega:
@@ -1136,7 +1210,6 @@ export default function Compras() {
       proveedorNumeroDocumento: compraDetalle.proveedorNumeroDocumento || "",
       terminoPagoId: String(compraDetalle.terminoPagoId || ""),
       fecha: toDateInputValue(compraDetalle.fecha),
-      fechaEntrega: toDateInputValue(compraDetalle.fechaEntrega),
       estado: compraDetalle.estado,
       observaciones: compraDetalle.observaciones || "",
       bodega: compraDetalle.bodega || "",
@@ -1286,16 +1359,6 @@ export default function Compras() {
 
     if (!formData.terminoPagoId) {
       toast.error("Debes seleccionar un término de pago");
-      return false;
-    }
-
-    if (!formData.fechaEntrega) {
-      toast.error("Debes ingresar la fecha de entrega");
-      return false;
-    }
-
-    if (formData.fechaEntrega < getFechaActual()) {
-      toast.error("La fecha de entrega no puede ser anterior a hoy");
       return false;
     }
 
@@ -1460,6 +1523,26 @@ export default function Compras() {
     });
   };
 
+  const renderDocumentoProveedorCompra = (compra: Compra) => {
+    const tipoDocumento = compra.proveedorTipoDocumento?.trim();
+    const numeroDocumento = compra.proveedorNumeroDocumento?.trim();
+
+    if (!tipoDocumento && !numeroDocumento) {
+      return <span className="text-gray-400">—</span>;
+    }
+
+    if (!numeroDocumento) {
+      return <span className="font-medium">{tipoDocumento || "Documento"}</span>;
+    }
+
+    return (
+      <>
+        <span className="font-medium">{tipoDocumento || "Documento"}:</span>{" "}
+        <span className="font-mono text-sm">{numeroDocumento}</span>
+      </>
+    );
+  };
+
   const formatFechaVista = (value?: string | Date | null) => {
     if (!value) return "-";
 
@@ -1614,8 +1697,9 @@ export default function Compras() {
                 <TableHead className="w-14">#</TableHead>
                 <TableHead>N° Orden</TableHead>
                 <TableHead>Proveedor</TableHead>
+                <TableHead>Documento / NIT</TableHead>
+                <TableHead>Bodega</TableHead>
                 <TableHead>Fecha</TableHead>
-                <TableHead>Fecha Entrega</TableHead>
                 <TableHead className="text-center">Items</TableHead>
                 <TableHead className="text-center">Estado</TableHead>
                 <TableHead className="w-32 text-center">Acciones</TableHead>
@@ -1625,14 +1709,14 @@ export default function Compras() {
             <TableBody>
               {isLoading || !hasResolvedBodega ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={9} className="text-center py-8 text-gray-500">
                     Cargando órdenes de compra...
                   </TableCell>
                 </TableRow>
               ) : filteredCompras.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={8}
+                    colSpan={9}
                     className="text-center py-8 text-gray-500"
                   >
                     <Package size={48} className="mx-auto mb-2 text-gray-300" />
@@ -1649,9 +1733,13 @@ export default function Compras() {
                       {compra.numeroOrden}
                     </TableCell>
                     <TableCell>{compra.proveedor}</TableCell>
+                    <TableCell className="text-gray-700">
+                      {renderDocumentoProveedorCompra(compra)}
+                    </TableCell>
+                    <TableCell className="text-gray-700">
+                      {compra.bodega || "—"}
+                    </TableCell>
                     <TableCell>{formatFechaVista(compra.fecha)}</TableCell>
-
-                    <TableCell>{formatFechaVista(compra.fechaEntrega)}</TableCell>
                     <TableCell className="text-center">
                       {compra.items}
                     </TableCell>
@@ -1660,12 +1748,12 @@ export default function Compras() {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleToggleEstado(compra)}
-                        disabled={compra.estado === "Anulada"}
-                        className={`h-7 ${compra.estado === "Aprobada"
-                          ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
+                        disabled={compra.estado !== "Pendiente"}
+                        className={`h-7 px-4 rounded-lg font-medium ${compra.estado === "Aprobada"
+                          ? "bg-green-100 text-green-700 hover:bg-green-50 cursor-default opacity-60"
                           : compra.estado === "Pendiente"
-                            ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                            : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
+                            ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200 cursor-pointer"
+                            : "bg-red-50 text-red-700 hover:bg-red-50 cursor-default opacity-60"
                           }`}
                       >
                         {compra.estado}
@@ -1808,96 +1896,71 @@ export default function Compras() {
           onInteractOutside={(e) => e.preventDefault()}
         >
           <DialogHeader className="space-y-2 pb-3">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <DialogTitle>Nueva Orden de Compra</DialogTitle>
-                <DialogDescription
-                  id="create-order-description"
-                  className="text-sm text-gray-500"
-                >
-                  Completa la información para crear una nueva orden de compra
-                </DialogDescription>
-              </div>
-
-              {formData.numeroOrden ? (
-                <div className="text-right">
-                  <p className="text-xs text-gray-500">Número de Orden</p>
-                  <p className="font-semibold text-gray-900">
-                    {formData.numeroOrden}
-                  </p>
-                </div>
-              ) : null}
-            </div>
+            <DialogTitle>Nueva Orden de Compra</DialogTitle>
+            <DialogDescription
+              id="create-order-description"
+              className="text-sm text-gray-500"
+            >
+              Completa la información para crear una nueva orden de compra
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-6 py-2">
             <div className="rounded-lg bg-gray-50 p-5">
-              <div className="mb-4">
-                <h3 className="font-semibold text-gray-900">Información general</h3>
-                <p className="text-sm text-gray-500">
-                  Define la fecha de entrega y la bodega de la compra
-                </p>
+              <div className="mb-4 flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="font-semibold text-gray-900">
+                    Información general
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    Define la bodega a la cual será asignada esta orden de compra
+                  </p>
+                </div>
+
+                <div className="shrink-0 rounded-lg border border-blue-100 bg-blue-50 px-4 py-2 text-right">
+                  <p className="text-xs font-medium text-blue-700">
+                    Fecha de Orden
+                  </p>
+                  <p className="text-sm font-semibold text-blue-900">
+                    {formatFechaVista(formData.fecha || getFechaActual())}
+                  </p>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                <div className="space-y-2">
-                  <Label>Fecha de Orden</Label>
-                  <Input
-                    value={formData.fecha || getFechaActual()}
-                    readOnly
-                    className={readonlyFieldClass}
-                  />
-                </div>
+              <div className="max-w-xl space-y-2">
+                <Label htmlFor="bodega">Bodega *</Label>
+                <Select
+                  value={formData.bodegaId}
+                  onValueChange={(value: string) => {
+                    const bodegaSeleccionada = bodegasActivas.find(
+                      (bodega) => String(bodega.id) === value
+                    );
 
-                <div className="space-y-2">
-                  <Label htmlFor="fechaEntrega">Fecha de Entrega *</Label>
-                  <Input
-                    id="fechaEntrega"
-                    type="date"
-                    min={getFechaActual()}
-                    value={formData.fechaEntrega}
-                    onChange={(e) =>
-                      setFormData({ ...formData, fechaEntrega: e.target.value })
-                    }
-                    className={fieldClass}
-                  />
-                </div>
+                    setFormData({
+                      ...formData,
+                      bodegaId: value,
+                      bodega: bodegaSeleccionada?.nombre || "",
+                    });
+                  }}
+                >
+                  <SelectTrigger id="bodega" className={fieldClass}>
+                    <SelectValue placeholder="Selecciona una bodega" />
+                  </SelectTrigger>
 
-                <div className="space-y-2">
-                  <Label htmlFor="bodega">Bodega *</Label>
-                  <Select
-                    value={formData.bodegaId}
-                    onValueChange={(value: string) => {
-                      const bodegaSeleccionada = bodegasActivas.find(
-                        (bodega) => String(bodega.id) === value
-                      );
-
-                      setFormData({
-                        ...formData,
-                        bodegaId: value,
-                        bodega: bodegaSeleccionada?.nombre || "",
-                      });
-                    }}
-                  >
-                    <SelectTrigger id="bodega" className={fieldClass}>
-                      <SelectValue placeholder="Selecciona una bodega" />
-                    </SelectTrigger>
-
-                    <SelectContent>
-                      {bodegasActivas.length === 0 ? (
-                        <div className="px-3 py-2 text-sm text-gray-500">
-                          No hay bodegas disponibles
-                        </div>
-                      ) : (
-                        bodegasActivas.map((bodega) => (
-                          <SelectItem key={bodega.id} value={String(bodega.id)}>
-                            {bodega.nombre}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
+                  <SelectContent>
+                    {bodegasActivas.length === 0 ? (
+                      <div className="px-3 py-2 text-sm text-gray-500">
+                        No hay bodegas disponibles
+                      </div>
+                    ) : (
+                      bodegasActivas.map((bodega) => (
+                        <SelectItem key={bodega.id} value={String(bodega.id)}>
+                          {bodega.nombre}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -2099,7 +2162,7 @@ export default function Compras() {
                           </TableCell>
 
                           <TableCell className="text-center">
-                            {formatIvaPorcentaje(item.ivaPorcentaje)}%
+                            IVA {formatIvaPorcentaje(item.ivaPorcentaje)}%
                           </TableCell>
 
                           <TableCell className="text-right">
@@ -2234,260 +2297,6 @@ export default function Compras() {
       </Dialog>
 
       <Dialog
-        open={isVer}
-        onOpenChange={(open) => {
-          if (!open) closeToList();
-        }}
-      >
-        <DialogContent
-          className="max-w-6xl max-h-[90vh] overflow-y-auto"
-          aria-describedby="view-order-description"
-          onInteractOutside={(e) => e.preventDefault()}
-        >
-          <DialogHeader className="space-y-2 pb-3">
-            <DialogTitle>Detalles de la Orden de Compra</DialogTitle>
-            <DialogDescription id="view-order-description">
-              Información completa de la orden de compra
-            </DialogDescription>
-          </DialogHeader>
-
-          {isLoadingDetail ? (
-            <div className="py-8 text-center text-gray-500">
-              Cargando detalle de la orden...
-            </div>
-          ) : compraSeleccionada ? (
-            <div className="space-y-6 py-2">
-              <div className="grid grid-cols-1 gap-x-10 gap-y-5 rounded-lg bg-gray-50 p-5 md:grid-cols-2">
-                <div>
-                  <p className="text-sm text-gray-600">N° de Orden</p>
-                  <p className="font-medium text-blue-600">
-                    {compraSeleccionada.numeroOrden || "-"}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-600">Estado</p>
-                  <div className="mt-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleToggleEstado(compraSeleccionada)}
-                      disabled={compraSeleccionada.estado === "Anulada"}
-                      className={`h-7 px-3 ${compraSeleccionada.estado === "Aprobada"
-                        ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
-                        : compraSeleccionada.estado === "Pendiente"
-                          ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                          : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
-                        }`}
-                    >
-                      {compraSeleccionada.estado}
-                    </Button>
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-600">Proveedor</p>
-                  <p className="font-medium">
-                    {compraSeleccionada.proveedor || "-"}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-600">Documento / NIT</p>
-                  <p>
-                    {compraSeleccionada.proveedorNumeroDocumento ? (
-                      <>
-                        <span className="font-medium">
-                          {compraSeleccionada.proveedorTipoDocumento || "Documento"}:
-                        </span>{" "}
-                        <span className="font-mono text-sm">
-                          {compraSeleccionada.proveedorNumeroDocumento}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="font-medium">-</span>
-                    )}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-600">Bodega</p>
-                  <p className="font-medium">
-                    {compraSeleccionada.bodega || "-"}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-600">Término de Pago</p>
-                  <p className="font-medium">
-                    {compraSeleccionada.terminoPago || "-"}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-600">Fecha de Orden</p>
-                  <p className="font-medium">
-                    {formatFechaVista(compraSeleccionada.fecha)}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-600">Fecha de Entrega</p>
-                  <p className="font-medium">
-                    {formatFechaVista(compraSeleccionada.fechaEntrega)}
-                  </p>
-                </div>
-              </div>
-
-              <div>
-                <div className="mb-3 flex items-center justify-between">
-                  <div>
-                    <h3 className="font-semibold text-gray-900">
-                      Productos de la Orden
-                    </h3>
-                    <p className="text-sm text-gray-500">
-                      {compraSeleccionada.productos?.length || 0} producto
-                      {(compraSeleccionada.productos?.length || 0) !== 1 ? "s" : ""} registrado
-                      {(compraSeleccionada.productos?.length || 0) !== 1 ? "s" : ""}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="overflow-hidden rounded-lg border border-gray-200">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-gray-50">
-                        <TableHead>Producto</TableHead>
-                        <TableHead className="text-center">Cantidad</TableHead>
-                        <TableHead className="text-center">IVA</TableHead>
-                        <TableHead className="text-right">Precio Unit.</TableHead>
-                        <TableHead className="text-right">Subtotal</TableHead>
-                      </TableRow>
-                    </TableHeader>
-
-                    <TableBody>
-                      {!compraSeleccionada.productos ||
-                        compraSeleccionada.productos.length === 0 ? (
-                        <TableRow>
-                          <TableCell
-                            colSpan={5}
-                            className="py-6 text-center text-gray-500"
-                          >
-                            No hay productos registrados
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        compraSeleccionada.productos.map((item, index) => (
-                          <TableRow key={`${item.producto.id}-${index}`}>
-                            <TableCell className="font-medium text-gray-900">
-                              {item.producto.nombre || "-"}
-                            </TableCell>
-
-                            <TableCell className="text-center">
-                              {item.cantidad}
-                            </TableCell>
-
-                            <TableCell className="text-center">
-                              {formatIvaPorcentaje(item.ivaPorcentaje)}%
-                            </TableCell>
-
-                            <TableCell className="text-right">
-                              {formatCop(item.precio)}
-                            </TableCell>
-
-                            <TableCell className="text-right font-medium">
-                              {formatCop(item.subtotal)}
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-
-                  <div className="flex justify-end border-t bg-gray-50 px-4 py-3">
-                    <div className="w-full max-w-sm space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">N° de Items:</span>
-                        <span className="font-medium">
-                          {compraSeleccionada.items}
-                        </span>
-                      </div>
-
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Subtotal:</span>
-                        <span className="font-medium">
-                          {formatCop(compraSeleccionada.subtotal)}
-                        </span>
-                      </div>
-
-                      {getIvasCompra(compraSeleccionada).length > 0 ? (
-                        getIvasCompra(compraSeleccionada).map((iva) => (
-                          <div
-                            key={iva.porcentaje}
-                            className="flex justify-between text-sm"
-                          >
-                            <span className="text-gray-600">
-                              IVA {formatIvaPorcentaje(iva.porcentaje)}%:
-                            </span>
-                            <span className="font-medium">
-                              {formatCop(iva.valor)}
-                            </span>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">IVA:</span>
-                          <span className="font-medium">{formatCop(0)}</span>
-                        </div>
-                      )}
-
-                      <div className="flex justify-between border-t pt-2 text-base">
-                        <span className="font-semibold">Total:</span>
-                        <span className="font-bold text-blue-600">
-                          {formatCop(compraSeleccionada.total)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {compraSeleccionada.observaciones && (
-                <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
-                  <p className="mb-1 text-sm font-semibold text-yellow-800">
-                    Observaciones
-                  </p>
-                  <p className="whitespace-pre-wrap text-sm text-yellow-900">
-                    {compraSeleccionada.observaciones}
-                  </p>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="py-8 text-center text-gray-500">
-              No se encontró la orden de compra
-            </div>
-          )}
-
-          <DialogFooter className="mt-2 border-t pt-4">
-            {compraSeleccionada && (
-              <Button
-                onClick={() => handleOpenPdfOptions(compraSeleccionada)}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                <Download size={16} className="mr-2" />
-                Descargar PDF
-              </Button>
-            )}
-
-            <Button variant="outline" onClick={closeToList}>
-              Cerrar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
         open={isEditar}
         onOpenChange={(open) => {
           if (!open) closeToList();
@@ -2518,11 +2327,11 @@ export default function Compras() {
                       Información general
                     </h3>
                     <p className="text-sm text-gray-500">
-                      Define la fecha de entrega y la bodega de la compra
+                      Define la bodega a la cual será asignada esta orden de compra
                     </p>
                   </div>
 
-                  <div className="flex flex-wrap items-center justify-end gap-2">
+                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                     <Badge
                       variant="outline"
                       className="border-blue-200 bg-blue-50 text-blue-700"
@@ -2542,71 +2351,52 @@ export default function Compras() {
                     >
                       {formData.estado}
                     </Badge>
+
+                    <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-2 text-right">
+                      <p className="text-xs font-medium text-blue-700">
+                        Fecha de Orden
+                      </p>
+                      <p className="text-sm font-semibold text-blue-900">
+                        {formatFechaVista(formData.fecha)}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-fecha">Fecha de Orden</Label>
-                    <Input
-                      id="edit-fecha"
-                      type="date"
-                      value={formData.fecha}
-                      readOnly
-                      disabled
-                      className={readonlyFieldClass}
-                    />
-                  </div>
+                <div className="max-w-xl space-y-2">
+                  <Label htmlFor="edit-bodega">Bodega *</Label>
+                  <Select
+                    value={formData.bodegaId}
+                    onValueChange={(value: string) => {
+                      const bodegaSeleccionada = bodegasActivas.find(
+                        (bodega) => String(bodega.id) === value
+                      );
 
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-fechaEntrega">Fecha de Entrega *</Label>
-                    <Input
-                      id="edit-fechaEntrega"
-                      type="date"
-                      min={getFechaActual()}
-                      value={formData.fechaEntrega}
-                      onChange={(e) =>
-                        setFormData({ ...formData, fechaEntrega: e.target.value })
-                      }
-                      className={fieldClass}
-                    />
-                  </div>
+                      setFormData({
+                        ...formData,
+                        bodegaId: value,
+                        bodega: bodegaSeleccionada?.nombre || "",
+                      });
+                    }}
+                  >
+                    <SelectTrigger id="edit-bodega" className={fieldClass}>
+                      <SelectValue placeholder="Selecciona una bodega" />
+                    </SelectTrigger>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-bodega">Bodega *</Label>
-                    <Select
-                      value={formData.bodegaId}
-                      onValueChange={(value: string) => {
-                        const bodegaSeleccionada = bodegasActivas.find(
-                          (bodega) => String(bodega.id) === value
-                        );
-
-                        setFormData({
-                          ...formData,
-                          bodegaId: value,
-                          bodega: bodegaSeleccionada?.nombre || "",
-                        });
-                      }}
-                    >
-                      <SelectTrigger id="edit-bodega" className={fieldClass}>
-                        <SelectValue placeholder="Selecciona una bodega" />
-                      </SelectTrigger>
-
-                      <SelectContent>
-                        {bodegasActivas.length === 0 ? (
-                          <div className="px-3 py-2 text-sm text-gray-500">
-                            No hay bodegas disponibles
-                          </div>
-                        ) : (
-                          bodegasActivas.map((bodega) => (
-                            <SelectItem key={bodega.id} value={String(bodega.id)}>
-                              {bodega.nombre}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                    <SelectContent>
+                      {bodegasActivas.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-gray-500">
+                          No hay bodegas disponibles
+                        </div>
+                      ) : (
+                        bodegasActivas.map((bodega) => (
+                          <SelectItem key={bodega.id} value={String(bodega.id)}>
+                            {bodega.nombre}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -2796,7 +2586,7 @@ export default function Compras() {
                             </TableCell>
 
                             <TableCell className="text-center">
-                              {formatIvaPorcentaje(item.ivaPorcentaje)}%
+                              IVA {formatIvaPorcentaje(item.ivaPorcentaje)}%
                             </TableCell>
 
                             <TableCell className="text-right">
@@ -2931,6 +2721,253 @@ export default function Compras() {
               className="bg-orange-600 hover:bg-orange-700"
             >
               {isSaving ? "Actualizando..." : "Guardar Cambios"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isVer}
+        onOpenChange={(open) => {
+          if (!open) closeToList();
+        }}
+      >
+        <DialogContent
+          className="max-w-6xl max-h-[90vh] overflow-y-auto"
+          aria-describedby="view-order-description"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
+          <DialogHeader className="space-y-2 pb-3">
+            <DialogTitle>Detalles de la Orden de Compra</DialogTitle>
+            <DialogDescription id="view-order-description">
+              Información completa de la orden de compra
+            </DialogDescription>
+          </DialogHeader>
+
+          {isLoadingDetail ? (
+            <div className="py-8 text-center text-gray-500">
+              Cargando detalle de la orden...
+            </div>
+          ) : compraSeleccionada ? (
+            <div className="space-y-6 py-2">
+              <div className="grid grid-cols-1 gap-x-10 gap-y-5 rounded-lg bg-gray-50 p-5 md:grid-cols-2">
+                <div>
+                  <p className="text-sm text-gray-600">N° de Orden</p>
+                  <p className="font-medium text-blue-600">
+                    {compraSeleccionada.numeroOrden || "-"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-sm text-gray-600">Estado</p>
+                  <div className="mt-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleToggleEstado(compraSeleccionada)}
+                      disabled={compraSeleccionada.estado === "Anulada"}
+                      className={`h-7 px-3 ${compraSeleccionada.estado === "Aprobada"
+                        ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
+                        : compraSeleccionada.estado === "Pendiente"
+                          ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                          : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
+                        }`}
+                    >
+                      {compraSeleccionada.estado}
+                    </Button>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-sm text-gray-600">Proveedor</p>
+                  <p className="font-medium">
+                    {compraSeleccionada.proveedor || "-"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-sm text-gray-600">Documento / NIT</p>
+                  <p>
+                    {compraSeleccionada.proveedorNumeroDocumento ? (
+                      <>
+                        <span className="font-medium">
+                          {compraSeleccionada.proveedorTipoDocumento || "Documento"}:
+                        </span>{" "}
+                        <span className="font-mono text-sm">
+                          {compraSeleccionada.proveedorNumeroDocumento}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="font-medium">-</span>
+                    )}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-sm text-gray-600">Bodega</p>
+                  <p className="font-medium">
+                    {compraSeleccionada.bodega || "-"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-sm text-gray-600">Término de Pago</p>
+                  <p className="font-medium">
+                    {compraSeleccionada.terminoPago || "-"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-sm text-gray-600">Fecha de Orden</p>
+                  <p className="font-medium">
+                    {formatFechaVista(compraSeleccionada.fecha)}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">
+                      Productos de la Orden
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      {compraSeleccionada.productos?.length || 0} producto
+                      {(compraSeleccionada.productos?.length || 0) !== 1 ? "s" : ""} registrado
+                      {(compraSeleccionada.productos?.length || 0) !== 1 ? "s" : ""}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="overflow-hidden rounded-lg border border-gray-200">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-gray-50">
+                        <TableHead>Producto</TableHead>
+                        <TableHead className="text-center">Cantidad</TableHead>
+                        <TableHead className="text-center">IVA</TableHead>
+                        <TableHead className="text-right">Precio Unit.</TableHead>
+                        <TableHead className="text-right">Subtotal</TableHead>
+                      </TableRow>
+                    </TableHeader>
+
+                    <TableBody>
+                      {!compraSeleccionada.productos ||
+                        compraSeleccionada.productos.length === 0 ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={5}
+                            className="py-6 text-center text-gray-500"
+                          >
+                            No hay productos registrados
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        compraSeleccionada.productos.map((item, index) => (
+                          <TableRow key={`${item.producto.id}-${index}`}>
+                            <TableCell className="font-medium text-gray-900">
+                              {item.producto.nombre || "-"}
+                            </TableCell>
+
+                            <TableCell className="text-center">
+                              {item.cantidad}
+                            </TableCell>
+
+                            <TableCell className="text-center">
+                              {formatIvaPorcentaje(item.ivaPorcentaje)}%
+                            </TableCell>
+
+                            <TableCell className="text-right">
+                              {formatCop(item.precio)}
+                            </TableCell>
+
+                            <TableCell className="text-right font-medium">
+                              {formatCop(item.subtotal)}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+
+                  <div className="flex justify-end border-t bg-gray-50 px-4 py-3">
+                    <div className="w-full max-w-sm space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">N° de Items:</span>
+                        <span className="font-medium">
+                          {compraSeleccionada.items}
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Subtotal:</span>
+                        <span className="font-medium">
+                          {formatCop(compraSeleccionada.subtotal)}
+                        </span>
+                      </div>
+
+                      {getIvasCompra(compraSeleccionada).length > 0 ? (
+                        getIvasCompra(compraSeleccionada).map((iva) => (
+                          <div
+                            key={iva.porcentaje}
+                            className="flex justify-between text-sm"
+                          >
+                            <span className="text-gray-600">
+                              IVA {formatIvaPorcentaje(iva.porcentaje)}%:
+                            </span>
+                            <span className="font-medium">
+                              {formatCop(iva.valor)}
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">IVA:</span>
+                          <span className="font-medium">{formatCop(0)}</span>
+                        </div>
+                      )}
+
+                      <div className="flex justify-between border-t pt-2 text-base">
+                        <span className="font-semibold">Total:</span>
+                        <span className="font-bold text-blue-600">
+                          {formatCop(compraSeleccionada.total)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {compraSeleccionada.observaciones && (
+                <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+                  <p className="mb-1 text-sm font-semibold text-yellow-800">
+                    Observaciones
+                  </p>
+                  <p className="whitespace-pre-wrap text-sm text-yellow-900">
+                    {compraSeleccionada.observaciones}
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="py-8 text-center text-gray-500">
+              No se encontró la orden de compra
+            </div>
+          )}
+
+          <DialogFooter className="mt-2 border-t pt-4">
+            {compraSeleccionada && (
+              <Button
+                onClick={() => handleOpenPdfOptions(compraSeleccionada)}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Download size={16} className="mr-2" />
+                Descargar PDF
+              </Button>
+            )}
+
+            <Button variant="outline" onClick={closeToList}>
+              Cerrar
             </Button>
           </DialogFooter>
         </DialogContent>

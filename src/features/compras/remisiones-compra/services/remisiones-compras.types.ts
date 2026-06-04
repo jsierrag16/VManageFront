@@ -19,10 +19,17 @@ export type RemisionCompraUI = {
   id: number;
   numeroRemision: string;
   fecha: string;
-  fechaVencimiento: string;
   observaciones: string;
   ordenCompraId: number;
   ordenCompra: string;
+
+  fechaAplicacionExistencias: string;
+  idUsuarioAplicoExistencias: number | null;
+  usuarioAplicoExistencias: string;
+
+  fechaAnulacion: string;
+  idUsuarioAnulo: number | null;
+  usuarioAnulo: string;
 
   proveedorId: number;
   proveedor: string;
@@ -34,10 +41,8 @@ export type RemisionCompraUI = {
   estadoKey: EstadoRemisionKey;
 
   idUsuarioCreador: number;
-  idFactura: number | null;
+  codigoFactura: string;
   afectaExistencias: boolean;
-  fechaAplicacionExistencias: string;
-  idUsuarioAplicoExistencias: number | null;
 
   idBodega: number;
   bodega: string;
@@ -86,8 +91,7 @@ export type CreateRemisionCompraPayload = {
   id_compra: number;
   id_proveedor: number;
   id_bodega: number;
-  id_factura?: number;
-  fecha_vencimiento?: string;
+  codigo_factura?: string;
   observaciones?: string;
   detalle_remision_compra: Array<{
     id_producto: number;
@@ -102,8 +106,7 @@ export type CreateRemisionCompraPayload = {
 };
 
 export type UpdateRemisionCompraPayload = {
-  id_factura?: number | null;
-  fecha_vencimiento?: string | null;
+  codigo_factura?: string | null;
   observaciones?: string;
   detalle_remision_compra?: Array<{
     id_producto: number;

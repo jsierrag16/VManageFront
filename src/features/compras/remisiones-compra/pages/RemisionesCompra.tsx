@@ -97,9 +97,8 @@ type FormState = {
   id_bodega: string;
   bodega: string;
   fechaCreacion: string;
-  fechaVencimiento: string;
   observaciones: string;
-  idFactura: string;
+  codigoFactura: string;
 };
 
 const makeLocalId = () => {
@@ -137,19 +136,73 @@ const getErrorMessage = (error: unknown, fallback: string) => {
   return fallback;
 };
 
-const formatDate = (value?: string) => {
+const formatDate = (value?: string | null) => {
   if (!value) return "—";
+
+  const soloFecha = String(value).split("T")[0];
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(soloFecha)) {
+    const [year, month, day] = soloFecha.split("-");
+    return `${day}/${month}/${year}`;
+  }
+
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
+
   return d.toLocaleDateString("es-CO");
 };
 
 const formatMoney = (value: number) =>
-  new Intl.NumberFormat("es-CO", {
-    style: "currency",
-    currency: "COP",
+  `COP$${Number(value || 0).toLocaleString("es-CO", {
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(value || 0);
+  })}`;
+
+const renderDocumentoProveedorRemision = (remision: RemisionCompraUI) => {
+  const tipoDocumento = remision.proveedorTipoDocumento?.trim();
+  const numeroDocumento = remision.proveedorNumeroDocumento?.trim();
+
+  if (!tipoDocumento && !numeroDocumento) {
+    return <span className="text-gray-400">—</span>;
+  }
+
+  if (!numeroDocumento) {
+    return <span className="font-medium">{tipoDocumento || "Documento"}</span>;
+  }
+
+  return (
+    <>
+      <span className="font-medium">{tipoDocumento || "Documento"}:</span>{" "}
+      <span className="font-mono text-sm">{numeroDocumento}</span>
+    </>
+  );
+};
+
+const getFechaAprobadaRemision = (remision: RemisionCompraUI) => {
+  const remisionConFechas = remision as RemisionCompraUI & {
+    fechaAplicacionExistencias?: string | null;
+    fecha_aplicacion_existencias?: string | null;
+    fechaAprobada?: string | null;
+    fecha_aprobada?: string | null;
+    fechaAprobacion?: string | null;
+    fecha_aprobacion?: string | null;
+    fechaAplicacion?: string | null;
+    fecha_aplicacion?: string | null;
+  };
+
+  return (
+    remision.fechaAplicacionExistencias ||
+    remisionConFechas.fechaAplicacionExistencias ||
+    remisionConFechas.fecha_aplicacion_existencias ||
+    remisionConFechas.fechaAprobada ||
+    remisionConFechas.fecha_aprobada ||
+    remisionConFechas.fechaAprobacion ||
+    remisionConFechas.fecha_aprobacion ||
+    remisionConFechas.fechaAplicacion ||
+    remisionConFechas.fecha_aplicacion ||
+    ""
+  );
+};
 
 const normalizeText = (value: unknown) =>
   String(value ?? "")
@@ -169,9 +222,8 @@ const buildEmptyForm = (): FormState => ({
   id_bodega: "",
   bodega: "",
   fechaCreacion: new Date().toISOString().split("T")[0],
-  fechaVencimiento: "",
   observaciones: "",
-  idFactura: "",
+  codigoFactura: "",
 });
 
 const MAX_OBSERVACIONES_LENGTH = 255;
@@ -616,10 +668,8 @@ export default function RemisionesCompra() {
       numeroRemisionFallback?: string;
       keepObservaciones?: boolean;
       observaciones?: string;
-      keepFechaVencimiento?: boolean;
-      fechaVencimiento?: string;
-      keepIdFactura?: boolean;
-      idFactura?: string;
+      keepCodigoFactura?: boolean;
+      codigoFactura?: string;
     }
   ) => {
     setSelectedCompra(compra);
@@ -629,33 +679,34 @@ export default function RemisionesCompra() {
       numeroRemision:
         options?.keepNumeroRemision === true
           ? prev.numeroRemision ||
-            options?.numeroRemisionFallback ||
-            compra.numeroRemisionSugerido ||
-            ""
+          options?.numeroRemisionFallback ||
+          compra.numeroRemisionSugerido ||
+          ""
           : compra.numeroRemisionSugerido ||
-            prev.numeroRemision ||
-            options?.numeroRemisionFallback ||
-            "",
+          prev.numeroRemision ||
+          options?.numeroRemisionFallback ||
+          "",
+
       id_compra: String(compra.id),
       ordenCompra: compra.codigo,
+
       id_proveedor: String(compra.proveedorId),
       proveedor: compra.proveedorNombre,
       proveedorTipoDocumento: compra.proveedorTipoDocumento || "",
       proveedorNumeroDocumento: compra.proveedorNumeroDocumento || "",
+
       id_bodega: String(compra.idBodega),
       bodega: compra.bodegaNombre,
-      fechaVencimiento:
-        options?.keepFechaVencimiento === true
-          ? options?.fechaVencimiento ?? prev.fechaVencimiento
-          : prev.fechaVencimiento,
+
       observaciones:
         options?.keepObservaciones === true
           ? options?.observaciones ?? prev.observaciones
           : prev.observaciones,
-      idFactura:
-        options?.keepIdFactura === true
-          ? options?.idFactura ?? prev.idFactura
-          : prev.idFactura,
+
+      codigoFactura:
+        options?.keepCodigoFactura === true
+          ? options?.codigoFactura ?? prev.codigoFactura
+          : prev.codigoFactura,
     }));
   };
 
@@ -666,6 +717,7 @@ export default function RemisionesCompra() {
     }
 
     const id = Number(params.id);
+
     if (!Number.isFinite(id)) {
       closeToList();
       return;
@@ -675,8 +727,10 @@ export default function RemisionesCompra() {
 
     const run = async () => {
       setLoadingDetalleRemision(true);
+
       try {
         const remision = await getRemisionCompraById(id);
+
         if (cancelled) return;
 
         setSelectedRemision(remision);
@@ -686,17 +740,20 @@ export default function RemisionesCompra() {
             numeroRemision: remision.numeroRemision,
             id_compra: String(remision.ordenCompraId),
             ordenCompra: remision.ordenCompra,
+
             id_proveedor: String(remision.proveedorId),
             proveedor: remision.proveedor,
             proveedorTipoDocumento: remision.proveedorTipoDocumento || "",
             proveedorNumeroDocumento: remision.proveedorNumeroDocumento || "",
+
             id_bodega: String(remision.idBodega),
             bodega: remision.bodega,
+
             fechaCreacion:
               remision.fecha || new Date().toISOString().split("T")[0],
-            fechaVencimiento: remision.fechaVencimiento || "",
+
             observaciones: remision.observaciones || "",
-            idFactura: remision.idFactura ? String(remision.idFactura) : "",
+            codigoFactura: remision.codigoFactura || "",
           });
 
           setItems(
@@ -720,15 +777,16 @@ export default function RemisionesCompra() {
 
             if (!cancelled) {
               setSelectedCompra(compra);
+
               applyCompraToForm(compra, {
                 keepNumeroRemision: true,
                 numeroRemisionFallback: remision.numeroRemision,
+
                 keepObservaciones: true,
                 observaciones: remision.observaciones || "",
-                keepFechaVencimiento: true,
-                fechaVencimiento: remision.fechaVencimiento || "",
-                keepIdFactura: true,
-                idFactura: remision.idFactura ? String(remision.idFactura) : "",
+
+                keepCodigoFactura: true,
+                codigoFactura: remision.codigoFactura || "",
               });
             }
           } catch {
@@ -741,7 +799,110 @@ export default function RemisionesCompra() {
         toast.error(getErrorMessage(error, "No fue posible cargar la remisión"));
         closeToList();
       } finally {
-        if (!cancelled) setLoadingDetalleRemision(false);
+        if (!cancelled) {
+          setLoadingDetalleRemision(false);
+        }
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [params.id, isVer, isEditar, isAnular]);
+
+  useEffect(() => {
+    if (!isVer && !isEditar && !isAnular) {
+      setSelectedRemision(null);
+      return;
+    }
+
+    const id = Number(params.id);
+    if (!Number.isFinite(id)) {
+      closeToList();
+      return;
+    }
+
+    let cancelled = false;
+
+    const run = async () => {
+      setLoadingDetalleRemision(true);
+
+      try {
+        const remision = await getRemisionCompraById(id);
+
+        if (cancelled) return;
+
+        setSelectedRemision(remision);
+
+        if (isEditar) {
+          setFormData({
+            numeroRemision: remision.numeroRemision,
+            id_compra: String(remision.ordenCompraId),
+            ordenCompra: remision.ordenCompra,
+
+            id_proveedor: String(remision.proveedorId),
+            proveedor: remision.proveedor,
+            proveedorTipoDocumento: remision.proveedorTipoDocumento || "",
+            proveedorNumeroDocumento: remision.proveedorNumeroDocumento || "",
+
+            id_bodega: String(remision.idBodega),
+            bodega: remision.bodega,
+
+            fechaCreacion:
+              remision.fecha || new Date().toISOString().split("T")[0],
+
+            observaciones: remision.observaciones || "",
+            codigoFactura: remision.codigoFactura || "",
+          });
+
+          setItems(
+            remision.items.map((item) => ({
+              localId: makeLocalId(),
+              id_producto: item.id_producto,
+              productoNombre: item.productoNombre,
+              cantidad: String(item.cantidad),
+              precio_unitario: item.precio_unitario,
+              id_iva: item.id_iva,
+              ivaPorcentaje: item.ivaPorcentaje,
+              lote: item.lote || "",
+              fecha_vencimiento: item.fecha_vencimiento || "",
+              codigo_barras: item.codigo_barras || item.cod_barras || "",
+              nota: item.nota || "",
+            }))
+          );
+
+          try {
+            const compra = await getCompraById(remision.ordenCompraId);
+
+            if (!cancelled) {
+              setSelectedCompra(compra);
+
+              applyCompraToForm(compra, {
+                keepNumeroRemision: true,
+                numeroRemisionFallback: remision.numeroRemision,
+
+                keepObservaciones: true,
+                observaciones: remision.observaciones || "",
+
+                keepCodigoFactura: true,
+                codigoFactura: remision.codigoFactura || "",
+              });
+            }
+          } catch {
+            //
+          }
+
+          resetItemBuilder();
+        }
+      } catch (error) {
+        toast.error(getErrorMessage(error, "No fue posible cargar la remisión"));
+        closeToList();
+      } finally {
+        if (!cancelled) {
+          setLoadingDetalleRemision(false);
+        }
       }
     };
 
@@ -757,7 +918,6 @@ export default function RemisionesCompra() {
 
     return remisiones.filter((remision) => {
       if (!q) return true;
-
       return [
         remision.numeroRemision,
         remision.ordenCompra,
@@ -766,6 +926,9 @@ export default function RemisionesCompra() {
         remision.proveedorNumeroDocumento,
         remision.estado,
         remision.bodega,
+        remision.fecha,
+        remision.fechaAplicacionExistencias,
+        remision.usuarioAplicoExistencias,
         String(remision.itemsCount),
       ].some((field) => normalizeText(field).includes(q));
     });
@@ -814,6 +977,128 @@ export default function RemisionesCompra() {
     });
   }, [selectedCompra, items]);
 
+  const proveedoresConComprasPendientes = useMemo(() => {
+    const map = new Map<
+      number,
+      {
+        id: number;
+        nombre: string;
+        tipoDocumento: string;
+        numeroDocumento: string;
+      }
+    >();
+
+    comprasOptions.forEach((compra) => {
+      if (!compra.proveedorId) return;
+
+      if (!map.has(compra.proveedorId)) {
+        map.set(compra.proveedorId, {
+          id: compra.proveedorId,
+          nombre: compra.proveedorNombre,
+          tipoDocumento: compra.proveedorTipoDocumento,
+          numeroDocumento: compra.proveedorNumeroDocumento,
+        });
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) =>
+      a.nombre.localeCompare(b.nombre, "es")
+    );
+  }, [comprasOptions]);
+
+  const comprasPendientesFiltradas = useMemo(() => {
+    if (!formData.id_proveedor) return comprasOptions;
+
+    return comprasOptions.filter(
+      (compra) => String(compra.proveedorId) === String(formData.id_proveedor)
+    );
+  }, [comprasOptions, formData.id_proveedor]);
+
+  const getDocumentoProveedorTexto = () => {
+    const tipo = formData.proveedorTipoDocumento?.trim();
+    const numero = formData.proveedorNumeroDocumento?.trim();
+
+    if (!tipo && !numero) return "";
+
+    return `${tipo || "Documento"}${numero ? `: ${numero}` : ""}`;
+  };
+
+  const formatIvaPorcentaje = (value: unknown) => {
+    const porcentaje = Number(value ?? 0);
+
+    if (!Number.isFinite(porcentaje)) return "0";
+
+    return porcentaje.toLocaleString("es-CO", {
+      minimumFractionDigits: porcentaje % 1 === 0 ? 0 : 2,
+      maximumFractionDigits: 2,
+    });
+  };
+
+  const resumenFormulario = useMemo(() => {
+    const subtotal = items.reduce((acc, item) => {
+      const cantidad = Number(item.cantidad || 0);
+      const precio = Number(item.precio_unitario || 0);
+
+      return acc + cantidad * precio;
+    }, 0);
+
+    const ivaMap = new Map<number, number>();
+
+    items.forEach((item) => {
+      const cantidad = Number(item.cantidad || 0);
+      const precio = Number(item.precio_unitario || 0);
+      const porcentaje = Number(item.ivaPorcentaje || 0);
+      const subtotalItem = cantidad * precio;
+      const valorIva = subtotalItem * (porcentaje / 100);
+
+      if (porcentaje > 0) {
+        ivaMap.set(porcentaje, (ivaMap.get(porcentaje) || 0) + valorIva);
+      }
+    });
+
+    const ivas = Array.from(ivaMap.entries())
+      .map(([porcentaje, valor]) => ({
+        porcentaje,
+        valor,
+      }))
+      .sort((a, b) => a.porcentaje - b.porcentaje);
+
+    const totalIva = ivas.reduce((acc, iva) => acc + iva.valor, 0);
+    const total = subtotal + totalIva;
+
+    return {
+      items: items.length,
+      subtotal,
+      ivas,
+      totalIva,
+      total,
+    };
+  }, [items]);
+
+  const totalFormulario = resumenFormulario.total;
+
+  const handleProveedorChange = (idProveedorValue: string) => {
+    const proveedorSeleccionado = proveedoresConComprasPendientes.find(
+      (proveedor) => String(proveedor.id) === idProveedorValue
+    );
+
+    setSelectedCompra(null);
+    setItems([]);
+    resetItemBuilder();
+
+    setFormData((prev) => ({
+      ...prev,
+      id_compra: "",
+      ordenCompra: "",
+      id_proveedor: idProveedorValue,
+      proveedor: proveedorSeleccionado?.nombre || "",
+      proveedorTipoDocumento: proveedorSeleccionado?.tipoDocumento || "",
+      proveedorNumeroDocumento: proveedorSeleccionado?.numeroDocumento || "",
+      id_bodega: "",
+      bodega: "",
+    }));
+  };
+
   const handleView = (r: RemisionCompraUI) => {
     navigate(`/app/remisiones-compra/${r.id}/ver`);
   };
@@ -850,12 +1135,14 @@ export default function RemisionesCompra() {
     if (!idCompraValue) return;
 
     const compraBase = comprasOptions.find((c) => String(c.id) === idCompraValue);
+
     if (!compraBase) {
       toast.error("No se encontró la compra seleccionada");
       return;
     }
 
     setLoadingCompraDetalle(true);
+
     try {
       const compra = await getCompraById(compraBase.id);
 
@@ -872,143 +1159,150 @@ export default function RemisionesCompra() {
   };
 
   const validateTextLimits = () => {
-  if (formData.observaciones.trim().length > MAX_OBSERVACIONES_LENGTH) {
-    toast.error(`Las observaciones no pueden superar ${MAX_OBSERVACIONES_LENGTH} caracteres`);
-    return false;
-  }
-
-  // ID Factura es opcional.
-  // Si viene vacío, pasa.
-  // Si viene lleno, debe ser número entero mayor a 0.
-  if (formData.idFactura.trim()) {
-    const factura = Number(formData.idFactura);
-
-    if (!Number.isInteger(factura) || factura <= 0) {
-      toast.error("El ID de factura debe ser un número entero mayor a 0");
+    if (formData.observaciones.trim().length > MAX_OBSERVACIONES_LENGTH) {
+      toast.error(`Las observaciones no pueden superar ${MAX_OBSERVACIONES_LENGTH} caracteres`);
       return false;
     }
-  }
 
-  return true;
-};
+    // ID Factura es opcional.
+    // Si viene vacío, pasa.
+    // Si viene lleno, debe ser número entero mayor a 0.
+    if (formData.codigoFactura.trim()) {
+      const codigoFactura = formData.codigoFactura.trim();
 
-const validateCurrentItemFields = () => {
-  const lote = currentNumeroLote.trim();
-  const nota = currentNota.trim();
-  const barras = codigoBarras.trim();
+      if (codigoFactura.length > 50) {
+        toast.error("El código de factura no puede superar 50 caracteres");
+        return false;
+      }
 
-  if (lote.length > MAX_LOTE_LENGTH) {
-    toast.error(`El lote no puede superar ${MAX_LOTE_LENGTH} caracteres`);
-    return false;
-  }
+      if (!/^[a-zA-Z0-9\s._\-/#]+$/.test(codigoFactura)) {
+        toast.error(
+          "El código de factura solo permite letras, números, espacios, punto, guion, guion bajo, / y #"
+        );
+        return false;
+      }
+    }
 
-  if (!loteRegex.test(lote)) {
-    toast.error("El lote solo permite letras, números, espacios, punto, guion y guion bajo");
-    return false;
-  }
-
-  if (barras.length > MAX_CODIGO_BARRAS_LENGTH) {
-    toast.error(`El código de barras no puede superar ${MAX_CODIGO_BARRAS_LENGTH} caracteres`);
-    return false;
-  }
-
-  if (barras && !codigoBarrasRegex.test(barras)) {
-    toast.error("El código de barras solo permite letras, números, punto, guion y guion bajo");
-    return false;
-  }
-
-  if (nota.length > MAX_NOTA_ITEM_LENGTH) {
-    toast.error(`La nota del ítem no puede superar ${MAX_NOTA_ITEM_LENGTH} caracteres`);
-    return false;
-  }
-
-  return true;
-};
-
-const handleAddItem = () => {
-  if (!selectedCompra) {
-    toast.error("Primero debes seleccionar una orden de compra");
-    return;
-  }
-
-  if (
-    !currentProducto ||
-    !currentNumeroLote.trim() ||
-    !currentCantidad.trim() ||
-    !currentFechaVencimiento
-  ) {
-    toast.error("Completa producto, lote, cantidad y fecha de vencimiento");
-    return;
-  }
-
-  if (!validateCurrentItemFields()) return;
-
-  const today = new Date().toISOString().split("T")[0];
-
-  if (currentFechaVencimiento < today) {
-    toast.error("La fecha de vencimiento del producto no puede ser anterior a hoy");
-    return;
-  }
-
-  const compraItem = selectedCompra.items.find(
-    (item) => String(item.idProducto) === currentProducto
-  );
-
-  if (!compraItem) {
-    toast.error("El producto seleccionado no pertenece a la compra");
-    return;
-  }
-
-  const cantidad = Number(currentCantidad);
-
-  if (!Number.isFinite(cantidad) || cantidad <= 0) {
-    toast.error("La cantidad debe ser mayor a 0");
-    return;
-  }
-
-  const cantidadYaAgregada = items
-    .filter((i) => i.id_producto === compraItem.idProducto)
-    .reduce((acc, item) => acc + Number(item.cantidad || 0), 0);
-
-  const cantidadDisponible = compraItem.cantidad - cantidadYaAgregada;
-
-  if (cantidad > cantidadDisponible) {
-    toast.error(
-      `La cantidad supera lo disponible en la compra. Máximo disponible: ${cantidadDisponible}`
-    );
-    return;
-  }
-
-  const duplicado = items.some(
-    (item) =>
-      item.id_producto === compraItem.idProducto &&
-      normalizeText(item.lote) === normalizeText(currentNumeroLote) &&
-      item.fecha_vencimiento === currentFechaVencimiento
-  );
-
-  if (duplicado) {
-    toast.error("Ya agregaste ese producto con el mismo lote y vencimiento");
-    return;
-  }
-
-  const nuevoItem: ItemForm = {
-    localId: makeLocalId(),
-    id_producto: compraItem.idProducto,
-    productoNombre: compraItem.productoNombre,
-    cantidad: String(cantidad),
-    precio_unitario: compraItem.precioUnitario,
-    id_iva: compraItem.idIva,
-    ivaPorcentaje: compraItem.ivaPorcentaje,
-    lote: currentNumeroLote.trim(),
-    fecha_vencimiento: currentFechaVencimiento,
-    codigo_barras: codigoBarras.trim(),
-    nota: currentNota.trim(),
+    return true;
   };
 
-  setItems((prev) => [...prev, nuevoItem]);
-  resetItemBuilder();
-  toast.success("Producto agregado a la remisión");
-};
+  const validateCurrentItemFields = () => {
+    const lote = currentNumeroLote.trim();
+    const nota = currentNota.trim();
+    const barras = codigoBarras.trim();
+
+    if (lote.length > MAX_LOTE_LENGTH) {
+      toast.error(`El lote no puede superar ${MAX_LOTE_LENGTH} caracteres`);
+      return false;
+    }
+
+    if (!loteRegex.test(lote)) {
+      toast.error("El lote solo permite letras, números, espacios, punto, guion y guion bajo");
+      return false;
+    }
+
+    if (barras.length > MAX_CODIGO_BARRAS_LENGTH) {
+      toast.error(`El código de barras no puede superar ${MAX_CODIGO_BARRAS_LENGTH} caracteres`);
+      return false;
+    }
+
+    if (barras && !codigoBarrasRegex.test(barras)) {
+      toast.error("El código de barras solo permite letras, números, punto, guion y guion bajo");
+      return false;
+    }
+
+    if (nota.length > MAX_NOTA_ITEM_LENGTH) {
+      toast.error(`La nota del ítem no puede superar ${MAX_NOTA_ITEM_LENGTH} caracteres`);
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleAddItem = () => {
+    if (!selectedCompra) {
+      toast.error("Primero debes seleccionar una orden de compra");
+      return;
+    }
+
+    if (
+      !currentProducto ||
+      !currentNumeroLote.trim() ||
+      !currentCantidad.trim() ||
+      !currentFechaVencimiento
+    ) {
+      toast.error("Completa producto, lote, cantidad y fecha de vencimiento");
+      return;
+    }
+
+    if (!validateCurrentItemFields()) return;
+
+    const today = new Date().toISOString().split("T")[0];
+
+    if (currentFechaVencimiento < today) {
+      toast.error("La fecha de vencimiento del producto no puede ser anterior a hoy");
+      return;
+    }
+
+    const compraItem = selectedCompra.items.find(
+      (item) => String(item.idProducto) === currentProducto
+    );
+
+    if (!compraItem) {
+      toast.error("El producto seleccionado no pertenece a la compra");
+      return;
+    }
+
+    const cantidad = Number(currentCantidad);
+
+    if (!Number.isFinite(cantidad) || cantidad <= 0) {
+      toast.error("La cantidad debe ser mayor a 0");
+      return;
+    }
+
+    const cantidadYaAgregada = items
+      .filter((i) => i.id_producto === compraItem.idProducto)
+      .reduce((acc, item) => acc + Number(item.cantidad || 0), 0);
+
+    const cantidadDisponible = compraItem.cantidad - cantidadYaAgregada;
+
+    if (cantidad > cantidadDisponible) {
+      toast.error(
+        `La cantidad supera lo disponible en la compra. Máximo disponible: ${cantidadDisponible}`
+      );
+      return;
+    }
+
+    const duplicado = items.some(
+      (item) =>
+        item.id_producto === compraItem.idProducto &&
+        normalizeText(item.lote) === normalizeText(currentNumeroLote) &&
+        item.fecha_vencimiento === currentFechaVencimiento
+    );
+
+    if (duplicado) {
+      toast.error("Ya agregaste ese producto con el mismo lote y vencimiento");
+      return;
+    }
+
+    const nuevoItem: ItemForm = {
+      localId: makeLocalId(),
+      id_producto: compraItem.idProducto,
+      productoNombre: compraItem.productoNombre,
+      cantidad: String(cantidad),
+      precio_unitario: compraItem.precioUnitario,
+      id_iva: compraItem.idIva,
+      ivaPorcentaje: compraItem.ivaPorcentaje,
+      lote: currentNumeroLote.trim(),
+      fecha_vencimiento: currentFechaVencimiento,
+      codigo_barras: codigoBarras.trim(),
+      nota: currentNota.trim(),
+    };
+
+    setItems((prev) => [...prev, nuevoItem]);
+    resetItemBuilder();
+    toast.success("Producto agregado a la remisión");
+  };
 
   const handleRemoveItem = (localId: string) => {
     setItems((prev) => prev.filter((item) => item.localId !== localId));
@@ -1029,57 +1323,52 @@ const handleAddItem = () => {
     loteInput?.focus();
   };
 
-const validateBeforeSubmit = () => {
-  const today = new Date().toISOString().split("T")[0];
+  const validateBeforeSubmit = () => {
+    const today = new Date().toISOString().split("T")[0];
 
-  if (!formData.id_compra) {
-    toast.error("Debes seleccionar una orden de compra válida");
-    return false;
-  }
-
-  if (Number(formData.id_proveedor) <= 0 || Number(formData.id_bodega) <= 0) {
-    toast.error("La compra seleccionada no tiene proveedor o bodega válidos");
-    return false;
-  }
-
-  if (!validateTextLimits()) return false;
-
-  if (formData.fechaVencimiento && formData.fechaVencimiento < today) {
-    toast.error("La fecha de vencimiento de la remisión no puede ser anterior a hoy");
-    return false;
-  }
-
-  if (items.length === 0) {
-    toast.error("Debes agregar al menos un producto a la remisión");
-    return false;
-  }
-
-  for (const item of items) {
-    if (!item.lote.trim()) {
-      toast.error(`El producto "${item.productoNombre}" debe tener lote`);
+    if (!formData.id_compra) {
+      toast.error("Debes seleccionar una orden de compra válida");
       return false;
     }
 
-    if (!item.fecha_vencimiento) {
-      toast.error(`El producto "${item.productoNombre}" debe tener fecha de vencimiento`);
+    if (Number(formData.id_proveedor) <= 0 || Number(formData.id_bodega) <= 0) {
+      toast.error("La compra seleccionada no tiene proveedor o bodega válidos");
       return false;
     }
 
-    if (item.fecha_vencimiento < today) {
-      toast.error(
-        `La fecha de vencimiento del producto "${item.productoNombre}" no puede ser anterior a hoy`
-      );
+    if (!validateTextLimits()) return false;
+
+    if (items.length === 0) {
+      toast.error("Debes agregar al menos un producto a la remisión");
       return false;
     }
 
-    if (!Number.isFinite(Number(item.cantidad)) || Number(item.cantidad) <= 0) {
-      toast.error(`La cantidad del producto "${item.productoNombre}" debe ser mayor a 0`);
-      return false;
-    }
-  }
+    for (const item of items) {
+      if (!item.lote.trim()) {
+        toast.error(`El producto "${item.productoNombre}" debe tener lote`);
+        return false;
+      }
 
-  return true;
-};
+      if (!item.fecha_vencimiento) {
+        toast.error(`El producto "${item.productoNombre}" debe tener fecha de vencimiento`);
+        return false;
+      }
+
+      if (item.fecha_vencimiento < today) {
+        toast.error(
+          `La fecha de vencimiento del producto "${item.productoNombre}" no puede ser anterior a hoy`
+        );
+        return false;
+      }
+
+      if (!Number.isFinite(Number(item.cantidad)) || Number(item.cantidad) <= 0) {
+        toast.error(`La cantidad del producto "${item.productoNombre}" debe ser mayor a 0`);
+        return false;
+      }
+    }
+
+    return true;
+  };
 
   const buildDetallePayload = () => {
     return items.map((item) => ({
@@ -1103,8 +1392,7 @@ const validateBeforeSubmit = () => {
         id_compra: Number(formData.id_compra),
         id_proveedor: Number(formData.id_proveedor),
         id_bodega: Number(formData.id_bodega),
-        id_factura: formData.idFactura ? Number(formData.idFactura) : undefined,
-        fecha_vencimiento: formData.fechaVencimiento || undefined,
+        codigo_factura: formData.codigoFactura.trim() || undefined,
         observaciones: formData.observaciones.trim() || undefined,
         detalle_remision_compra: buildDetallePayload(),
       });
@@ -1139,8 +1427,7 @@ const validateBeforeSubmit = () => {
     setSubmitting(true);
     try {
       await updateRemisionCompra(selectedRemision.id, {
-        id_factura: formData.idFactura ? Number(formData.idFactura) : null,
-        fecha_vencimiento: formData.fechaVencimiento || null,
+        codigo_factura: formData.codigoFactura.trim() || null,
         observaciones: formData.observaciones.trim() || "",
         detalle_remision_compra: buildDetallePayload(),
       });
@@ -1403,12 +1690,6 @@ const validateBeforeSubmit = () => {
     doc.text(`Fecha: ${formatDatePdf(remision.fecha)}`, rightX, 17.8, {
       align: "right",
     });
-    doc.text(
-      `Vencimiento: ${formatDatePdf(remision.fechaVencimiento)}`,
-      rightX,
-      24.1,
-      { align: "right" }
-    );
 
     doc.setFillColor(...COLORS.card);
     doc.roundedRect(marginX, 42, pageWidth - marginX * 2, 42, 3, 3, "F");
@@ -1460,8 +1741,8 @@ const validateBeforeSubmit = () => {
           item.lote ? `Lote: ${item.lote}` : null,
           item.fecha_vencimiento
             ? `Vence: ${new Date(item.fecha_vencimiento).toLocaleDateString(
-                "es-CO"
-              )}`
+              "es-CO"
+            )}`
             : null,
           item.codigo_barras || item.cod_barras
             ? `Cod. barras: ${item.codigo_barras || item.cod_barras}`
@@ -1526,26 +1807,26 @@ const validateBeforeSubmit = () => {
       },
       columnStyles: includePrices
         ? {
-            0: { cellWidth: 82 },
-            1: { cellWidth: 20, halign: "center" },
-            2: { cellWidth: 24, halign: "center" },
-            3: { cellWidth: 28, halign: "right" },
-            4: { cellWidth: 32, halign: "right" },
-          }
+          0: { cellWidth: 82 },
+          1: { cellWidth: 20, halign: "center" },
+          2: { cellWidth: 24, halign: "center" },
+          3: { cellWidth: 28, halign: "right" },
+          4: { cellWidth: 32, halign: "right" },
+        }
         : {
-            0: { cellWidth: 126 },
-            1: { cellWidth: 24, halign: "center" },
-            2: { cellWidth: 36, halign: "center" },
-          },
+          0: { cellWidth: 126 },
+          1: { cellWidth: 24, halign: "center" },
+          2: { cellWidth: 36, halign: "center" },
+        },
     });
 
     let currentY = ((doc as any).lastAutoTable?.finalY || 96) + 8;
 
     const observacionesLines = remision.observaciones
       ? doc.splitTextToSize(
-          remision.observaciones,
-          includePrices ? 95 : pageWidth - marginX * 2 - 8
-        )
+        remision.observaciones,
+        includePrices ? 95 : pageWidth - marginX * 2 - 8
+      )
       : [];
 
     const observacionesHeight = remision.observaciones
@@ -1649,8 +1930,7 @@ const validateBeforeSubmit = () => {
     }
 
     doc.save(
-      `Remision_Compra_${remision.numeroRemision}_${
-        includePrices ? "con_precios" : "sin_precios"
+      `Remision_Compra_${remision.numeroRemision}_${includePrices ? "con_precios" : "sin_precios"
       }.pdf`
     );
   };
@@ -1682,14 +1962,27 @@ const validateBeforeSubmit = () => {
     }
   };
 
-  const totalFormulario = useMemo(() => {
-    return items.reduce((acc, item) => {
-      const cantidad = Number(item.cantidad || 0);
-      const subtotal = cantidad * item.precio_unitario;
-      const iva = subtotal * (item.ivaPorcentaje / 100);
-      return acc + subtotal + iva;
-    }, 0);
-  }, [items]);
+  const getGestionEstadoRemision = (remision: RemisionCompraUI) => {
+    if (remision.estadoKey === "APLICADA") {
+      const usuario = remision.usuarioAplicoExistencias || "—";
+      const fecha = getFechaAprobadaRemision(remision);
+
+      return fecha
+        ? `${usuario} - ${formatDate(fecha)}`
+        : `${usuario}`;
+    }
+
+    if (remision.estadoKey === "ANULADA") {
+      const usuario = remision.usuarioAnulo || "—";
+      const fecha = remision.fechaAnulacion;
+
+      return fecha
+        ? `${usuario} - ${formatDate(fecha)}`
+        : `${usuario}`;
+    }
+
+    return "Pendiente de aprobación";
+  };
 
   if (loadingPage) {
     return (
@@ -1795,9 +2088,12 @@ const validateBeforeSubmit = () => {
               <TableRow className="bg-gray-50">
                 <TableHead className="w-14">#</TableHead>
                 <TableHead>N° Remisión</TableHead>
-                <TableHead>Orden de Compra</TableHead>
+                <TableHead>N° Orden</TableHead>
                 <TableHead>Proveedor</TableHead>
-                <TableHead>Fecha</TableHead>
+                <TableHead>Documento / NIT</TableHead>
+                <TableHead>Bodega</TableHead>
+                <TableHead>Fecha Creación</TableHead>
+                <TableHead className="text-center">Aprobación / Anulación</TableHead>
                 <TableHead className="text-center">Items</TableHead>
                 <TableHead className="text-center">Estado</TableHead>
                 <TableHead className="text-center w-32">Acciones</TableHead>
@@ -1807,7 +2103,7 @@ const validateBeforeSubmit = () => {
             <TableBody>
               {currentRemisiones.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={11} className="text-center py-8 text-gray-500">
                     <FileText size={48} className="mx-auto mb-2 text-gray-300" />
                     <p>No se encontraron remisiones de compra</p>
                   </TableCell>
@@ -1819,31 +2115,54 @@ const validateBeforeSubmit = () => {
 
                   return (
                     <TableRow key={remision.id} className="hover:bg-gray-50">
-                      <TableCell className="text-gray-500">
+                      <TableCell className="text-center text-gray-500">
                         {startIndex + index + 1}
                       </TableCell>
-                      <TableCell className="font-medium">
+
+                      <TableCell className="font-medium text-gray-900">
                         {remision.numeroRemision}
                       </TableCell>
-                      <TableCell>{remision.ordenCompra}</TableCell>
-                      <TableCell>{remision.proveedor}</TableCell>
-                      <TableCell>{formatDate(remision.fecha)}</TableCell>
+
+                      <TableCell className="font-mono text-sm">
+                        {remision.ordenCompra}
+                      </TableCell>
+
+                      <TableCell className="font-medium text-gray-900">
+                        {remision.proveedor}
+                      </TableCell>
+
+                      <TableCell className="text-gray-700">
+                        {renderDocumentoProveedorRemision(remision)}
+                      </TableCell>
+
+                      <TableCell className="text-gray-700">
+                        {remision.bodega || "—"}
+                      </TableCell>
+
+                      <TableCell className="text-center">
+                        {formatDate(remision.fecha)}
+                      </TableCell>
+
+                      <TableCell className="text-gray-700">
+                        {getGestionEstadoRemision(remision)}
+                      </TableCell>
+
                       <TableCell className="text-center">
                         {remision.itemsCount}
                       </TableCell>
+
                       <TableCell className="text-center">
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleEstadoClick(remision)}
                           disabled={remision.estadoKey !== "PENDIENTE"}
-                          className={`h-7 ${
-                            remision.estadoKey === "APLICADA"
-                              ? "bg-green-100 text-green-800 hover:bg-green-200"
-                              : remision.estadoKey === "PENDIENTE"
-                                ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                                : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
-                          }`}
+                          className={`h-7 ${remision.estadoKey === "APLICADA"
+                            ? "bg-green-100 text-green-800 hover:bg-green-200"
+                            : remision.estadoKey === "PENDIENTE"
+                              ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                              : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
+                            }`}
                         >
                           {remision.estado}
                         </Button>
@@ -1981,429 +2300,536 @@ const validateBeforeSubmit = () => {
           aria-describedby="create-remision-compra-description"
           onInteractOutside={(e) => e.preventDefault()}
         >
-          <DialogHeader>
+          <DialogHeader className="space-y-2 pb-3">
             <DialogTitle>Nueva Remisión de Compra</DialogTitle>
-            <DialogDescription
-              id="create-remision-compra-description"
-              className="sr-only"
-            >
-              Formulario para crear una nueva remisión de compra
-            </DialogDescription>
           </DialogHeader>
 
-<div className="space-y-8 py-4">
-  <div className="rounded-2xl border border-gray-200 bg-white p-5 md:p-6">
-    <div className="mb-5">
-      <h3 className="text-lg font-semibold text-gray-900">
-        Información general
-      </h3>
-      <p className="mt-1 text-sm text-gray-500">
-        Selecciona la orden de compra y completa los datos principales de la remisión.
-      </p>
-    </div>
+          <div className="space-y-6 py-2">
+            <div className="rounded-lg bg-gray-50 p-5">
+              <div className="mb-4 flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="font-semibold text-gray-900">
+                    Información general
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    Selecciona el proveedor y luego la orden de compra pendiente
+                  </p>
+                </div>
 
-    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-      <div className="space-y-2">
-        <Label>Número de Remisión</Label>
-        {renderReadonlyBox(
-          formData.numeroRemision,
-          "Se genera automáticamente"
-        )}
-      </div>
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                  <Badge
+                    variant="outline"
+                    className="border-blue-200 bg-blue-50 px-3 py-1 text-blue-700"
+                  >
+                    {formData.numeroRemision || "Código automático"}
+                  </Badge>
 
-      <div className="space-y-2">
-        <Label htmlFor="ordenCompra">Orden de Compra *</Label>
-        <Select
-          value={formData.id_compra}
-          onValueChange={handleOrdenCompraChange}
-        >
-          <SelectTrigger id="ordenCompra" className="h-11">
-            <SelectValue placeholder="Seleccionar orden de compra" />
-          </SelectTrigger>
-          <SelectContent>
-            {comprasOptions.map((compra) => (
-              <SelectItem key={compra.id} value={String(compra.id)}>
-                {compra.codigo} - {compra.proveedorNombre}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-    </div>
+                  <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-2 text-right">
+                    <p className="text-xs font-medium text-blue-700">
+                      Fecha de Creación
+                    </p>
+                    <p className="text-sm font-semibold text-blue-900">
+                      {formatDate(formData.fechaCreacion)}
+                    </p>
+                  </div>
+                </div>
+              </div>
 
-    <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2">
-      <div className="space-y-2">
-        <Label>Proveedor</Label>
-        {renderReadonlyBox(
-          formData.proveedor,
-          "Se completa al seleccionar orden de compra"
-        )}
-      </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="proveedor">Proveedor</Label>
+                  <Select
+                    value={formData.id_proveedor}
+                    onValueChange={handleProveedorChange}
+                  >
+                    <SelectTrigger id="proveedor" className="h-11">
+                      <SelectValue placeholder="Selecciona un proveedor" />
+                    </SelectTrigger>
 
-      <div className="space-y-2">
-        <Label>Tipo de Documento</Label>
-        {renderReadonlyBox(
-          formData.proveedorTipoDocumento,
-          "Se completa al seleccionar orden de compra"
-        )}
-      </div>
+                    <SelectContent>
+                      {proveedoresConComprasPendientes.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-gray-500">
+                          No hay proveedores con órdenes pendientes por remisionar
+                        </div>
+                      ) : (
+                        proveedoresConComprasPendientes.map((proveedor) => (
+                          <SelectItem key={proveedor.id} value={String(proveedor.id)}>
+                            {proveedor.nombre}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-      <div className="space-y-2">
-        <Label>Número de Documento</Label>
-        {renderReadonlyBox(
-          formData.proveedorNumeroDocumento,
-          "Se completa al seleccionar orden de compra"
-        )}
-      </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ordenCompra">Orden de Compra *</Label>
+                  <Select
+                    value={formData.id_compra}
+                    onValueChange={handleOrdenCompraChange}
+                    disabled={loadingCompraDetalle}
+                  >
+                    <SelectTrigger id="ordenCompra" className="h-11">
+                      <SelectValue
+                        placeholder={
+                          formData.id_proveedor
+                            ? "Selecciona una orden pendiente"
+                            : "Selecciona una orden de compra"
+                        }
+                      />
+                    </SelectTrigger>
 
-      <div className="space-y-2">
-        <Label>Bodega</Label>
-        {renderReadonlyBox(
-          formData.bodega,
-          "Se completa al seleccionar orden de compra"
-        )}
-      </div>
-    </div>
+                    <SelectContent>
+                      {comprasPendientesFiltradas.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-gray-500">
+                          No hay órdenes pendientes por remisionar
+                        </div>
+                      ) : (
+                        comprasPendientesFiltradas.map((compra) => (
+                          <SelectItem key={compra.id} value={String(compra.id)}>
+                            {compra.codigo} - {compra.proveedorNombre}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
 
-    <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2">
-      <div className="space-y-2">
-        <Label htmlFor="fechaVencimiento">Fecha de Vencimiento</Label>
-        <Input
-          id="fechaVencimiento"
-          type="date"
-          min={new Date().toISOString().split("T")[0]}
-          value={formData.fechaVencimiento}
-          onChange={(e) =>
-            setFormData((prev) => ({
-              ...prev,
-              fechaVencimiento: e.target.value,
-            }))
-          }
-          className="h-11"
-        />
-      </div>
+              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div className="space-y-2">
+                  <Label>Documento / NIT</Label>
+                  {renderReadonlyBox(
+                    getDocumentoProveedorTexto(),
+                    "Se completa al seleccionar proveedor u orden"
+                  )}
+                </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="idFactura">ID Factura</Label>
-        <Input
-          id="idFactura"
-          type="text"
-          inputMode="numeric"
-          value={formData.idFactura}
-          onChange={(e) => {
-            const value = e.target.value.replace(/\D/g, "");
-            setFormData((prev) => ({ ...prev, idFactura: value }));
-          }}
-          placeholder="Opcional"
-          className="h-11"
-        />
-      </div>
-    </div>
+                <div className="space-y-2">
+                  <Label>Bodega</Label>
+                  {renderReadonlyBox(
+                    formData.bodega,
+                    "Se completa al seleccionar orden"
+                  )}
+                </div>
 
-    <div className="mt-6 space-y-2">
-      <Label htmlFor="observaciones">Observaciones</Label>
-      <Input
-        id="observaciones"
-        value={formData.observaciones}
-        onChange={(e) => {
-          const value = e.target.value;
+                <div className="space-y-2">
+                  <Label htmlFor="codigoFactura">Código Factura</Label>
+                  <Input
+                    id="codigoFactura"
+                    type="text"
+                    value={formData.codigoFactura}
+                    onChange={(e) => {
+                      const value = e.target.value;
 
-          if (value.length > MAX_OBSERVACIONES_LENGTH) {
-            toast.error(`Máximo ${MAX_OBSERVACIONES_LENGTH} caracteres en observaciones`);
-            return;
-          }
+                      if (value.length > 50) {
+                        toast.error("Máximo 50 caracteres para el código de factura");
+                        return;
+                      }
 
-          setFormData((prev) => ({
-            ...prev,
-            observaciones: value,
-          }));
-        }}
-        placeholder="Notas adicionales..."
-        className="h-11"
-      />
-    </div>
-  </div>
+                      setFormData((prev) => ({
+                        ...prev,
+                        codigoFactura: value,
+                      }));
+                    }}
+                    placeholder="Ej: FEV-1020"
+                    className="h-11"
+                  />
+                </div>
+              </div>
+            </div>
 
-  {selectedCompra && (
-    <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 md:p-6">
-      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-blue-900">
-            Resumen de la compra seleccionada
-          </h3>
-          <p className="mt-1 text-sm text-blue-800">
-            Compra: {selectedCompra.codigo}
-          </p>
-          <p className="mt-1 text-sm text-blue-800">
-            Proveedor: {selectedCompra.proveedorNombre} | Tipo Doc.:{" "}
-            {selectedCompra.proveedorTipoDocumento || ""} | N° Doc.:{" "}
-            {selectedCompra.proveedorNumeroDocumento || ""} | Bodega:{" "}
-            {selectedCompra.bodegaNombre}
-          </p>
-        </div>
+            {selectedCompra && (
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-5">
+                <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <h3 className="font-semibold text-blue-900">
+                      Resumen de la compra seleccionada
+                    </h3>
+                    <p className="text-sm text-blue-800">
+                      Orden: <span className="font-medium">{selectedCompra.codigo}</span>
+                    </p>
+                    <p className="text-sm text-blue-800">
+                      Proveedor:{" "}
+                      <span className="font-medium">
+                        {selectedCompra.proveedorNombre}
+                      </span>
+                    </p>
+                  </div>
 
-        {loadingCompraDetalle && (
-          <div className="flex items-center gap-2 text-sm text-blue-700">
-            <Loader2 size={16} className="animate-spin" />
-            Cargando detalle...
-          </div>
-        )}
-      </div>
+                  {loadingCompraDetalle && (
+                    <div className="flex items-center gap-2 text-sm text-blue-700">
+                      <Loader2 size={16} className="animate-spin" />
+                      Cargando detalle...
+                    </div>
+                  )}
+                </div>
 
-      <div className="overflow-hidden rounded-xl border border-blue-100 bg-white">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-gray-50">
-              <TableHead>Producto</TableHead>
-              <TableHead>Cantidad Compra</TableHead>
-              <TableHead>Precio Unitario</TableHead>
-              <TableHead>IVA %</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {productosDeCompra.map((item) => (
-              <TableRow key={item.idProducto}>
-                <TableCell>{item.productoNombre}</TableCell>
-                <TableCell>{item.cantidad}</TableCell>
-                <TableCell>{formatMoney(item.precioUnitario)}</TableCell>
-                <TableCell>{item.ivaPorcentaje}%</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
-  )}
+                <div className="overflow-hidden rounded-lg border border-blue-100 bg-white">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-gray-50">
+                        <TableHead>Producto</TableHead>
+                        <TableHead className="text-center">Cantidad Compra</TableHead>
+                        <TableHead className="text-center">IVA</TableHead>
+                        <TableHead className="text-right">Precio Unitario</TableHead>
+                      </TableRow>
+                    </TableHeader>
 
-  <div className="rounded-2xl border border-gray-200 bg-white p-5 md:p-6">
-    <div className="mb-5 flex items-center gap-2">
-      <Package size={20} className="text-blue-600" />
-      <div>
-        <h3 className="text-lg font-semibold text-gray-900">
-          Productos de la Remisión
-        </h3>
-        <p className="mt-1 text-sm text-gray-500">
-          Agrega los productos con su lote, vencimiento y observaciones del ítem.
-        </p>
-      </div>
-    </div>
+                    <TableBody>
+                      {productosDeCompra.map((item) => (
+                        <TableRow key={item.idProducto}>
+                          <TableCell className="font-medium text-gray-900">
+                            {item.productoNombre}
+                          </TableCell>
 
-    <div className="mb-6 rounded-2xl border-2 border-blue-200 bg-blue-50 p-4 md:p-5">
-      <div className="mb-3 flex items-center gap-2">
-        <Barcode size={20} className="text-blue-600" />
-        <Label htmlFor="codigoBarras" className="text-blue-900">
-          Código de Barras del Ítem
-        </Label>
-      </div>
+                          <TableCell className="text-center">
+                            {item.cantidad}
+                          </TableCell>
 
-      <div className="relative">
-        <Input
-          id="codigoBarras"
-          ref={barcodeInputRef}
-          value={codigoBarras}
-          onChange={(e) => {
-            const value = e.target.value;
+                          <TableCell className="text-center">
+                            IVA {formatIvaPorcentaje(item.ivaPorcentaje)}%
+                          </TableCell>
 
-            if (value.length > MAX_CODIGO_BARRAS_LENGTH) {
-              toast.error(`Máximo ${MAX_CODIGO_BARRAS_LENGTH} caracteres para código de barras`);
-              return;
-            }
+                          <TableCell className="text-right">
+                            {formatMoney(item.precioUnitario)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
 
-            setCodigoBarras(value);
-          }}
-          onKeyDown={handleBarcodeKeyDown}
-          placeholder="Escanee o escriba el código de barras del lote/ítem..."
-          className="h-11 pr-10 bg-white border-blue-300 focus:border-blue-500"
-        />
-        <Barcode
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-400"
-          size={20}
-        />
-      </div>
+            <div>
+              <div className="mb-3 flex items-center gap-2">
+                <Package size={20} className="text-blue-600" />
+                <div>
+                  <h3 className="font-semibold text-gray-900">
+                    Productos de la Remisión
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    Agrega los productos con lote, vencimiento y cantidad recibida
+                  </p>
+                </div>
+              </div>
 
-      <p className="mt-3 text-xs text-blue-700">
-        Opcional. Este código se guarda en el detalle de la remisión y luego en existencias.
-      </p>
-    </div>
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
+                  <div className="mb-2 flex items-center gap-2">
+                    <Barcode size={18} className="text-blue-600" />
+                    <Label htmlFor="codigoBarras" className="text-blue-900">
+                      Código de Barras del Ítem
+                    </Label>
+                  </div>
 
-    <div className="rounded-2xl bg-gray-50 p-4 md:p-5">
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="producto">Producto *</Label>
-          <Select
-            value={currentProducto}
-            onValueChange={(value: string) => setCurrentProducto(value)}
-          >
-            <SelectTrigger id="producto" className="h-11">
-              <SelectValue placeholder="Seleccionar producto de la compra" />
-            </SelectTrigger>
-            <SelectContent>
-              {productosDisponibles.map((producto) => (
-                <SelectItem
-                  key={producto.idProducto}
-                  value={String(producto.idProducto)}
-                >
-                  {producto.productoNombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+                  <Input
+                    id="codigoBarras"
+                    ref={barcodeInputRef}
+                    value={codigoBarras}
+                    onChange={(e) => {
+                      const value = e.target.value;
 
-        <div className="space-y-2">
-          <Label htmlFor="numeroLote">Número de Lote *</Label>
-          <Input
-            id="numeroLote"
-            value={currentNumeroLote}
-            onChange={(e) => {
-              const value = e.target.value;
+                      if (value.length > MAX_CODIGO_BARRAS_LENGTH) {
+                        toast.error(
+                          `Máximo ${MAX_CODIGO_BARRAS_LENGTH} caracteres para código de barras`
+                        );
+                        return;
+                      }
 
-              if (value.length > MAX_LOTE_LENGTH) {
-                toast.error(`Máximo ${MAX_LOTE_LENGTH} caracteres para el lote`);
-                return;
-              }
+                      setCodigoBarras(value);
+                    }}
+                    onKeyDown={handleBarcodeKeyDown}
+                    placeholder="Escanee o escriba el código de barras..."
+                    className="h-11 bg-white"
+                  />
 
-              setCurrentNumeroLote(value);
-            }}
-            placeholder="Ej: AL-2026-001"
-            className="h-11"
-          />
-        </div>
+                  <p className="mt-2 text-xs text-blue-700">
+                    Opcional. Se guardará en el detalle y luego en existencias.
+                  </p>
+                </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="cantidad">Cantidad *</Label>
-          <Input
-            id="cantidad"
-            type="text"
-            inputMode="decimal"
-            value={currentCantidad}
-            onChange={(e) => {
-              const value = e.target.value.replace(",", ".").replace(/[^\d.]/g, "");
-
-              const partes = value.split(".");
-              if (partes.length > 2) return;
-
-              setCurrentCantidad(value);
-            }}
-            placeholder="0"
-            className="h-11"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="fechaVencimientoItem">
-            Fecha de Vencimiento *
-          </Label>
-          <Input
-            id="fechaVencimientoItem"
-            type="date"
-            min={new Date().toISOString().split("T")[0]}
-            value={currentFechaVencimiento}
-            onChange={(e) => setCurrentFechaVencimiento(e.target.value)}
-            className="h-11"
-          />
-        </div>
-
-        <div className="md:col-span-2 space-y-2">
-          <Label htmlFor="notaItem">Nota del Ítem</Label>
-          <Input
-            id="notaItem"
-            value={currentNota}
-            onChange={(e) => {
-              const value = e.target.value;
-
-              if (value.length > MAX_NOTA_ITEM_LENGTH) {
-                toast.error(`Máximo ${MAX_NOTA_ITEM_LENGTH} caracteres para la nota`);
-                return;
-              }
-
-              setCurrentNota(value);
-            }}
-            placeholder="Opcional"
-            className="h-11"
-          />
-        </div>
-      </div>
-
-      <div className="mt-5">
-        <Button
-          type="button"
-          onClick={handleAddItem}
-          className="bg-green-600 hover:bg-green-700 w-full h-11"
-          disabled={!selectedCompra}
-        >
-          <Plus size={16} className="mr-2" />
-          Agregar Producto
-        </Button>
-      </div>
-    </div>
-
-    <div className="mt-6">
-      {items.length > 0 ? (
-        <div className="overflow-hidden rounded-2xl border border-gray-200">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-gray-50">
-                <TableHead>Producto</TableHead>
-                <TableHead>Lote</TableHead>
-                <TableHead>Cantidad</TableHead>
-                <TableHead>Precio</TableHead>
-                <TableHead>IVA</TableHead>
-                <TableHead>Vencimiento</TableHead>
-                <TableHead>Cód. Barras</TableHead>
-                <TableHead>Nota</TableHead>
-                <TableHead className="w-16"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.map((item) => (
-                <TableRow key={item.localId}>
-                  <TableCell>{item.productoNombre}</TableCell>
-                  <TableCell>{item.lote}</TableCell>
-                  <TableCell>{item.cantidad}</TableCell>
-                  <TableCell>{formatMoney(item.precio_unitario)}</TableCell>
-                  <TableCell>{item.ivaPorcentaje}%</TableCell>
-                  <TableCell>{formatDate(item.fecha_vencimiento)}</TableCell>
-                  <TableCell>{item.codigo_barras || "—"}</TableCell>
-                  <TableCell>{item.nota || "—"}</TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemoveItem(item.localId)}
-                      className="hover:bg-red-50"
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1.5fr)_160px_180px_180px]">
+                  <div className="space-y-2">
+                    <Label htmlFor="producto">Producto *</Label>
+                    <Select
+                      value={currentProducto}
+                      onValueChange={(value: string) => setCurrentProducto(value)}
+                      disabled={!selectedCompra}
                     >
-                      <X size={16} className="text-red-600" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+                      <SelectTrigger id="producto" className="h-11">
+                        <SelectValue placeholder="Selecciona un producto de la compra" />
+                      </SelectTrigger>
 
-              <TableRow className="bg-gray-50">
-                <TableCell colSpan={8} className="text-right font-semibold">
-                  Total aproximado
-                </TableCell>
-                <TableCell className="font-semibold">
-                  {formatMoney(totalFormulario)}
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </div>
-      ) : (
-        <div className="rounded-2xl border border-dashed border-gray-300 py-10 text-center text-gray-500">
-          <Package size={48} className="mx-auto mb-3 text-gray-300" />
-          <p className="font-medium">No hay productos agregados</p>
-          <p className="mt-1 text-sm">
-            Selecciona la compra y agrega productos desde su detalle
-          </p>
-        </div>
-      )}
-    </div>
-  </div>
-</div>
+                      <SelectContent>
+                        {productosDisponibles.length === 0 ? (
+                          <div className="px-3 py-2 text-sm text-gray-500">
+                            No hay productos disponibles
+                          </div>
+                        ) : (
+                          productosDisponibles.map((producto) => (
+                            <SelectItem
+                              key={producto.idProducto}
+                              value={String(producto.idProducto)}
+                            >
+                              {producto.productoNombre} | Disp: {producto.cantidad} | IVA{" "}
+                              {formatIvaPorcentaje(producto.ivaPorcentaje)}%
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-          <DialogFooter>
+                  <div className="space-y-2">
+                    <Label htmlFor="numeroLote">Lote *</Label>
+                    <Input
+                      id="numeroLote"
+                      value={currentNumeroLote}
+                      onChange={(e) => {
+                        const value = e.target.value;
+
+                        if (value.length > MAX_LOTE_LENGTH) {
+                          toast.error(`Máximo ${MAX_LOTE_LENGTH} caracteres para el lote`);
+                          return;
+                        }
+
+                        setCurrentNumeroLote(value);
+                      }}
+                      placeholder="Ej: LT-001"
+                      className="h-11"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="cantidad">Cantidad *</Label>
+                    <Input
+                      id="cantidad"
+                      type="text"
+                      inputMode="decimal"
+                      value={currentCantidad}
+                      onChange={(e) => {
+                        const value = e.target.value
+                          .replace(",", ".")
+                          .replace(/[^\d.]/g, "");
+
+                        const partes = value.split(".");
+                        if (partes.length > 2) return;
+
+                        setCurrentCantidad(value);
+                      }}
+                      placeholder="0"
+                      className="h-11"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="fechaVencimientoItem">
+                      Vencimiento *
+                    </Label>
+                    <Input
+                      id="fechaVencimientoItem"
+                      type="date"
+                      min={new Date().toISOString().split("T")[0]}
+                      value={currentFechaVencimiento}
+                      onChange={(e) => setCurrentFechaVencimiento(e.target.value)}
+                      className="h-11"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  <Label htmlFor="notaItem">Nota del Ítem</Label>
+                  <Input
+                    id="notaItem"
+                    value={currentNota}
+                    onChange={(e) => {
+                      const value = e.target.value;
+
+                      if (value.length > MAX_NOTA_ITEM_LENGTH) {
+                        toast.error(`Máximo ${MAX_NOTA_ITEM_LENGTH} caracteres para la nota`);
+                        return;
+                      }
+
+                      setCurrentNota(value);
+                    }}
+                    placeholder="Opcional"
+                    className="h-11"
+                  />
+                </div>
+
+                <Button
+                  type="button"
+                  onClick={handleAddItem}
+                  className="mt-4 h-11 w-full bg-green-600 hover:bg-green-700"
+                  disabled={!selectedCompra}
+                >
+                  <Plus size={16} className="mr-2" />
+                  Agregar Producto
+                </Button>
+              </div>
+
+              {items.length > 0 ? (
+                <div className="mt-4 overflow-hidden rounded-lg border border-gray-200">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-gray-50">
+                        <TableHead>Producto</TableHead>
+                        <TableHead>Lote</TableHead>
+                        <TableHead className="text-center">Cantidad</TableHead>
+                        <TableHead className="text-center">IVA</TableHead>
+                        <TableHead className="text-right">Precio Unitario</TableHead>
+                        <TableHead className="text-right">Subtotal</TableHead>
+                        <TableHead className="text-center">Vencimiento</TableHead>
+                        <TableHead>Cód. Barras</TableHead>
+                        <TableHead>Nota</TableHead>
+                        <TableHead className="w-16 text-center">Acción</TableHead>
+                      </TableRow>
+                    </TableHeader>
+
+                    <TableBody>
+                      {items.map((item) => {
+                        const subtotalItem =
+                          Number(item.cantidad || 0) *
+                          Number(item.precio_unitario || 0);
+
+                        return (
+                          <TableRow key={item.localId}>
+                            <TableCell className="font-medium text-gray-900">
+                              {item.productoNombre}
+                            </TableCell>
+
+                            <TableCell>{item.lote}</TableCell>
+
+                            <TableCell className="text-center">
+                              {item.cantidad}
+                            </TableCell>
+
+                            <TableCell className="text-center">
+                              IVA {formatIvaPorcentaje(item.ivaPorcentaje)}%
+                            </TableCell>
+
+                            <TableCell className="text-right">
+                              {formatMoney(item.precio_unitario)}
+                            </TableCell>
+
+                            <TableCell className="text-right font-medium">
+                              {formatMoney(subtotalItem)}
+                            </TableCell>
+
+                            <TableCell className="text-center">
+                              {formatDate(item.fecha_vencimiento)}
+                            </TableCell>
+
+                            <TableCell>{item.codigo_barras || "—"}</TableCell>
+
+                            <TableCell>{item.nota || "—"}</TableCell>
+
+                            <TableCell className="text-center">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRemoveItem(item.localId)}
+                                className="hover:bg-red-50"
+                              >
+                                <X size={16} className="text-red-600" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+
+                  <div className="flex justify-end border-t bg-gray-50 px-4 py-3">
+                    <div className="w-full max-w-sm space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">N° de Items:</span>
+                        <span className="font-medium">{resumenFormulario.items}</span>
+                      </div>
+
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Subtotal:</span>
+                        <span className="font-medium">
+                          {formatMoney(resumenFormulario.subtotal)}
+                        </span>
+                      </div>
+
+                      {resumenFormulario.ivas.length > 0 ? (
+                        resumenFormulario.ivas.map((iva) => (
+                          <div
+                            key={iva.porcentaje}
+                            className="flex justify-between text-sm"
+                          >
+                            <span className="text-gray-600">
+                              IVA {formatIvaPorcentaje(iva.porcentaje)}%:
+                            </span>
+                            <span className="font-medium">
+                              {formatMoney(iva.valor)}
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">IVA:</span>
+                          <span className="font-medium">{formatMoney(0)}</span>
+                        </div>
+                      )}
+
+                      <div className="flex justify-between border-t pt-2 text-base">
+                        <span className="font-semibold">Total:</span>
+                        <span className="font-bold text-blue-600">
+                          {formatMoney(resumenFormulario.total)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4 rounded-lg border border-dashed border-gray-300 py-10 text-center text-gray-500">
+                  <Package size={48} className="mx-auto mb-3 text-gray-300" />
+                  <p className="font-medium">No hay productos agregados</p>
+                  <p className="mt-1 text-sm">
+                    Selecciona una orden de compra y agrega productos a la remisión
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <div>
+                <h3 className="font-semibold text-gray-900">Observaciones</h3>
+                <p className="text-sm text-gray-500">
+                  Notas adicionales para esta remisión
+                </p>
+              </div>
+
+              <Input
+                id="observaciones"
+                value={formData.observaciones}
+                onChange={(e) => {
+                  const value = e.target.value;
+
+                  if (value.length > MAX_OBSERVACIONES_LENGTH) {
+                    toast.error(
+                      `Máximo ${MAX_OBSERVACIONES_LENGTH} caracteres en observaciones`
+                    );
+                    return;
+                  }
+
+                  setFormData((prev) => ({
+                    ...prev,
+                    observaciones: value,
+                  }));
+                }}
+                placeholder="Notas adicionales..."
+                className="h-11"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="mt-2 border-t pt-4">
             <Button
               variant="outline"
               onClick={() => {
@@ -2414,6 +2840,7 @@ const validateBeforeSubmit = () => {
             >
               Cancelar
             </Button>
+
             <Button
               onClick={confirmCreate}
               className="bg-blue-600 hover:bg-blue-700"
@@ -2437,148 +2864,180 @@ const validateBeforeSubmit = () => {
           aria-describedby="edit-remision-compra-description"
           onInteractOutside={(e) => e.preventDefault()}
         >
-          <DialogHeader>
+          <DialogHeader className="space-y-2 pb-3">
             <DialogTitle>Editar Remisión de Compra</DialogTitle>
-            <DialogDescription
-              id="edit-remision-compra-description"
-              className="sr-only"
-            >
-              Formulario para editar la remisión de compra
-            </DialogDescription>
           </DialogHeader>
 
           {loadingDetalleRemision ? (
-            <div className="flex items-center justify-center py-16 text-gray-600 gap-2">
+            <div className="flex items-center justify-center gap-2 py-16 text-gray-600">
               <Loader2 className="animate-spin" size={18} />
               Cargando remisión...
             </div>
           ) : (
-            <div className="space-y-4 py-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Número de Remisión</Label>
-                  {renderReadonlyBox(formData.numeroRemision)}
+            <div className="space-y-6 py-2">
+              <div className="rounded-lg bg-gray-50 p-5">
+                <div className="mb-4 flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">
+                      Información general
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      Datos principales de la remisión seleccionada
+                    </p>
+                  </div>
+
+                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                    <Badge
+                      variant="outline"
+                      className="border-blue-200 bg-blue-50 px-3 py-1 text-blue-700"
+                    >
+                      {formData.numeroRemision || "Sin número"}
+                    </Badge>
+
+                    {selectedRemision && (
+                      <Badge
+                        variant="outline"
+                        className={getEstadoBadge(selectedRemision.estadoKey).class}
+                      >
+                        {selectedRemision.estado}
+                      </Badge>
+                    )}
+
+                    <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-2 text-right">
+                      <p className="text-xs font-medium text-blue-700">
+                        Fecha de Creación
+                      </p>
+                      <p className="text-sm font-semibold text-blue-900">
+                        {formatDate(formData.fechaCreacion)}
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Orden de Compra</Label>
-                  {renderReadonlyBox(formData.ordenCompra)}
-                </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Orden de Compra</Label>
+                    {renderReadonlyBox(formData.ordenCompra)}
+                  </div>
 
-                <div className="space-y-2">
-                  <Label>Proveedor</Label>
-                  {renderReadonlyBox(formData.proveedor)}
-                </div>
+                  <div className="space-y-2">
+                    <Label>Proveedor</Label>
+                    {renderReadonlyBox(formData.proveedor)}
+                  </div>
 
-                <div className="space-y-2">
-                  <Label>Tipo de Documento</Label>
-                  {renderReadonlyBox(formData.proveedorTipoDocumento)}
-                </div>
+                  <div className="space-y-2">
+                    <Label>Documento / NIT</Label>
+                    {renderReadonlyBox(
+                      `${formData.proveedorTipoDocumento || "Documento"}${formData.proveedorNumeroDocumento
+                        ? `: ${formData.proveedorNumeroDocumento}`
+                        : ""
+                      }`,
+                      "No registrado"
+                    )}
+                  </div>
 
-                <div className="space-y-2">
-                  <Label>Número de Documento</Label>
-                  {renderReadonlyBox(formData.proveedorNumeroDocumento)}
-                </div>
+                  <div className="space-y-2">
+                    <Label>Bodega</Label>
+                    {renderReadonlyBox(formData.bodega)}
+                  </div>
 
-                <div className="space-y-2">
-                  <Label>Bodega</Label>
-                  {renderReadonlyBox(formData.bodega)}
-                </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-codigoFactura">Código Factura</Label>
+                    <Input
+                      id="edit-codigoFactura"
+                      type="text"
+                      value={formData.codigoFactura}
+                      onChange={(e) => {
+                        const value = e.target.value;
 
-                <div className="space-y-2">
-                  <Label htmlFor="edit-fechaCreacion">Fecha de Creación</Label>
-                  <Input
-                    id="edit-fechaCreacion"
-                    type="date"
-                    value={formData.fechaCreacion}
-                    readOnly
-                    className="bg-gray-100 cursor-not-allowed"
-                  />
-                </div>
+                        if (value.length > 50) {
+                          toast.error(
+                            "Máximo 50 caracteres para el código de factura"
+                          );
+                          return;
+                        }
 
-                <div className="space-y-2">
-                  <Label htmlFor="edit-fechaVencimiento">
-                    Fecha de Vencimiento
-                  </Label>
-                  <Input
-                    id="edit-fechaVencimiento"
-                    type="date"
-                    value={formData.fechaVencimiento}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        fechaVencimiento: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
+                        setFormData((prev) => ({
+                          ...prev,
+                          codigoFactura: value,
+                        }));
+                      }}
+                      placeholder="Ej: FEV-1020"
+                      className="h-11"
+                    />
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="edit-idFactura">ID Factura</Label>
-                  <Input
-                    id="edit-idFactura"
-                    type="text"
-                    inputMode="numeric"
-                    value={formData.idFactura}
-                    onChange={(e) => {
-                      const value = e.target.value.replace(/\D/g, "");
-                      setFormData((prev) => ({ ...prev, idFactura: value }));
-                    }}
-                    placeholder="Opcional"
-                  />
-                </div>
-
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="edit-observaciones">Observaciones</Label>
-                  <Input
-                    id="edit-observaciones"
-                    value={formData.observaciones}
-                    onChange={(e) => {
-                      const value = e.target.value;
-
-                      if (value.length > MAX_OBSERVACIONES_LENGTH) {
-                        toast.error(`Máximo ${MAX_OBSERVACIONES_LENGTH} caracteres en observaciones`);
-                        return;
-                      }
-
-                      setFormData((prev) => ({
-                        ...prev,
-                        observaciones: value,
-                      }));
-                    }}
-                  />
+                  {selectedRemision && (
+                    <div className="space-y-2">
+                      <Label>Gestión</Label>
+                      {renderReadonlyBox(getGestionEstadoRemision(selectedRemision))}
+                    </div>
+                  )}
                 </div>
               </div>
 
               {selectedCompra && (
-                <div className="border rounded-lg p-4 bg-blue-50 border-blue-200">
-                  <p className="font-semibold text-blue-900 mb-3">
-                    Productos disponibles de la compra {selectedCompra.codigo}
-                  </p>
-                  <p className="text-sm text-blue-800 mb-3">
-                    Proveedor: {selectedCompra.proveedorNombre} | Tipo Doc.:{" "}
-                    {selectedCompra.proveedorTipoDocumento || "—"} | N° Doc.:{" "}
-                    {selectedCompra.proveedorNumeroDocumento || "—"} | Bodega:{" "}
-                    {selectedCompra.bodegaNombre}
-                  </p>
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-5">
+                  <div className="mb-4">
+                    <h3 className="font-semibold text-blue-900">
+                      Resumen de la compra seleccionada
+                    </h3>
+                    <p className="text-sm text-blue-800">
+                      Orden:{" "}
+                      <span className="font-medium">{selectedCompra.codigo}</span>
+                    </p>
+                    <p className="text-sm text-blue-800">
+                      Proveedor:{" "}
+                      <span className="font-medium">
+                        {selectedCompra.proveedorNombre}
+                      </span>{" "}
+                      | Documento / NIT:{" "}
+                      <span className="font-medium">
+                        {selectedCompra.proveedorTipoDocumento || "Documento"}
+                        {selectedCompra.proveedorNumeroDocumento
+                          ? `: ${selectedCompra.proveedorNumeroDocumento}`
+                          : ""}
+                      </span>{" "}
+                      | Bodega:{" "}
+                      <span className="font-medium">
+                        {selectedCompra.bodegaNombre}
+                      </span>
+                    </p>
+                  </div>
 
-                  <div className="border rounded-lg overflow-hidden bg-white">
+                  <div className="overflow-hidden rounded-lg border border-blue-100 bg-white">
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-gray-50">
                           <TableHead>Producto</TableHead>
-                          <TableHead>Cantidad Compra</TableHead>
-                          <TableHead>Precio Unitario</TableHead>
-                          <TableHead>IVA %</TableHead>
+                          <TableHead className="text-center">
+                            Cantidad Compra
+                          </TableHead>
+                          <TableHead className="text-center">IVA</TableHead>
+                          <TableHead className="text-right">
+                            Precio Unitario
+                          </TableHead>
                         </TableRow>
                       </TableHeader>
+
                       <TableBody>
                         {selectedCompra.items.map((item) => (
                           <TableRow key={item.idProducto}>
-                            <TableCell>{item.productoNombre}</TableCell>
-                            <TableCell>{item.cantidad}</TableCell>
-                            <TableCell>{formatMoney(item.precioUnitario)}</TableCell>
-                            <TableCell>{item.ivaPorcentaje}%</TableCell>
+                            <TableCell className="font-medium text-gray-900">
+                              {item.productoNombre}
+                            </TableCell>
+
+                            <TableCell className="text-center">
+                              {item.cantidad}
+                            </TableCell>
+
+                            <TableCell className="text-center">
+                              IVA {formatIvaPorcentaje(item.ivaPorcentaje)}%
+                            </TableCell>
+
+                            <TableCell className="text-right">
+                              {formatMoney(item.precioUnitario)}
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -2587,65 +3046,89 @@ const validateBeforeSubmit = () => {
                 </div>
               )}
 
-              <div className="border-t pt-4 mt-4">
-                <div className="flex items-center gap-2 mb-4">
+              <div>
+                <div className="mb-3 flex items-center gap-2">
                   <Package size={20} className="text-blue-600" />
-                  <h3 className="font-semibold">Productos de la Remisión</h3>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">
+                      Productos de la Remisión
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      Agrega o ajusta productos con lote, vencimiento y cantidad
+                      recibida
+                    </p>
+                  </div>
                 </div>
 
-                <div className="bg-gray-50 p-4 rounded-lg space-y-4 mb-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                  <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
+                    <div className="mb-2 flex items-center gap-2">
+                      <Barcode size={18} className="text-blue-600" />
+                      <Label htmlFor="edit-codigoBarrasItem" className="text-blue-900">
+                        Código de Barras del Ítem
+                      </Label>
+                    </div>
+
+                    <Input
+                      id="edit-codigoBarrasItem"
+                      value={codigoBarras}
+                      onChange={(e) => {
+                        const value = e.target.value;
+
+                        if (value.length > MAX_CODIGO_BARRAS_LENGTH) {
+                          toast.error(
+                            `Máximo ${MAX_CODIGO_BARRAS_LENGTH} caracteres para código de barras`
+                          );
+                          return;
+                        }
+
+                        setCodigoBarras(value);
+                      }}
+                      onKeyDown={handleBarcodeKeyDown}
+                      placeholder="Escanee o escriba el código de barras..."
+                      className="h-11 bg-white"
+                    />
+
+                    <p className="mt-2 text-xs text-blue-700">
+                      Opcional. Se guardará en el detalle y luego en existencias.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1.5fr)_160px_180px_180px]">
                     <div className="space-y-2">
                       <Label htmlFor="edit-producto">Producto *</Label>
                       <Select
                         value={currentProducto}
                         onValueChange={(value: string) => setCurrentProducto(value)}
+                        disabled={!selectedCompra}
                       >
-                        <SelectTrigger id="edit-producto">
-                          <SelectValue placeholder="Seleccionar producto de la compra" />
+                        <SelectTrigger id="edit-producto" className="h-11">
+                          <SelectValue placeholder="Selecciona un producto de la compra" />
                         </SelectTrigger>
+
                         <SelectContent>
-                          {productosDisponibles.map((producto) => (
-                            <SelectItem
-                              key={producto.idProducto}
-                              value={String(producto.idProducto)}
-                            >
-                              {producto.productoNombre}
-                            </SelectItem>
-                          ))}
+                          {productosDisponibles.length === 0 ? (
+                            <div className="px-3 py-2 text-sm text-gray-500">
+                              No hay productos disponibles
+                            </div>
+                          ) : (
+                            productosDisponibles.map((producto) => (
+                              <SelectItem
+                                key={producto.idProducto}
+                                value={String(producto.idProducto)}
+                              >
+                                {producto.productoNombre} | Disp:{" "}
+                                {producto.cantidad} | IVA{" "}
+                                {formatIvaPorcentaje(producto.ivaPorcentaje)}%
+                              </SelectItem>
+                            ))
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="edit-codigoBarrasItem">Código de Barras</Label>
-                      <div className="relative">
-                        <Input
-                          id="edit-codigoBarrasItem"
-                          value={codigoBarras}
-                          onChange={(e) => {
-                            const value = e.target.value;
-
-                            if (value.length > MAX_CODIGO_BARRAS_LENGTH) {
-                              toast.error(`Máximo ${MAX_CODIGO_BARRAS_LENGTH} caracteres para código de barras`);
-                              return;
-                            }
-
-                            setCodigoBarras(value);
-                          }}
-                          onKeyDown={handleBarcodeKeyDown}
-                          placeholder="Escanee o escriba el código de barras..."
-                          className="pr-10"
-                        />
-                        <Barcode
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
-                          size={18}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-numeroLote">Número de Lote *</Label>
+                      <Label htmlFor="edit-numeroLote">Lote *</Label>
                       <Input
                         id="edit-numeroLote"
                         value={currentNumeroLote}
@@ -2653,13 +3136,16 @@ const validateBeforeSubmit = () => {
                           const value = e.target.value;
 
                           if (value.length > MAX_LOTE_LENGTH) {
-                            toast.error(`Máximo ${MAX_LOTE_LENGTH} caracteres para el lote`);
+                            toast.error(
+                              `Máximo ${MAX_LOTE_LENGTH} caracteres para el lote`
+                            );
                             return;
                           }
 
                           setCurrentNumeroLote(value);
                         }}
-                        placeholder="Ej: AL-2026-001"
+                        placeholder="Ej: LT-001"
+                        className="h-11"
                       />
                     </div>
 
@@ -2671,7 +3157,9 @@ const validateBeforeSubmit = () => {
                         inputMode="decimal"
                         value={currentCantidad}
                         onChange={(e) => {
-                          const value = e.target.value.replace(",", ".").replace(/[^\d.]/g, "");
+                          const value = e.target.value
+                            .replace(",", ".")
+                            .replace(/[^\d.]/g, "");
 
                           const partes = value.split(".");
                           if (partes.length > 2) return;
@@ -2679,12 +3167,13 @@ const validateBeforeSubmit = () => {
                           setCurrentCantidad(value);
                         }}
                         placeholder="0"
+                        className="h-11"
                       />
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="edit-fechaVencimientoItem">
-                        Fecha de Vencimiento *
+                        Vencimiento *
                       </Label>
                       <Input
                         id="edit-fechaVencimientoItem"
@@ -2692,33 +3181,37 @@ const validateBeforeSubmit = () => {
                         min={new Date().toISOString().split("T")[0]}
                         value={currentFechaVencimiento}
                         onChange={(e) => setCurrentFechaVencimiento(e.target.value)}
+                        className="h-11"
                       />
                     </div>
+                  </div>
 
-                    <div className="md:col-span-2 space-y-2">
-                      <Label htmlFor="edit-notaItem">Nota del Ítem</Label>
-                      <Input
-                        id="edit-notaItem"
-                        value={currentNota}
-                        onChange={(e) => {
-                          const value = e.target.value;
+                  <div className="mt-4 space-y-2">
+                    <Label htmlFor="edit-notaItem">Nota del Ítem</Label>
+                    <Input
+                      id="edit-notaItem"
+                      value={currentNota}
+                      onChange={(e) => {
+                        const value = e.target.value;
 
-                          if (value.length > MAX_NOTA_ITEM_LENGTH) {
-                            toast.error(`Máximo ${MAX_NOTA_ITEM_LENGTH} caracteres para la nota`);
-                            return;
-                          }
+                        if (value.length > MAX_NOTA_ITEM_LENGTH) {
+                          toast.error(
+                            `Máximo ${MAX_NOTA_ITEM_LENGTH} caracteres para la nota`
+                          );
+                          return;
+                        }
 
-                          setCurrentNota(value);
-                        }}
-                        placeholder="Opcional"
-                      />
-                    </div>
+                        setCurrentNota(value);
+                      }}
+                      placeholder="Opcional"
+                      className="h-11"
+                    />
                   </div>
 
                   <Button
                     type="button"
                     onClick={handleAddItem}
-                    className="bg-green-600 hover:bg-green-700 w-full"
+                    className="mt-4 h-11 w-full bg-green-600 hover:bg-green-700"
                     disabled={!selectedCompra}
                   >
                     <Plus size={16} className="mr-2" />
@@ -2727,66 +3220,168 @@ const validateBeforeSubmit = () => {
                 </div>
 
                 {items.length > 0 ? (
-                  <div className="border rounded-lg overflow-hidden">
+                  <div className="mt-4 overflow-hidden rounded-lg border border-gray-200">
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-gray-50">
                           <TableHead>Producto</TableHead>
                           <TableHead>Lote</TableHead>
-                          <TableHead>Cantidad</TableHead>
-                          <TableHead>Precio</TableHead>
-                          <TableHead>IVA</TableHead>
-                          <TableHead>Vencimiento</TableHead>
+                          <TableHead className="text-center">Cantidad</TableHead>
+                          <TableHead className="text-center">IVA</TableHead>
+                          <TableHead className="text-right">Precio Unitario</TableHead>
+                          <TableHead className="text-right">Subtotal</TableHead>
+                          <TableHead className="text-center">Vencimiento</TableHead>
                           <TableHead>Cód. Barras</TableHead>
                           <TableHead>Nota</TableHead>
-                          <TableHead className="w-16"></TableHead>
+                          <TableHead className="w-16 text-center">Acción</TableHead>
                         </TableRow>
                       </TableHeader>
+
                       <TableBody>
-                        {items.map((item) => (
-                          <TableRow key={item.localId}>
-                            <TableCell>{item.productoNombre}</TableCell>
-                            <TableCell>{item.lote}</TableCell>
-                            <TableCell>{item.cantidad}</TableCell>
-                            <TableCell>{formatMoney(item.precio_unitario)}</TableCell>
-                            <TableCell>{item.ivaPorcentaje}%</TableCell>
-                            <TableCell>{formatDate(item.fecha_vencimiento)}</TableCell>
-                            <TableCell>{item.codigo_barras || "—"}</TableCell>
-                            <TableCell>{item.nota || "—"}</TableCell>
-                            <TableCell>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleRemoveItem(item.localId)}
-                                className="hover:bg-red-50"
-                              >
-                                <X size={16} className="text-red-600" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                        <TableRow className="bg-gray-50">
-                          <TableCell colSpan={8} className="text-right font-semibold">
-                            Total aproximado
-                          </TableCell>
-                          <TableCell className="font-semibold">
-                            {formatMoney(totalFormulario)}
-                          </TableCell>
-                        </TableRow>
+                        {items.map((item) => {
+                          const subtotalItem =
+                            Number(item.cantidad || 0) *
+                            Number(item.precio_unitario || 0);
+
+                          return (
+                            <TableRow key={item.localId}>
+                              <TableCell className="font-medium text-gray-900">
+                                {item.productoNombre}
+                              </TableCell>
+
+                              <TableCell>{item.lote}</TableCell>
+
+                              <TableCell className="text-center">
+                                {item.cantidad}
+                              </TableCell>
+
+                              <TableCell className="text-center">
+                                IVA {formatIvaPorcentaje(item.ivaPorcentaje)}%
+                              </TableCell>
+
+                              <TableCell className="text-right">
+                                {formatMoney(item.precio_unitario)}
+                              </TableCell>
+
+                              <TableCell className="text-right font-medium">
+                                {formatMoney(subtotalItem)}
+                              </TableCell>
+
+                              <TableCell className="text-center">
+                                {formatDate(item.fecha_vencimiento)}
+                              </TableCell>
+
+                              <TableCell>{item.codigo_barras || "—"}</TableCell>
+
+                              <TableCell>{item.nota || "—"}</TableCell>
+
+                              <TableCell className="text-center">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleRemoveItem(item.localId)}
+                                  className="hover:bg-red-50"
+                                >
+                                  <X size={16} className="text-red-600" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
+
+                    <div className="flex justify-end border-t bg-gray-50 px-4 py-3">
+                      <div className="w-full max-w-sm space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">N° de Items:</span>
+                          <span className="font-medium">
+                            {resumenFormulario.items}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Subtotal:</span>
+                          <span className="font-medium">
+                            {formatMoney(resumenFormulario.subtotal)}
+                          </span>
+                        </div>
+
+                        {resumenFormulario.ivas.length > 0 ? (
+                          resumenFormulario.ivas.map((iva) => (
+                            <div
+                              key={iva.porcentaje}
+                              className="flex justify-between text-sm"
+                            >
+                              <span className="text-gray-600">
+                                IVA {formatIvaPorcentaje(iva.porcentaje)}%:
+                              </span>
+                              <span className="font-medium">
+                                {formatMoney(iva.valor)}
+                              </span>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">IVA:</span>
+                            <span className="font-medium">{formatMoney(0)}</span>
+                          </div>
+                        )}
+
+                        <div className="flex justify-between border-t pt-2 text-base">
+                          <span className="font-semibold">Total:</span>
+                          <span className="font-bold text-blue-600">
+                            {formatMoney(resumenFormulario.total)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 ) : (
-                  <div className="text-center py-8 text-gray-500 border rounded-lg border-dashed">
-                    <Package size={48} className="mx-auto mb-2 text-gray-300" />
-                    <p>No hay productos agregados</p>
+                  <div className="mt-4 rounded-lg border border-dashed border-gray-300 py-10 text-center text-gray-500">
+                    <Package size={48} className="mx-auto mb-3 text-gray-300" />
+                    <p className="font-medium">No hay productos agregados</p>
+                    <p className="mt-1 text-sm">
+                      Agrega productos desde el detalle de la compra seleccionada
+                    </p>
                   </div>
                 )}
+              </div>
+
+              <div className="space-y-2">
+                <div>
+                  <h3 className="font-semibold text-gray-900">Observaciones</h3>
+                  <p className="text-sm text-gray-500">
+                    Notas adicionales para esta remisión
+                  </p>
+                </div>
+
+                <Input
+                  id="edit-observaciones"
+                  value={formData.observaciones}
+                  onChange={(e) => {
+                    const value = e.target.value;
+
+                    if (value.length > MAX_OBSERVACIONES_LENGTH) {
+                      toast.error(
+                        `Máximo ${MAX_OBSERVACIONES_LENGTH} caracteres en observaciones`
+                      );
+                      return;
+                    }
+
+                    setFormData((prev) => ({
+                      ...prev,
+                      observaciones: value,
+                    }));
+                  }}
+                  placeholder="Notas adicionales..."
+                  className="h-11"
+                />
               </div>
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="mt-2 border-t pt-4">
             <Button
               variant="outline"
               onClick={() => {
@@ -2797,6 +3392,7 @@ const validateBeforeSubmit = () => {
             >
               Cancelar
             </Button>
+
             <Button
               onClick={confirmEdit}
               className="bg-blue-600 hover:bg-blue-700"
@@ -2865,12 +3461,6 @@ const validateBeforeSubmit = () => {
                 <div>
                   <p className="text-sm text-gray-600">Fecha de Creación</p>
                   <p className="font-semibold">{formatDate(selectedRemision.fecha)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Fecha de Vencimiento</p>
-                  <p className="font-semibold">
-                    {formatDate(selectedRemision.fechaVencimiento)}
-                  </p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Bodega</p>
@@ -3070,8 +3660,8 @@ const validateBeforeSubmit = () => {
           <DialogHeader>
             <DialogTitle>Cambiar Estado de Remisión</DialogTitle>
             <DialogDescription id="confirm-estado-description">
-              ¿Deseas aprobar/confirmar esta remisión? Solo al confirmar/aprobar se
-              deben aplicar existencias desde el backend.
+              ¿Deseas aprobar esta remisión? Solo al aprobar se
+              subiran las existencias al inventario
             </DialogDescription>
           </DialogHeader>
 
