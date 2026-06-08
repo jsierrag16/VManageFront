@@ -138,12 +138,9 @@ export default function Productos({
   // =========================================================
   const canCreateProductos = tienePermiso("existencias", "productos", "crear");
   const canEditProductos = tienePermiso("existencias", "productos", "editar");
-  const canChangeEstadoProductos = tienePermiso(
-    "existencias",
-    "productos",
-    "cambiarEstado"
-  );
+  const canChangeEstadoProductos = tienePermiso("existencias", "productos", "cambiarEstado");
   const canCreateTraslados = tienePermiso("existencias", "traslados", "crear");
+  const canCreateIva = tienePermiso("existencias", "productos", "crearIva");
 
   // =========================================================
   // Estados de errores y touched
@@ -527,6 +524,11 @@ export default function Productos({
   };
 
   const handleCrearIva = async () => {
+    if (!canCreateIva) {
+      toast.error("No tienes permiso para crear IVA");
+      return;
+    }
+
     const porcentaje = Number(nuevoIvaPorcentaje.replace(",", "."));
 
     if (!nuevoIvaPorcentaje.trim() || Number.isNaN(porcentaje)) {
@@ -1700,15 +1702,17 @@ export default function Productos({
                   </SelectContent>
                 </Select>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowNuevoIvaModal(true)}
-                  className="h-11 shrink-0 border-blue-200 bg-blue-50 px-4 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
-                >
-                  <Plus size={16} className="mr-2" />
-                  Nuevo IVA
-                </Button>
+                {canCreateIva && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowNuevoIvaModal(true)}
+                    className="h-11 shrink-0 border-blue-200 bg-blue-50 px-4 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
+                  >
+                    <Plus size={16} className="mr-2" />
+                    Nuevo IVA
+                  </Button>
+                )}
               </div>
 
               {errors.iva && touched.iva && (
@@ -1864,15 +1868,17 @@ export default function Productos({
                   </SelectContent>
                 </Select>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowNuevoIvaModal(true)}
-                  className="h-11 shrink-0 border-blue-200 bg-blue-50 px-4 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
-                >
-                  <Plus size={16} className="mr-2" />
-                  Nuevo IVA
-                </Button>
+                {canCreateIva && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowNuevoIvaModal(true)}
+                    className="h-11 shrink-0 border-blue-200 bg-blue-50 px-4 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
+                  >
+                    <Plus size={16} className="mr-2" />
+                    Nuevo IVA
+                  </Button>
+                )}
               </div>
 
               {errors.iva && touched.iva && (

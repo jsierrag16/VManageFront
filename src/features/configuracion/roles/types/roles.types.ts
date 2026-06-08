@@ -9,6 +9,7 @@ export interface Permisos {
       crear: boolean;
       editar: boolean;
       cambiarEstado: boolean;
+      crearIva: boolean;
     };
     traslados: {
       ver: boolean;
@@ -131,6 +132,7 @@ export const createEmptyPermisos = (): Permisos => ({
       crear: false,
       editar: false,
       cambiarEstado: false,
+      crearIva: false,
     },
     traslados: {
       ver: false,
@@ -244,6 +246,7 @@ export const createFullPermisos = (): Permisos => ({
       crear: true,
       editar: true,
       cambiarEstado: true,
+      crearIva: true,
     },
     traslados: {
       ver: true,

@@ -1116,7 +1116,7 @@ export default function Roles() {
                   <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
                     <h5 className="font-semibold text-sm mb-2">Dashboard</h5>
                     <div className="text-sm text-gray-700 space-y-1">
-                      <p>• Acceder: {rolSeleccionado.permisos.dashboard.acceder ? "✓" : "✗"}</p>
+                      <p>• Ver Resumen: {rolSeleccionado.permisos.dashboard.acceder ? "✓" : "✗"}</p>
                     </div>
                   </div>
 
@@ -1129,6 +1129,7 @@ export default function Roles() {
                       <p className="pl-2">• Crear: {rolSeleccionado.permisos.existencias.productos.crear ? "✓" : "✗"}</p>
                       <p className="pl-2">• Editar: {rolSeleccionado.permisos.existencias.productos.editar ? "✓" : "✗"}</p>
                       <p className="pl-2">• Cambiar Estado: {rolSeleccionado.permisos.existencias.productos.cambiarEstado ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Crear IVA: {rolSeleccionado.permisos.existencias.productos.crearIva ? "✓" : "✗"}</p>
 
                       <p className="font-medium mt-2">Traslados:</p>
                       <p className="pl-2">• Ver: {rolSeleccionado.permisos.existencias.traslados.ver ? "✓" : "✗"}</p>

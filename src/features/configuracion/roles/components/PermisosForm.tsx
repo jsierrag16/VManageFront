@@ -59,7 +59,7 @@ export function PermisosForm({
         </div>
         <div className="space-y-1 ml-2">
           <PermisoCheckbox
-            label="Acceder"
+            label="Ver Resumen"
             path={["dashboard", "acceder"]}
             value={formPermisos.dashboard.acceder}
           />
@@ -105,6 +105,11 @@ export function PermisosForm({
                 label="Cambiar estado"
                 path={["existencias", "productos", "cambiarEstado"]}
                 value={formPermisos.existencias.productos.cambiarEstado}
+              />
+              <PermisoCheckbox
+                label="Crear IVA"
+                path={["existencias", "productos", "crearIva"]}
+                value={formPermisos.existencias.productos.crearIva}
               />
             </div>
           </div>

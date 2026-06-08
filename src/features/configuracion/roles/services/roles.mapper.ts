@@ -19,6 +19,8 @@ const permisoPathMap: Record<string, string[]> = {
   "existencias.productos.editar": ["existencias", "productos", "editar"],
   "existencias.productos.cambiar_estado": ["existencias", "productos", "cambiarEstado"],
   "existencias.productos.cambiarestado": ["existencias", "productos", "cambiarEstado"],
+  "existencias.productos.crear_iva": ["existencias", "productos", "crearIva"],
+  "existencias.productos.creariva": ["existencias", "productos", "crearIva"],
 
   "existencias.traslados.ver": ["existencias", "traslados", "ver"],
   "existencias.traslados.crear": ["existencias", "traslados", "crear"],
