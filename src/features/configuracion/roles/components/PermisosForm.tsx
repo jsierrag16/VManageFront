@@ -1,12 +1,14 @@
 import { Checkbox } from "../../../../shared/components/ui/checkbox";
 import { Label } from "../../../../shared/components/ui/label";
-import { Permisos } from "../types/roles.types";
+import type { Permisos } from "@/features/configuracion/roles/types/roles.types";
+
+type ModuloPermisos = keyof Permisos;
 
 interface PermisosFormProps {
   formPermisos: Permisos;
   updatePermiso: (path: string[], value: boolean) => void;
-  toggleModulePermissions: (module: string) => void;
-  isModuleFullyChecked: (module: string) => boolean;
+  toggleModulePermissions: (module: ModuloPermisos) => void;
+  isModuleFullyChecked: (module: ModuloPermisos) => boolean;
 }
 
 export function PermisosForm({
@@ -97,6 +99,11 @@ export function PermisosForm({
                 value={formPermisos.existencias.productos.crear}
               />
               <PermisoCheckbox
+                label="Crear IVA"
+                path={["existencias", "productos", "crearIva"]}
+                value={formPermisos.existencias.productos.crearIva}
+              />
+              <PermisoCheckbox
                 label="Editar"
                 path={["existencias", "productos", "editar"]}
                 value={formPermisos.existencias.productos.editar}
@@ -105,11 +112,6 @@ export function PermisosForm({
                 label="Cambiar estado"
                 path={["existencias", "productos", "cambiarEstado"]}
                 value={formPermisos.existencias.productos.cambiarEstado}
-              />
-              <PermisoCheckbox
-                label="Crear IVA"
-                path={["existencias", "productos", "crearIva"]}
-                value={formPermisos.existencias.productos.crearIva}
               />
             </div>
           </div>
