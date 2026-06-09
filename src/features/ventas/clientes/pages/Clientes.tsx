@@ -699,6 +699,228 @@ export default function Clientes() {
     setShowSuccessModal(false);
   };
 
+  const renderClienteForm = (mode: "create" | "edit") => {
+    const prefix = mode === "create" ? "create" : "edit";
+
+    return (
+      <div className="space-y-5 py-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div>
+            <Label htmlFor={`${prefix}-tipo-doc`}>Tipo de Documento *</Label>
+            <Select
+              value={formTipoDocId}
+              onValueChange={handleTipoDocChange}
+            >
+              <SelectTrigger
+                id={`${prefix}-tipo-doc`}
+                className={errors.tipoDoc && touched.tipoDoc ? "border-red-500" : ""}
+              >
+                <SelectValue placeholder="Selecciona un tipo de documento" />
+              </SelectTrigger>
+
+              <SelectContent>
+                {tiposDocumento.map((tipo) => (
+                  <SelectItem key={tipo.id} value={String(tipo.id)}>
+                    {tipo.nombre}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {errors.tipoDoc && touched.tipoDoc && (
+              <p className="mt-1 text-sm text-red-500">{errors.tipoDoc}</p>
+            )}
+          </div>
+
+          <div>
+            <Label htmlFor={`${prefix}-numero-doc`}>N° de Documento *</Label>
+            <Input
+              id={`${prefix}-numero-doc`}
+              value={formNumeroDoc}
+              onChange={(e) => handleNumeroDocChange(e.target.value)}
+              onBlur={handleNumeroDocBlur}
+              placeholder="Ej: 1234567890"
+              className={errors.numeroDoc && touched.numeroDoc ? "border-red-500" : ""}
+            />
+
+            {errors.numeroDoc && touched.numeroDoc && (
+              <p className="mt-1 text-sm text-red-500">{errors.numeroDoc}</p>
+            )}
+          </div>
+        </div>
+
+        <div>
+          <Label htmlFor={`${prefix}-nombre`}>Nombre Completo *</Label>
+          <Input
+            id={`${prefix}-nombre`}
+            value={formNombre}
+            onChange={(e) => handleNombreChange(e.target.value)}
+            onBlur={handleNombreBlur}
+            placeholder="Ej: Juan Pérez García"
+            className={errors.nombre && touched.nombre ? "border-red-500" : ""}
+          />
+
+          {errors.nombre && touched.nombre && (
+            <p className="mt-1 text-sm text-red-500">{errors.nombre}</p>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div>
+            <Label htmlFor={`${prefix}-email`}>Email *</Label>
+            <Input
+              id={`${prefix}-email`}
+              type="email"
+              value={formEmail}
+              onChange={(e) => handleEmailChange(e.target.value)}
+              onBlur={handleEmailBlur}
+              placeholder="correo@ejemplo.com"
+              className={errors.email && touched.email ? "border-red-500" : ""}
+            />
+
+            {errors.email && touched.email && (
+              <p className="mt-1 text-sm text-red-500">{errors.email}</p>
+            )}
+          </div>
+
+          <div>
+            <Label htmlFor={`${prefix}-telefono`}>Teléfono *</Label>
+            <Input
+              id={`${prefix}-telefono`}
+              value={formTelefono}
+              onChange={(e) => handleTelefonoChange(e.target.value)}
+              onBlur={handleTelefonoBlur}
+              placeholder="3001234567"
+              className={errors.telefono && touched.telefono ? "border-red-500" : ""}
+            />
+
+            {errors.telefono && touched.telefono && (
+              <p className="mt-1 text-sm text-red-500">{errors.telefono}</p>
+            )}
+          </div>
+        </div>
+
+        <div>
+          <Label htmlFor={`${prefix}-tipo-cliente`}>Tipo de Cliente *</Label>
+          <Select
+            value={formTipoClienteId}
+            onValueChange={handleTipoClienteChange}
+          >
+            <SelectTrigger
+              id={`${prefix}-tipo-cliente`}
+              className={
+                errors.tipoCliente && touched.tipoCliente ? "border-red-500" : ""
+              }
+            >
+              <SelectValue placeholder="Selecciona el tipo de cliente" />
+            </SelectTrigger>
+
+            <SelectContent>
+              {tiposCliente.map((tipo) => (
+                <SelectItem key={tipo.id} value={String(tipo.id)}>
+                  {tipo.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {errors.tipoCliente && touched.tipoCliente && (
+            <p className="mt-1 text-sm text-red-500">{errors.tipoCliente}</p>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div>
+            <Label htmlFor={`${prefix}-departamento`}>Departamento *</Label>
+            <Select
+              value={formDepartamentoId}
+              onValueChange={handleDepartamentoChange}
+            >
+              <SelectTrigger id={`${prefix}-departamento`}>
+                <SelectValue placeholder="Selecciona un departamento" />
+              </SelectTrigger>
+
+              <SelectContent>
+                {departamentos.length === 0 ? (
+                  <div className="px-3 py-2 text-sm text-gray-500">
+                    No hay departamentos disponibles
+                  </div>
+                ) : (
+                  departamentos.map((departamento) => (
+                    <SelectItem
+                      key={departamento.id}
+                      value={String(departamento.id)}
+                    >
+                      {departamento.nombre}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label htmlFor={`${prefix}-municipio`}>Ciudad / Municipio *</Label>
+            <Select
+              value={formMunicipioId}
+              onValueChange={handleMunicipioChange}
+              disabled={!formDepartamentoId || isLoadingMunicipios}
+            >
+              <SelectTrigger
+                id={`${prefix}-municipio`}
+                className={errors.municipio && touched.municipio ? "border-red-500" : ""}
+              >
+                <SelectValue
+                  placeholder={
+                    !formDepartamentoId
+                      ? "Selecciona primero un departamento"
+                      : isLoadingMunicipios
+                        ? "Cargando municipios..."
+                        : "Selecciona una ciudad / municipio"
+                  }
+                />
+              </SelectTrigger>
+
+              <SelectContent>
+                {municipios.length === 0 ? (
+                  <div className="px-3 py-2 text-sm text-gray-500">
+                    No hay municipios disponibles
+                  </div>
+                ) : (
+                  municipios.map((municipio) => (
+                    <SelectItem key={municipio.id} value={String(municipio.id)}>
+                      {municipio.nombre}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+
+            {errors.municipio && touched.municipio && (
+              <p className="mt-1 text-sm text-red-500">{errors.municipio}</p>
+            )}
+          </div>
+        </div>
+
+        <div>
+          <Label htmlFor={`${prefix}-direccion`}>Dirección *</Label>
+          <Input
+            id={`${prefix}-direccion`}
+            value={formDireccion}
+            onChange={(e) => handleDireccionChange(e.target.value)}
+            onBlur={handleDireccionBlur}
+            placeholder="Ej: Carrera 43A # 12-34"
+            className={errors.direccion && touched.direccion ? "border-red-500" : ""}
+          />
+
+          {errors.direccion && touched.direccion && (
+            <p className="mt-1 text-sm text-red-500">{errors.direccion}</p>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -1080,215 +1302,20 @@ export default function Clientes() {
           aria-describedby="create-cliente-description"
           onInteractOutside={(e) => e.preventDefault()}
         >
-          <DialogHeader>
+          <DialogHeader className="space-y-2 pb-3">
             <DialogTitle>Nuevo Cliente</DialogTitle>
             <DialogDescription id="create-cliente-description">
               Completa la información del nuevo cliente
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="create-tipo-doc">Tipo de Documento *</Label>
-                <Select
-                  value={formTipoDocId}
-                  onValueChange={handleTipoDocChange}
-                >
-                  <SelectTrigger id="create-tipo-doc">
-                    <SelectValue placeholder="Selecciona un tipo de documento" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tiposDocumento.map((tipo) => (
-                      <SelectItem key={tipo.id} value={String(tipo.id)}>
-                        {tipo.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.tipoDoc && touched.tipoDoc && (
-                  <p className="text-red-500 text-xs mt-1">{errors.tipoDoc}</p>
-                )}
-              </div>
+          {renderClienteForm("create")}
 
-              <div>
-                <Label htmlFor="create-numero-doc">N° de Documento *</Label>
-                <Input
-                  id="create-numero-doc"
-                  value={formNumeroDoc}
-                  onChange={(e) => handleNumeroDocChange(e.target.value)}
-                  placeholder="Ej: 1234567890"
-                  onBlur={handleNumeroDocBlur}
-                />
-                {errors.numeroDoc && touched.numeroDoc && (
-                  <p className="text-red-500 text-xs mt-1">{errors.numeroDoc}</p>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="create-nombre">Nombre Completo *</Label>
-              <Input
-                id="create-nombre"
-                value={formNombre}
-                onChange={(e) => handleNombreChange(e.target.value)}
-                placeholder="Ej: Juan Pérez García"
-                onBlur={handleNombreBlur}
-              />
-              {errors.nombre && touched.nombre && (
-                <p className="text-red-500 text-xs mt-1">{errors.nombre}</p>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="create-email">Email *</Label>
-                <Input
-                  id="create-email"
-                  type="email"
-                  value={formEmail}
-                  onChange={(e) => handleEmailChange(e.target.value)}
-                  placeholder="correo@ejemplo.com"
-                  onBlur={handleEmailBlur}
-                />
-                {errors.email && touched.email && (
-                  <p className="text-red-500 text-xs mt-1">{errors.email}</p>
-                )}
-              </div>
-
-              <div>
-                <Label htmlFor="create-tipo-cliente">Tipo de Cliente *</Label>
-                <Select
-                  value={formTipoClienteId}
-                  onValueChange={handleTipoClienteChange}
-                >
-                  <SelectTrigger id="create-tipo-cliente">
-                    <SelectValue placeholder="Selecciona el tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tiposCliente.map((tipo) => (
-                      <SelectItem key={tipo.id} value={String(tipo.id)}>
-                        {tipo.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.tipoCliente && touched.tipoCliente && (
-                  <p className="text-red-500 text-xs mt-1">
-                    {errors.tipoCliente}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="create-telefono">Teléfono Principal *</Label>
-                <Input
-                  id="create-telefono"
-                  value={formTelefono}
-                  onChange={(e) => handleTelefonoChange(e.target.value)}
-                  placeholder="3001234567"
-                  onBlur={handleTelefonoBlur}
-                />
-                {errors.telefono && touched.telefono && (
-                  <p className="text-red-500 text-xs mt-1">{errors.telefono}</p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <Label htmlFor="departamento">Departamento *</Label>
-                  <Select
-                    value={formDepartamentoId}
-                    onValueChange={handleDepartamentoChange}
-                  >
-                    <SelectTrigger id="departamento">
-                      <SelectValue placeholder="Selecciona un departamento" />
-                    </SelectTrigger>
-
-                    <SelectContent>
-                      {departamentos.length === 0 ? (
-                        <div className="px-3 py-2 text-sm text-gray-500">
-                          No hay departamentos disponibles
-                        </div>
-                      ) : (
-                        departamentos.map((departamento) => (
-                          <SelectItem
-                            key={departamento.id}
-                            value={String(departamento.id)}
-                          >
-                            {departamento.nombre}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label htmlFor="municipio">Ciudad / Municipio *</Label>
-                  <Select
-                    value={formMunicipioId}
-                    onValueChange={handleMunicipioChange}
-                    disabled={!formDepartamentoId || isLoadingMunicipios}
-                  >
-                    <SelectTrigger
-                      id="municipio"
-                      className={errors.municipio && touched.municipio ? "border-red-500" : ""}
-                    >
-                      <SelectValue
-                        placeholder={
-                          !formDepartamentoId
-                            ? "Selecciona primero un departamento"
-                            : isLoadingMunicipios
-                              ? "Cargando municipios..."
-                              : "Selecciona una ciudad / municipio"
-                        }
-                      />
-                    </SelectTrigger>
-
-                    <SelectContent>
-                      {municipios.length === 0 ? (
-                        <div className="px-3 py-2 text-sm text-gray-500">
-                          No hay municipios disponibles
-                        </div>
-                      ) : (
-                        municipios.map((municipio) => (
-                          <SelectItem key={municipio.id} value={String(municipio.id)}>
-                            {municipio.nombre}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-
-                  {errors.municipio && touched.municipio && (
-                    <p className="mt-1 text-sm text-red-500">{errors.municipio}</p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="create-direccion">Dirección *</Label>
-              <Input
-                id="create-direccion"
-                value={formDireccion}
-                onChange={(e) => handleDireccionChange(e.target.value)}
-                placeholder="Ej: Carrera 43A # 12-34"
-                onBlur={handleDireccionBlur}
-              />
-              {errors.direccion && touched.direccion && (
-                <p className="text-red-500 text-xs mt-1">{errors.direccion}</p>
-              )}
-            </div>
-          </div>
-
-          <DialogFooter>
+          <DialogFooter className="mt-2 border-t pt-4">
             <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
+
             <Button
               onClick={confirmCreate}
               className="bg-blue-600 hover:bg-blue-700"
@@ -1299,6 +1326,7 @@ export default function Clientes() {
         </DialogContent>
       </Dialog>
 
+      {/* Modal Editar */}
       {/* Modal Editar */}
       <Dialog
         open={isEditar}
@@ -1311,215 +1339,20 @@ export default function Clientes() {
           aria-describedby="edit-cliente-description"
           onInteractOutside={(e) => e.preventDefault()}
         >
-          <DialogHeader>
+          <DialogHeader className="space-y-2 pb-3">
             <DialogTitle>Editar Cliente</DialogTitle>
             <DialogDescription id="edit-cliente-description">
               Modifica la información del cliente
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="edit-tipo-doc">Tipo de Documento *</Label>
-                <Select
-                  value={formTipoDocId}
-                  onValueChange={handleTipoDocChange}
-                >
-                  <SelectTrigger id="edit-tipo-doc">
-                    <SelectValue placeholder="Selecciona un tipo de documento" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tiposDocumento.map((tipo) => (
-                      <SelectItem key={tipo.id} value={String(tipo.id)}>
-                        {tipo.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.tipoDoc && touched.tipoDoc && (
-                  <p className="text-red-500 text-xs mt-1">{errors.tipoDoc}</p>
-                )}
-              </div>
+          {renderClienteForm("edit")}
 
-              <div>
-                <Label htmlFor="edit-numero-doc">N° de Documento *</Label>
-                <Input
-                  id="edit-numero-doc"
-                  value={formNumeroDoc}
-                  onChange={(e) => handleNumeroDocChange(e.target.value)}
-                  placeholder="Ej: 1234567890"
-                  onBlur={handleNumeroDocBlur}
-                />
-                {errors.numeroDoc && touched.numeroDoc && (
-                  <p className="text-red-500 text-xs mt-1">{errors.numeroDoc}</p>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="edit-nombre">Nombre Completo *</Label>
-              <Input
-                id="edit-nombre"
-                value={formNombre}
-                onChange={(e) => handleNombreChange(e.target.value)}
-                placeholder="Ej: Juan Pérez García"
-                onBlur={handleNombreBlur}
-              />
-              {errors.nombre && touched.nombre && (
-                <p className="text-red-500 text-xs mt-1">{errors.nombre}</p>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="edit-email">Email *</Label>
-                <Input
-                  id="edit-email"
-                  type="email"
-                  value={formEmail}
-                  onChange={(e) => handleEmailChange(e.target.value)}
-                  placeholder="correo@ejemplo.com"
-                  onBlur={handleEmailBlur}
-                />
-                {errors.email && touched.email && (
-                  <p className="text-red-500 text-xs mt-1">{errors.email}</p>
-                )}
-              </div>
-
-              <div>
-                <Label htmlFor="edit-tipo-cliente">Tipo de Cliente *</Label>
-                <Select
-                  value={formTipoClienteId}
-                  onValueChange={handleTipoClienteChange}
-                >
-                  <SelectTrigger id="edit-tipo-cliente">
-                    <SelectValue placeholder="Selecciona el tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tiposCliente.map((tipo) => (
-                      <SelectItem key={tipo.id} value={String(tipo.id)}>
-                        {tipo.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.tipoCliente && touched.tipoCliente && (
-                  <p className="text-red-500 text-xs mt-1">
-                    {errors.tipoCliente}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="edit-telefono">Teléfono Principal *</Label>
-                <Input
-                  id="edit-telefono"
-                  value={formTelefono}
-                  onChange={(e) => handleTelefonoChange(e.target.value)}
-                  placeholder="3001234567"
-                  onBlur={handleTelefonoBlur}
-                />
-                {errors.telefono && touched.telefono && (
-                  <p className="text-red-500 text-xs mt-1">{errors.telefono}</p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <Label htmlFor="edit-departamento">Departamento *</Label>
-                  <Select
-                    value={formDepartamentoId}
-                    onValueChange={handleDepartamentoChange}
-                  >
-                    <SelectTrigger id="edit-departamento">
-                      <SelectValue placeholder="Selecciona un departamento" />
-                    </SelectTrigger>
-
-                    <SelectContent>
-                      {departamentos.length === 0 ? (
-                        <div className="px-3 py-2 text-sm text-gray-500">
-                          No hay departamentos disponibles
-                        </div>
-                      ) : (
-                        departamentos.map((departamento) => (
-                          <SelectItem
-                            key={departamento.id}
-                            value={String(departamento.id)}
-                          >
-                            {departamento.nombre}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label htmlFor="edit-municipio">Ciudad / Municipio *</Label>
-                  <Select
-                    value={formMunicipioId}
-                    onValueChange={handleMunicipioChange}
-                    disabled={!formDepartamentoId || isLoadingMunicipios}
-                  >
-                    <SelectTrigger
-                      id="edit-municipio"
-                      className={errors.municipio && touched.municipio ? "border-red-500" : ""}
-                    >
-                      <SelectValue
-                        placeholder={
-                          !formDepartamentoId
-                            ? "Selecciona primero un departamento"
-                            : isLoadingMunicipios
-                              ? "Cargando municipios..."
-                              : "Selecciona una ciudad / municipio"
-                        }
-                      />
-                    </SelectTrigger>
-
-                    <SelectContent>
-                      {municipios.length === 0 ? (
-                        <div className="px-3 py-2 text-sm text-gray-500">
-                          No hay municipios disponibles
-                        </div>
-                      ) : (
-                        municipios.map((municipio) => (
-                          <SelectItem key={municipio.id} value={String(municipio.id)}>
-                            {municipio.nombre}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-
-                  {errors.municipio && touched.municipio && (
-                    <p className="mt-1 text-sm text-red-500">{errors.municipio}</p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="edit-direccion">Dirección *</Label>
-              <Input
-                id="edit-direccion"
-                value={formDireccion}
-                onChange={(e) => handleDireccionChange(e.target.value)}
-                placeholder="Ej: Carrera 43A # 12-34"
-                onBlur={handleDireccionBlur}
-              />
-              {errors.direccion && touched.direccion && (
-                <p className="text-red-500 text-xs mt-1">{errors.direccion}</p>
-              )}
-            </div>
-          </div>
-
-          <DialogFooter>
+          <DialogFooter className="mt-2 border-t pt-4">
             <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
+
             <Button
               onClick={confirmEdit}
               className="bg-orange-600 hover:bg-orange-700"

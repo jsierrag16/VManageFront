@@ -331,7 +331,8 @@ export default function Traslados({
     return filtrados.sort((a, b) => {
       const numeroA = Number(a.codigo.replace(/\D/g, ""));
       const numeroB = Number(b.codigo.replace(/\D/g, ""));
-      return numeroA - numeroB;
+
+      return numeroB - numeroA;
     });
   }, [traslados, searchTerm, fechaInicio, fechaFin, selectedBodega]);
 
@@ -1047,6 +1048,7 @@ export default function Traslados({
       setIsCreatingTraslado(true);
 
       await createTraslado(payload);
+      setCurrentPage(1);
       await loadTraslados();
 
       if (formBodegaOrigenId) {

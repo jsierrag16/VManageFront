@@ -68,7 +68,7 @@ type DetalleCotizacionApi = {
   id_producto: number;
   cantidad: number | string;
   precio_unitario: number | string;
-  id_iva: number;
+  id_iva?: number | null;
   iva_porcentaje?: number | string | null;
   producto?: ProductoApi | null;
   iva?: IvaApi | null;
@@ -97,6 +97,20 @@ type CotizacionApi = {
     nombre_estado: string;
   } | null;
   detalle_cotizacion?: DetalleCotizacionApi[];
+  fecha_aprobacion?: string | null;
+  id_usuario_aprobo?: number | null;
+  fecha_anulacion?: string | null;
+  id_usuario_anulo?: number | null;
+  usuario_aprobo?: {
+    id_usuario: number;
+    nombre: string;
+    apellido?: string | null;
+  } | null;
+  usuario_anulo?: {
+    id_usuario: number;
+    nombre: string;
+    apellido?: string | null;
+  } | null;
 };
 
 type CotizacionesListResponse =
@@ -123,6 +137,10 @@ export type CotizacionUI = {
   idCliente: number;
   fecha: string;
   fechaVencimiento: string;
+  usuarioAprobo: string;
+  fechaAprobacion: string;
+  usuarioAnulo: string;
+  fechaAnulacion: string;
   estado: EstadoCotizacionUI;
   estadoId: number;
   items: number;
@@ -204,6 +222,16 @@ function mapProductoApiToUi(
   };
 }
 
+function getNombreUsuarioGestion(
+  usuario?: {
+    nombre?: string | null;
+    apellido?: string | null;
+  } | null
+) {
+  const nombre = `${usuario?.nombre ?? ""} ${usuario?.apellido ?? ""}`.trim();
+  return nombre;
+}
+
 export function mapCotizacionApiToUi(item: CotizacionApi): CotizacionUI {
   const productos: CotizacionProductoUI[] = (item.detalle_cotizacion ?? []).map(
     (detalle) => {
@@ -222,7 +250,7 @@ export function mapCotizacionApiToUi(item: CotizacionApi): CotizacionUI {
         cantidad,
         precio,
         subtotal,
-        idIva: detalle.id_iva,
+        idIva: detalle.id_iva ?? undefined,
       };
     }
   );
@@ -242,7 +270,7 @@ export function mapCotizacionApiToUi(item: CotizacionApi): CotizacionUI {
     id: item.id_cotizacion,
     numeroCotizacion:
       item.codigo_cotizacion ||
-      `COT-${String(item.id_cotizacion).padStart(4, "0")}`,
+      `CT-${String(item.id_cotizacion).padStart(4, "0")}`,
     cliente: item.cliente?.nombre_cliente ?? "Cliente",
     idCliente: item.id_cliente,
     fecha: normalizeDate(item.fecha),
@@ -260,6 +288,11 @@ export function mapCotizacionApiToUi(item: CotizacionApi): CotizacionUI {
     bodega: item.bodega?.nombre_bodega ?? "",
     idBodega: item.id_bodega,
     productos,
+
+    usuarioAprobo: getNombreUsuarioGestion(item.usuario_aprobo),
+    fechaAprobacion: normalizeDate(item.fecha_aprobacion),
+    usuarioAnulo: getNombreUsuarioGestion(item.usuario_anulo),
+    fechaAnulacion: normalizeDate(item.fecha_anulacion),
   };
 }
 

@@ -136,8 +136,8 @@ export default function Cotizaciones() {
       return;
     }
 
-    if (isEditar && cotizacionSeleccionada.estado === "Anulada") {
-      toast.error("No se puede editar una cotización anulada");
+    if (isEditar && !puedeEditarCotizacion(cotizacionSeleccionada.estado)) {
+      toast.error("Solo se pueden editar cotizaciones pendientes");
       closeToList();
       return;
     }
@@ -312,6 +312,61 @@ export default function Cotizaciones() {
     })}`;
   };
 
+  const formatIvaPorcentaje = (value: unknown) => {
+    const porcentaje = Number(value ?? 0);
+
+    if (!Number.isFinite(porcentaje)) return "0";
+
+    return porcentaje.toLocaleString("es-CO", {
+      minimumFractionDigits: porcentaje % 1 === 0 ? 0 : 2,
+      maximumFractionDigits: 2,
+    });
+  };
+
+  const getProductoCotizacionLabel = (producto: ProductoCotizacion) => {
+    return `${producto.nombre} — IVA ${formatIvaPorcentaje(producto.iva)}%`;
+  };
+
+  const getEstadoCotizacionClass = (estado: Cotizacion["estado"]) => {
+    if (estado === "Aprobada") {
+      return "bg-green-100 text-green-800 hover:bg-green-200";
+    }
+
+    if (estado === "Pendiente") {
+      return "bg-yellow-100 text-yellow-800 hover:bg-yellow-200";
+    }
+
+    if (estado === "Rechazada") {
+      return "bg-red-100 text-red-800 hover:bg-red-200";
+    }
+
+    if (estado === "Anulada") {
+      return "bg-red-100 text-red-800 opacity-60 cursor-not-allowed hover:bg-red-100";
+    }
+
+    if (estado === "Vencida") {
+      return "bg-gray-100 text-gray-800 opacity-60 hover:bg-gray-100";
+    }
+
+    return "bg-gray-100 text-gray-800 hover:bg-gray-200";
+  };
+
+  const getEstadoCotizacionBadgeClass = (estado: Cotizacion["estado"]) => {
+    if (estado === "Aprobada") {
+      return "border-green-200 bg-green-50 text-green-700";
+    }
+
+    if (estado === "Anulada" || estado === "Rechazada") {
+      return "border-red-200 bg-red-50 text-red-700";
+    }
+
+    if (estado === "Vencida") {
+      return "border-gray-200 bg-gray-50 text-gray-700";
+    }
+
+    return "border-yellow-200 bg-yellow-50 text-yellow-700";
+  };
+
   const padDate = (value: number) => String(value).padStart(2, "0");
 
   const formatDateLocalInput = (date: Date) => {
@@ -337,6 +392,79 @@ export default function Cotizaciones() {
     if (!date || Number.isNaN(date.getTime())) return "-";
 
     return date.toLocaleDateString("es-CO");
+  };
+
+  const getFechaGestionCotizacion = (cotizacion: Cotizacion) => {
+    const c = cotizacion as Cotizacion & {
+      fechaAprobacion?: string | null;
+      fecha_aprobacion?: string | null;
+      fechaAprobada?: string | null;
+      fecha_aprobada?: string | null;
+      fechaAnulacion?: string | null;
+      fecha_anulacion?: string | null;
+    };
+
+    if (cotizacion.estado === "Aprobada") {
+      return (
+        c.fechaAprobacion ||
+        c.fecha_aprobacion ||
+        c.fechaAprobada ||
+        c.fecha_aprobada ||
+        ""
+      );
+    }
+
+    if (cotizacion.estado === "Anulada") {
+      return c.fechaAnulacion || c.fecha_anulacion || "";
+    }
+
+    return "";
+  };
+
+  const getUsuarioGestionCotizacion = (cotizacion: Cotizacion) => {
+    const c = cotizacion as Cotizacion & {
+      usuarioAprobo?: string | null;
+      usuario_aprobo?: string | null;
+      aprobadoPor?: string | null;
+      aprobadaPor?: string | null;
+      usuarioAnulo?: string | null;
+      usuario_anulo?: string | null;
+      anuladoPor?: string | null;
+      anuladaPor?: string | null;
+    };
+
+    if (cotizacion.estado === "Aprobada") {
+      return (
+        c.usuarioAprobo ||
+        c.usuario_aprobo ||
+        c.aprobadoPor ||
+        c.aprobadaPor ||
+        "—"
+      );
+    }
+
+    if (cotizacion.estado === "Anulada") {
+      return (
+        c.usuarioAnulo ||
+        c.usuario_anulo ||
+        c.anuladoPor ||
+        c.anuladaPor ||
+        "—"
+      );
+    }
+
+    return "";
+  };
+
+  const getGestionEstadoCotizacion = (cotizacion: Cotizacion) => {
+    if (cotizacion.estado === "Aprobada" || cotizacion.estado === "Anulada") {
+      const usuario = getUsuarioGestionCotizacion(cotizacion);
+      const fecha = getFechaGestionCotizacion(cotizacion);
+
+      return fecha ? `${usuario} - ${formatDateDisplay(fecha)}` : usuario;
+    }
+
+    return "Pendiente de aprobación";
   };
 
   const getFechaActual = () => {
@@ -692,7 +820,7 @@ export default function Cotizaciones() {
   };
 
   const puedeEditarCotizacion = (estado: Cotizacion["estado"]) => {
-    return estado !== "Anulada";
+    return estado === "Pendiente";
   };
 
   const puedeAnularCotizacion = (estado: Cotizacion["estado"]) => {
@@ -701,7 +829,7 @@ export default function Cotizaciones() {
 
   const handleEdit = (cotizacion: Cotizacion) => {
     if (!puedeEditarCotizacion(cotizacion.estado)) {
-      toast.error("No se puede editar una cotización anulada");
+      toast.info("Solo puedes editar cotizaciones pendientes");
       return;
     }
 
@@ -861,6 +989,11 @@ export default function Cotizaciones() {
 
   const confirmEdit = async () => {
     if (!cotizacionSeleccionada) return;
+
+    if (!puedeEditarCotizacion(cotizacionSeleccionada.estado)) {
+      toast.error("Solo se pueden editar cotizaciones pendientes");
+      return;
+    }
 
     if (!formData.idCliente || !formData.fecha || !formData.fechaVencimiento || !formData.idBodega) {
       toast.error("Por favor completa todos los campos obligatorios");
@@ -1494,6 +1627,15 @@ export default function Cotizaciones() {
     );
   };
 
+  const fieldClass =
+    "h-11 rounded-lg border-gray-300 bg-white shadow-none focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/20";
+
+  const readonlyFieldClass =
+    "h-11 rounded-lg border-gray-200 bg-gray-100 cursor-not-allowed shadow-none";
+
+  const numberFieldClass =
+    "sin-flechas h-11 rounded-lg border-gray-300 bg-white text-right shadow-none focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/20";
+
   return (
     <div className="space-y-6">
       <div>
@@ -1583,6 +1725,7 @@ export default function Cotizaciones() {
                 <TableHead>Documento / NIT</TableHead>
                 <TableHead>Fecha</TableHead>
                 <TableHead>Vencimiento</TableHead>
+                <TableHead className="text-center">Aprobación / Anulación</TableHead>
                 <TableHead className="text-center">Items</TableHead>
                 <TableHead className="text-center">Estado</TableHead>
                 <TableHead className="text-center w-32">Acciones</TableHead>
@@ -1592,7 +1735,7 @@ export default function Cotizaciones() {
             <TableBody>
               {filteredCotizaciones.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="py-8 text-center text-gray-500">
+                  <TableCell colSpan={10} className="py-8 text-center text-gray-500">
                     <Package size={48} className="mx-auto mb-2 text-gray-300" />
                     <p>No se encontraron cotizaciones</p>
                   </TableCell>
@@ -1619,23 +1762,17 @@ export default function Cotizaciones() {
                     <TableCell>
                       {formatDateDisplay(cotizacion.fechaVencimiento)}
                     </TableCell>
+                    <TableCell className="text-center text-gray-700">
+                      {getGestionEstadoCotizacion(cotizacion)}
+                    </TableCell>
                     <TableCell className="text-center">{cotizacion.items}</TableCell>
                     <TableCell className="text-center">
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleToggleEstado(cotizacion)}
-                        disabled={cotizacion.estado === "Anulada"}
-                        className={`h-7 ${cotizacion.estado === "Aprobada"
-                          ? "bg-green-100 text-green-800 hover:bg-green-200"
-                          : cotizacion.estado === "Pendiente"
-                            ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                            : cotizacion.estado === "Rechazada"
-                              ? "bg-red-100 text-red-800 hover:bg-red-200"
-                              : cotizacion.estado === "Anulada"
-                                ? "cursor-not-allowed bg-gray-100 text-gray-800 opacity-60 hover:bg-gray-100"
-                                : "bg-gray-100 text-gray-800 hover:bg-gray-200"
-                          }`}
+                        disabled={!getSiguienteEstado(cotizacion.estado)}
+                        className={`h-7 ${getEstadoCotizacionClass(cotizacion.estado)}`}
                       >
                         {cotizacion.estado}
                       </Button>
@@ -1670,15 +1807,22 @@ export default function Cotizaciones() {
                           className={
                             puedeEditarCotizacion(cotizacion.estado)
                               ? "hover:bg-yellow-50"
-                              : "cursor-not-allowed opacity-50"
+                              : "cursor-not-allowed hover:bg-transparent"
                           }
                           title={
-                            cotizacion.estado === "Anulada"
-                              ? "No se puede editar una cotización anulada"
-                              : "Editar"
+                            puedeEditarCotizacion(cotizacion.estado)
+                              ? "Editar"
+                              : "Solo se pueden editar cotizaciones pendientes"
                           }
                         >
-                          <Edit size={16} className="text-yellow-600" />
+                          <Edit
+                            size={16}
+                            className={
+                              puedeEditarCotizacion(cotizacion.estado)
+                                ? "text-yellow-600"
+                                : "text-gray-400"
+                            }
+                          />
                         </Button>
 
                         <Button
@@ -1775,43 +1919,47 @@ export default function Cotizaciones() {
           className="max-h-[90vh] max-w-7xl overflow-y-auto"
           aria-describedby="create-quote-description"
         >
-          <DialogHeader>
+          <DialogHeader className="space-y-2 pb-3">
             <DialogTitle>Nueva Cotización</DialogTitle>
-            <DialogDescription id="create-quote-description">
-              Completa la información para crear una nueva cotización
-            </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="numeroCotizacion">Codigo de Cotización *</Label>
-                <Input
-                  id="numeroCotizacion"
-                  value={formData.numeroCotizacion}
-                  disabled
-                  placeholder="Se genera automáticamente"
-                  className="bg-gray-100"
-                />
+          <div className="space-y-6 py-2">
+            <div className="rounded-lg bg-gray-50 p-5">
+              <div className="mb-4 flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="font-semibold text-gray-900">
+                    Información general
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    Selecciona el cliente, la bodega y revisa las fechas de la cotización
+                  </p>
+                </div>
+
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                  <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-2 text-right">
+                    <p className="text-xs font-medium text-blue-700">
+                      Fecha de Cotización
+                    </p>
+                    <p className="text-sm font-semibold text-blue-900">
+                      {formatDateDisplay(formData.fecha)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-2 text-right">
+                    <p className="text-xs font-medium text-blue-700">
+                      Vencimiento
+                    </p>
+                    <p className="text-sm font-semibold text-blue-900">
+                      {formatDateDisplay(formData.fechaVencimiento)}
+                    </p>
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <Label htmlFor="fecha">Fecha *</Label>
-                <Input
-                  id="fecha"
-                  type="date"
-                  value={formData.fecha}
-                  disabled
-                  readOnly
-                  className="bg-gray-100 cursor-not-allowed"
-                />
-              </div>
-            </div>
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_180px]">
+                <div className="space-y-2">
+                  <Label htmlFor="cliente">Cliente *</Label>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="cliente">Cliente *</Label>
-                <div className="flex gap-2">
                   <Select
                     value={formData.idCliente}
                     onValueChange={(value: string) => {
@@ -1826,7 +1974,7 @@ export default function Cotizaciones() {
                       });
                     }}
                   >
-                    <SelectTrigger id="cliente" className="flex-1">
+                    <SelectTrigger id="cliente" className={fieldClass}>
                       {formData.cliente ? (
                         <span className="truncate">{formData.cliente}</span>
                       ) : (
@@ -1836,7 +1984,7 @@ export default function Cotizaciones() {
 
                     <SelectContent>
                       {clientesActivos.length === 0 ? (
-                        <div className="px-2 py-2 text-sm text-gray-500">
+                        <div className="px-3 py-2 text-sm text-gray-500">
                           No hay clientes activos disponibles
                         </div>
                       ) : (
@@ -1857,204 +2005,215 @@ export default function Cotizaciones() {
                       )}
                     </SelectContent>
                   </Select>
+                </div>
 
+                <div className="flex items-end">
                   <Button
                     type="button"
                     variant="outline"
                     onClick={() => navigate("/app/clientes/crear")}
-                    className="border-blue-600 text-blue-600 hover:bg-blue-50"
+                    className="h-11 w-full border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
                   >
-                    <Plus size={16} className="mr-1" />
-                    Nuevo
+                    <Plus size={16} className="mr-2" />
+                    Nuevo Cliente
                   </Button>
                 </div>
               </div>
 
-              <div>
-                <Label htmlFor="numeroDocumentoCliente">
-                  Documento / NIT del cliente
-                </Label>
-                <Input
-                  id="numeroDocumentoCliente"
-                  value={getDocumentoClienteTexto(clienteSeleccionadoForm)}
-                  readOnly
-                  disabled
-                  placeholder="Se completa al seleccionar cliente"
-                  className="bg-gray-100"
-                />
-              </div>
-            </div>
+              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="numeroDocumentoCliente">
+                    Documento / NIT del cliente
+                  </Label>
+                  <Input
+                    id="numeroDocumentoCliente"
+                    value={getDocumentoClienteTexto(clienteSeleccionadoForm)}
+                    readOnly
+                    disabled
+                    placeholder="Se completa al seleccionar cliente"
+                    className={readonlyFieldClass}
+                  />
+                </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="fechaVencimiento">Fecha de Vencimiento *</Label>
-                <Input
-                  id="fechaVencimiento"
-                  type="date"
-                  value={formData.fechaVencimiento}
-                  disabled
-                  readOnly
-                  className="bg-gray-100 cursor-not-allowed"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="bodega">Bodega *</Label>
-                <Select
-                  value={formData.idBodega}
-                  onValueChange={(value: string) => {
-                    const bodegaSeleccionada = bodegasDisponibles.find(
-                      (bodega) => String(bodega.id) === value
-                    );
-
-                    setFormData({
-                      ...formData,
-                      idBodega: value,
-                      bodega: bodegaSeleccionada?.nombre ?? "",
-                    });
-                  }}
-                >
-                  <SelectTrigger id="bodega">
-                    <SelectValue placeholder="Selecciona una bodega" />
-                  </SelectTrigger>
-
-                  <SelectContent>
-                    {bodegasDisponibles.map((bodega) => (
-                      <SelectItem key={bodega.id} value={String(bodega.id)}>
-                        {bodega.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="border-t pt-4">
-              <Label className="text-lg">Productos de la Cotización</Label>
-
-              <div className="mt-3 grid grid-cols-12 gap-2">
-                <div className="col-span-5">
-                  <Label htmlFor="producto">Producto</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="bodega">Bodega *</Label>
                   <Select
-                    value={selectedProductoId}
-                    onValueChange={setSelectedProductoId}
+                    value={formData.idBodega}
+                    onValueChange={(value: string) => {
+                      const bodegaSeleccionada = bodegasDisponibles.find(
+                        (bodega) => String(bodega.id) === value
+                      );
+
+                      setFormData({
+                        ...formData,
+                        idBodega: value,
+                        bodega: bodegaSeleccionada?.nombre ?? "",
+                      });
+                    }}
                   >
-                    <SelectTrigger id="producto">
-                      <SelectValue placeholder="Selecciona un producto" />
+                    <SelectTrigger id="bodega" className={fieldClass}>
+                      <SelectValue placeholder="Selecciona una bodega" />
                     </SelectTrigger>
 
                     <SelectContent>
-                      {productosActivos.map((producto) => (
-                        <SelectItem key={producto.id} value={producto.id}>
-                          {producto.nombre}
+                      {bodegasDisponibles.map((bodega) => (
+                        <SelectItem key={bodega.id} value={String(bodega.id)}>
+                          {bodega.nombre}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+            </div>
 
-                <div className="col-span-2">
-                  <Label htmlFor="cantidad">Cantidad</Label>
-                  <Input
-                    id="cantidad"
-                    type="number"
-                    value={cantidadProducto}
-                    min="0"
-                    onFocus={() => {
-                      if (cantidadProducto === "0") {
-                        setCantidadProducto("");
-                      }
-                    }}
-                    onBlur={() => {
-                      if (!cantidadProducto.trim()) {
-                        setCantidadProducto("0");
-                      }
-                    }}
-                    onChange={(e) => {
-                      setCantidadProducto(e.target.value);
-                    }}
-                    className={
-                      cantidadProducto === "0" ? "text-gray-400" : "text-gray-900"
-                    }
-                  />
-                </div>
-
-                <div className="col-span-3">
-                  <Label htmlFor="precio">Precio Unit.</Label>
-                  <Input
-                    id="precio"
-                    type="number"
-                    value={precioProducto}
-                    onChange={(e) => setPrecioProducto(e.target.value)}
-                    min={
-                      precioMinimoProductoSeleccionado > 0
-                        ? precioMinimoProductoSeleccionado
-                        : 0
-                    }
-                    step="0"
-                    placeholder="0.00"
-                    className="sin-flechas w-full"
-                  />
-                  {precioMinimoProductoSeleccionado > 0 && (
-                    <p className="mt-1 text-xs text-amber-600">
-                      Mínimo permitido: {formatMoney(precioMinimoProductoSeleccionado)}
-                    </p>
-                  )}
-                </div>
-
-                <div className="col-span-2 flex items-end">
-                  <Button
-                    type="button"
-                    onClick={handleAgregarProducto}
-                    className="w-full bg-green-600 hover:bg-green-700"
-                  >
-                    <Plus size={16} className="mr-1" />
-                    Agregar
-                  </Button>
+            <div>
+              <div className="mb-3 flex items-center gap-2">
+                <Package size={20} className="text-blue-600" />
+                <div>
+                  <h3 className="font-semibold text-gray-900">
+                    Productos de la Cotización
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    Selecciona los productos, cantidad y precio de venta
+                  </p>
                 </div>
               </div>
 
-              {productosOrden.length > 0 && (
-                <div className="mt-4 overflow-hidden rounded-lg border">
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1.5fr)_160px_220px_180px]">
+                  <div className="space-y-2">
+                    <Label htmlFor="producto">Producto *</Label>
+                    <Select
+                      value={selectedProductoId}
+                      onValueChange={setSelectedProductoId}
+                    >
+                      <SelectTrigger id="producto" className={fieldClass}>
+                        <SelectValue placeholder="Selecciona un producto" />
+                      </SelectTrigger>
+
+                      <SelectContent>
+                        {productosActivos.length === 0 ? (
+                          <div className="px-3 py-2 text-sm text-gray-500">
+                            No hay productos disponibles
+                          </div>
+                        ) : (
+                          productosActivos.map((producto) => (
+                            <SelectItem
+                              key={producto.id}
+                              value={producto.id}
+                              textValue={getProductoCotizacionLabel(producto)}
+                            >
+                              {getProductoCotizacionLabel(producto)}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="cantidad">Cantidad *</Label>
+                    <Input
+                      id="cantidad"
+                      type="number"
+                      value={cantidadProducto}
+                      min="0"
+                      onFocus={() => {
+                        if (cantidadProducto === "0") {
+                          setCantidadProducto("");
+                        }
+                      }}
+                      onBlur={() => {
+                        if (!cantidadProducto.trim()) {
+                          setCantidadProducto("0");
+                        }
+                      }}
+                      onChange={(e) => setCantidadProducto(e.target.value)}
+                      className={numberFieldClass}
+                      placeholder="0"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="precio">Precio Unitario *</Label>
+                    <Input
+                      id="precio"
+                      type="number"
+                      value={precioProducto}
+                      onChange={(e) => setPrecioProducto(e.target.value)}
+                      min={
+                        precioMinimoProductoSeleccionado > 0
+                          ? precioMinimoProductoSeleccionado
+                          : 0
+                      }
+                      step="0"
+                      placeholder="0.00"
+                      className={numberFieldClass}
+                    />
+
+                    {precioMinimoProductoSeleccionado > 0 && (
+                      <p className="text-xs text-amber-600">
+                        Mínimo permitido: {formatMoney(precioMinimoProductoSeleccionado)}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-end">
+                    <Button
+                      type="button"
+                      onClick={handleAgregarProducto}
+                      className="h-11 w-full bg-green-600 hover:bg-green-700"
+                    >
+                      <Plus size={16} className="mr-2" />
+                      Agregar
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {productosOrden.length > 0 ? (
+                <div className="mt-4 overflow-hidden rounded-lg border border-gray-200">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-gray-50">
                         <TableHead>Producto</TableHead>
                         <TableHead className="text-center">Cantidad</TableHead>
                         <TableHead className="text-right">Precio Unit.</TableHead>
-                        <TableHead className="text-center">IVA%</TableHead>
+                        <TableHead className="text-center">IVA</TableHead>
                         <TableHead className="text-right">Subtotal</TableHead>
-                        <TableHead className="text-center">Acciones</TableHead>
+                        <TableHead className="w-20 text-center">Acción</TableHead>
                       </TableRow>
                     </TableHeader>
 
                     <TableBody>
                       {productosOrden.map((item) => (
                         <TableRow key={item.producto.id}>
-                          <TableCell className="font-medium">
+                          <TableCell className="font-medium text-gray-900">
                             {item.producto.nombre}
                           </TableCell>
+
                           <TableCell className="text-center">
                             {item.cantidad}
                           </TableCell>
+
                           <TableCell className="text-right">
                             {formatMoney(item.precio)}
                           </TableCell>
+
                           <TableCell className="text-center">
-                            <Badge variant="outline" className="bg-blue-50">
-                              {item.producto.iva}%
-                            </Badge>
+                            IVA {formatIvaPorcentaje(item.producto.iva)}%
                           </TableCell>
-                          <TableCell className="text-right">
+
+                          <TableCell className="text-right font-medium">
                             {formatMoney(item.subtotal)}
                           </TableCell>
+
                           <TableCell className="text-center">
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() =>
-                                handleEliminarProducto(item.producto.id)
-                              }
+                              onClick={() => handleEliminarProducto(item.producto.id)}
                               className="hover:bg-red-50"
                             >
                               <Trash2 size={16} className="text-red-600" />
@@ -2064,63 +2223,62 @@ export default function Cotizaciones() {
                       ))}
                     </TableBody>
                   </Table>
-                </div>
-              )}
 
-              <div className="mt-4 space-y-2 rounded-lg bg-gray-50 p-4">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">N° de Items:</span>
-                  <span className="font-medium">{calcularTotales.items}</span>
-                </div>
-
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Subtotal:</span>
-                  <span className="font-medium">
-                    {formatMoney(calcularTotales.subtotal)}
-                  </span>
-                </div>
-
-                {(() => {
-                  const ivaEntries = Object.entries(calcularTotales.impuestosPorPorcentaje).sort(
-                    ([a], [b]) => Number(a) - Number(b)
-                  );
-
-                  if (!ivaEntries.length) return null;
-
-                  return (
-                    <div className="space-y-2 border-t pt-2">
+                  <div className="flex justify-end border-t bg-gray-50 px-4 py-3">
+                    <div className="w-full max-w-sm space-y-2">
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Subtotal IVA:</span>
-                        <span className="font-medium text-gray-700">
-                          {ivaEntries.map(([porcentaje]) => `${porcentaje}%`).join(", ")}
+                        <span className="text-gray-600">N° de Items:</span>
+                        <span className="font-medium">{calcularTotales.items}</span>
+                      </div>
+
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Subtotal:</span>
+                        <span className="font-medium">
+                          {formatMoney(calcularTotales.subtotal)}
                         </span>
                       </div>
 
-                      {ivaEntries.map(([porcentaje, monto]) => (
-                        <div key={porcentaje} className="flex justify-between text-sm">
-                          <span className="text-gray-600">
-                            Subtotal IVA {porcentaje}%:
-                          </span>
-                          <span className="font-medium">
-                            {formatMoney(monto)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
+                      {Object.entries(calcularTotales.impuestosPorPorcentaje)
+                        .sort(([a], [b]) => Number(a) - Number(b))
+                        .map(([porcentaje, monto]) => (
+                          <div key={porcentaje} className="flex justify-between text-sm">
+                            <span className="text-gray-600">
+                              IVA {porcentaje}%:
+                            </span>
+                            <span className="font-medium">
+                              {formatMoney(monto)}
+                            </span>
+                          </div>
+                        ))}
 
-                <div className="flex justify-between border-t pt-2 text-lg">
-                  <span className="font-semibold">Total:</span>
-                  <span className="font-bold text-blue-600">
-                    {formatMoney(calcularTotales.total)}
-                  </span>
+                      <div className="flex justify-between border-t pt-2 text-base">
+                        <span className="font-semibold">Total:</span>
+                        <span className="font-bold text-blue-600">
+                          {formatMoney(calcularTotales.total)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="mt-4 rounded-lg border border-dashed border-gray-300 py-10 text-center text-gray-500">
+                  <Package size={48} className="mx-auto mb-3 text-gray-300" />
+                  <p className="font-medium">No hay productos agregados</p>
+                  <p className="mt-1 text-sm">
+                    Selecciona un producto y agrégalo a la cotización
+                  </p>
+                </div>
+              )}
             </div>
 
-            <div>
-              <Label htmlFor="observaciones">Observaciones</Label>
+            <div className="space-y-2">
+              <div>
+                <h3 className="font-semibold text-gray-900">Observaciones</h3>
+                <p className="text-sm text-gray-500">
+                  Notas adicionales para esta cotización
+                </p>
+              </div>
+
               <Textarea
                 id="observaciones"
                 value={formData.observaciones}
@@ -2129,14 +2287,16 @@ export default function Cotizaciones() {
                 }
                 placeholder="Escribe cualquier observación sobre la cotización..."
                 rows={3}
+                className="resize-none rounded-lg border-gray-300 shadow-none focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/20"
               />
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="mt-2 border-t pt-4">
             <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
+
             <Button
               onClick={confirmCreate}
               className="bg-blue-600 hover:bg-blue-700"
@@ -2158,367 +2318,395 @@ export default function Cotizaciones() {
           className="max-h-[90vh] max-w-7xl overflow-y-auto"
           aria-describedby="edit-quote-description"
         >
-          <DialogHeader>
+          <DialogHeader className="space-y-2 pb-3">
             <DialogTitle>Editar Cotización</DialogTitle>
             <DialogDescription id="edit-quote-description">
               Actualiza la información permitida de la cotización
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="numeroCotizacionEdit">Número de Cotización</Label>
-                <Input
-                  id="numeroCotizacionEdit"
-                  value={formData.numeroCotizacion}
-                  disabled
-                  readOnly
-                  className="bg-gray-100 cursor-not-allowed"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="estadoEdit">Estado *</Label>
-                <Select
-                  value={formData.estado}
-                  onValueChange={(value: any) =>
-                    setFormData({ ...formData, estado: value })
-                  }
-                >
-                  <SelectTrigger id="estadoEdit">
-                    <SelectValue />
-                  </SelectTrigger>
-
-                  <SelectContent>
-                    <SelectItem value="Pendiente">Pendiente</SelectItem>
-                    <SelectItem value="Aprobada">Aprobada</SelectItem>
-                    <SelectItem value="Rechazada">Rechazada</SelectItem>
-                    <SelectItem value="Vencida">Vencida</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+          {!cotizacionSeleccionada ? (
+            <div className="py-8 text-center text-gray-500">
+              Cargando información de la cotización...
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="clienteEdit">Cliente</Label>
-                <Input
-                  id="clienteEdit"
-                  value={formData.cliente}
-                  readOnly
-                  disabled
-                  className="bg-gray-100 cursor-not-allowed"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="numeroDocumentoClienteEdit">
-                  Documento / NIT del cliente
-                </Label>
-                <Input
-                  id="numeroDocumentoClienteEdit"
-                  value={getDocumentoClienteTexto(clienteSeleccionadoForm)}
-                  readOnly
-                  disabled
-                  placeholder="No registrado"
-                  className="bg-gray-100 cursor-not-allowed"
-                />
-              </div>
+          ) : !puedeEditarCotizacion(cotizacionSeleccionada.estado) ? (
+            <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-5 text-sm text-yellow-800">
+              Esta cotización no se puede editar porque ya no está en estado pendiente.
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <Label htmlFor="fechaEdit">Fecha de creación</Label>
-                <Input
-                  id="fechaEdit"
-                  type="date"
-                  value={formData.fecha}
-                  readOnly
-                  disabled
-                  className="bg-gray-100 cursor-not-allowed"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="fechaVencimientoEdit">Fecha de vencimiento</Label>
-                <Input
-                  id="fechaVencimientoEdit"
-                  type="date"
-                  value={formData.fechaVencimiento}
-                  readOnly
-                  disabled
-                  className="bg-gray-100 cursor-not-allowed"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="bodegaEdit">Bodega *</Label>
-                <Select
-                  value={formData.idBodega}
-                  onValueChange={(value: string) => {
-                    const bodegaSeleccionada = bodegasDisponibles.find(
-                      (bodega) => String(bodega.id) === value
-                    );
-
-                    setFormData({
-                      ...formData,
-                      idBodega: value,
-                      bodega: bodegaSeleccionada?.nombre ?? "",
-                    });
-                  }}
-                >
-                  <SelectTrigger id="bodegaEdit">
-                    <SelectValue placeholder="Selecciona una bodega" />
-                  </SelectTrigger>
-
-                  <SelectContent>
-                    {bodegasDisponibles.map((bodega) => (
-                      <SelectItem key={bodega.id} value={String(bodega.id)}>
-                        {bodega.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="border-t pt-4">
-              <Label className="text-lg">Productos de la Cotización</Label>
-
-              <div className="mt-3 grid grid-cols-12 gap-2">
-                <div className="col-span-5">
-                  <Label htmlFor="productoEdit">Producto</Label>
-                  <Select
-                    value={selectedProductoId}
-                    onValueChange={setSelectedProductoId}
-                  >
-                    <SelectTrigger id="productoEdit">
-                      <SelectValue placeholder="Selecciona un producto" />
-                    </SelectTrigger>
-
-                    <SelectContent>
-                      {productosActivos.map((producto) => (
-                        <SelectItem key={producto.id} value={producto.id}>
-                          {producto.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="col-span-2">
-                  <Label htmlFor="cantidadEdit">Cantidad</Label>
-                  <Input
-                    id="cantidadEdit"
-                    type="number"
-                    value={cantidadProducto}
-                    min="0"
-                    onFocus={() => {
-                      if (cantidadProducto === "0") {
-                        setCantidadProducto("");
-                      }
-                    }}
-                    onBlur={() => {
-                      if (!cantidadProducto.trim()) {
-                        setCantidadProducto("0");
-                      }
-                    }}
-                    onChange={(e) => {
-                      setCantidadProducto(e.target.value);
-                    }}
-                    className={
-                      cantidadProducto === "0" ? "text-gray-400" : "text-gray-900"
-                    }
-                  />
-                </div>
-
-                <div className="col-span-3">
-                  <Label htmlFor="precioEdit">Precio Unit.</Label>
-                  <Input
-                    id="precioEdit"
-                    type="number"
-                    value={precioProducto}
-                    onChange={(e) => setPrecioProducto(e.target.value)}
-                    min={
-                      precioMinimoProductoSeleccionado > 0
-                        ? precioMinimoProductoSeleccionado
-                        : 0
-                    }
-                    step="0"
-                    placeholder="0.00"
-                    className="sin-flechas w-full"
-                  />
-
-                  {precioMinimoProductoSeleccionado > 0 && (
-                    <p className="mt-1 text-xs text-amber-600">
-                      Mínimo permitido:{" "}
-                      {formatMoney(precioMinimoProductoSeleccionado)}
+          ) : (
+            <div className="space-y-6 py-2">
+              <div className="rounded-lg bg-gray-50 p-5">
+                <div className="mb-4 flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">
+                      Información general
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      Datos principales de la cotización seleccionada
                     </p>
-                  )}
+                  </div>
+
+                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                    <Badge
+                      variant="outline"
+                      className="border-blue-200 bg-blue-50 px-3 py-1 text-blue-700"
+                    >
+                      {formData.numeroCotizacion || "Sin número"}
+                    </Badge>
+
+                    <Badge
+                      variant="outline"
+                      className={getEstadoCotizacionBadgeClass(formData.estado)}
+                    >
+                      {formData.estado}
+                    </Badge>
+
+                    <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-2 text-right">
+                      <p className="text-xs font-medium text-blue-700">
+                        Fecha de Cotización
+                      </p>
+                      <p className="text-sm font-semibold text-blue-900">
+                        {formatDateDisplay(formData.fecha)}
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-2 text-right">
+                      <p className="text-xs font-medium text-blue-700">
+                        Vencimiento
+                      </p>
+                      <p className="text-sm font-semibold text-blue-900">
+                        {formatDateDisplay(formData.fechaVencimiento)}
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="col-span-2 flex items-end">
-                  <Button
-                    type="button"
-                    onClick={handleAgregarProducto}
-                    className="w-full bg-green-600 hover:bg-green-700"
-                  >
-                    <Plus size={16} className="mr-1" />
-                    Agregar
-                  </Button>
-                </div>
-              </div>
-
-              {productosOrden.length > 0 ? (
-                <div className="mt-4 overflow-hidden rounded-lg border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-gray-50">
-                        <TableHead>Producto</TableHead>
-                        <TableHead className="text-center">Cantidad</TableHead>
-                        <TableHead className="text-right">Precio Unit.</TableHead>
-                        <TableHead className="text-center">IVA%</TableHead>
-                        <TableHead className="text-right">Subtotal</TableHead>
-                        <TableHead className="text-center">Acciones</TableHead>
-                      </TableRow>
-                    </TableHeader>
-
-                    <TableBody>
-                      {productosOrden.map((item) => (
-                        <TableRow key={item.producto.id}>
-                          <TableCell className="font-medium">
-                            {item.producto.nombre}
-                          </TableCell>
-
-                          <TableCell className="text-center">
-                            <Input
-                              type="number"
-                              min="1"
-                              value={item.cantidad}
-                              onChange={(e) =>
-                                handleActualizarCantidadProducto(
-                                  item.producto.id,
-                                  e.target.value
-                                )
-                              }
-                              className="mx-auto h-9 w-24 text-center"
-                            />
-                          </TableCell>
-
-                          <TableCell className="text-right">
-                            <Input
-                              type="number"
-                              min={getPrecioMinimoProducto(item.producto.id)}
-                              value={item.precio}
-                              onChange={(e) =>
-                                handleActualizarPrecioProducto(
-                                  item.producto.id,
-                                  e.target.value
-                                )
-                              }
-                              className="ml-auto h-9 w-36 text-right"
-                            />
-                          </TableCell>
-
-                          <TableCell className="text-center">
-                            <Badge variant="outline" className="bg-blue-50">
-                              {item.producto.iva}%
-                            </Badge>
-                          </TableCell>
-
-                          <TableCell className="text-right">
-                            {formatMoney(item.subtotal)}
-                          </TableCell>
-
-                          <TableCell className="text-center">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                handleEliminarProducto(item.producto.id)
-                              }
-                              className="hover:bg-red-50"
-                            >
-                              <Trash2 size={16} className="text-red-600" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              ) : (
-                <div className="mt-4 rounded-lg border border-dashed py-8 text-center text-gray-500">
-                  <Package size={44} className="mx-auto mb-2 text-gray-300" />
-                  <p>No hay productos agregados</p>
-                  <p className="text-sm">
-                    Selecciona un producto y agrégalo a la cotización
-                  </p>
-                </div>
-              )}
-
-              <div className="mt-4 flex justify-end">
-                <div className="min-w-75 rounded-lg border border-blue-200 bg-blue-50 p-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                   <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">N° de Items:</span>
-                      <span className="font-medium">{calcularTotales.items}</span>
-                    </div>
+                    <Label htmlFor="clienteEdit">Cliente</Label>
+                    <Input
+                      id="clienteEdit"
+                      value={formData.cliente}
+                      readOnly
+                      disabled
+                      className={readonlyFieldClass}
+                    />
+                  </div>
 
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Subtotal:</span>
-                      <span className="font-medium">
-                        {formatMoney(calcularTotales.subtotal)}
-                      </span>
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="numeroDocumentoClienteEdit">
+                      Documento / NIT
+                    </Label>
+                    <Input
+                      id="numeroDocumentoClienteEdit"
+                      value={getDocumentoClienteTexto(clienteSeleccionadoForm)}
+                      readOnly
+                      disabled
+                      placeholder="No registrado"
+                      className={readonlyFieldClass}
+                    />
+                  </div>
 
-                    {Object.entries(calcularTotales.impuestosPorPorcentaje)
-                      .sort(([a], [b]) => Number(a) - Number(b))
-                      .map(([porcentaje, monto]) => (
-                        <div key={porcentaje} className="flex justify-between text-sm">
-                          <span className="text-gray-600">
-                            Total IVA {porcentaje}%:
-                          </span>
-                          <span className="font-medium">
-                            {formatMoney(monto)}
-                          </span>
-                        </div>
-                      ))}
+                  <div className="space-y-2">
+                    <Label htmlFor="bodegaEdit">Bodega *</Label>
+                    <Select
+                      value={formData.idBodega}
+                      onValueChange={(value: string) => {
+                        const bodegaSeleccionada = bodegasDisponibles.find(
+                          (bodega) => String(bodega.id) === value
+                        );
 
-                    <div className="flex justify-between border-t border-blue-300 pt-2 text-lg">
-                      <span className="font-semibold text-gray-700">Total:</span>
-                      <span className="font-bold text-blue-600">
-                        {formatMoney(calcularTotales.total)}
-                      </span>
+                        setFormData({
+                          ...formData,
+                          idBodega: value,
+                          bodega: bodegaSeleccionada?.nombre ?? "",
+                        });
+                      }}
+                    >
+                      <SelectTrigger id="bodegaEdit" className={fieldClass}>
+                        <SelectValue placeholder="Selecciona una bodega" />
+                      </SelectTrigger>
+
+                      <SelectContent>
+                        {bodegasDisponibles.map((bodega) => (
+                          <SelectItem key={bodega.id} value={String(bodega.id)}>
+                            {bodega.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Gestión</Label>
+                    <div className="flex h-11 items-center rounded-lg border border-gray-200 bg-gray-100 px-3 text-sm text-gray-700">
+                      {getGestionEstadoCotizacion(cotizacionSeleccionada)}
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div>
-              <Label htmlFor="observacionesEdit">Observaciones</Label>
-              <Textarea
-                id="observacionesEdit"
-                value={formData.observaciones}
-                onChange={(e) =>
-                  setFormData({ ...formData, observaciones: e.target.value })
-                }
-                placeholder="Escribe cualquier observación sobre la cotización..."
-                rows={3}
-              />
-            </div>
-          </div>
+              <div>
+                <div className="mb-3 flex items-center gap-2">
+                  <Package size={20} className="text-blue-600" />
+                  <div>
+                    <h3 className="font-semibold text-gray-900">
+                      Productos de la Cotización
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      Agrega o ajusta productos, cantidades y precios
+                    </p>
+                  </div>
+                </div>
 
-          <DialogFooter>
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1.5fr)_160px_220px_180px]">
+                    <div className="space-y-2">
+                      <Label htmlFor="productoEdit">Producto</Label>
+                      <Select
+                        value={selectedProductoId}
+                        onValueChange={setSelectedProductoId}
+                      >
+                        <SelectTrigger id="productoEdit" className={fieldClass}>
+                          <SelectValue placeholder="Selecciona un producto" />
+                        </SelectTrigger>
+
+                        <SelectContent>
+                          {productosActivos.length === 0 ? (
+                            <div className="px-3 py-2 text-sm text-gray-500">
+                              No hay productos disponibles
+                            </div>
+                          ) : (
+                            productosActivos.map((producto) => (
+                              <SelectItem
+                                key={producto.id}
+                                value={producto.id}
+                                textValue={getProductoCotizacionLabel(producto)}
+                              >
+                                {getProductoCotizacionLabel(producto)}
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="cantidadEdit">Cantidad</Label>
+                      <Input
+                        id="cantidadEdit"
+                        type="number"
+                        value={cantidadProducto}
+                        min="0"
+                        onFocus={() => {
+                          if (cantidadProducto === "0") {
+                            setCantidadProducto("");
+                          }
+                        }}
+                        onBlur={() => {
+                          if (!cantidadProducto.trim()) {
+                            setCantidadProducto("0");
+                          }
+                        }}
+                        onChange={(e) => setCantidadProducto(e.target.value)}
+                        className={numberFieldClass}
+                        placeholder="0"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="precioEdit">Precio Unitario</Label>
+                      <Input
+                        id="precioEdit"
+                        type="number"
+                        value={precioProducto}
+                        onChange={(e) => setPrecioProducto(e.target.value)}
+                        min={
+                          precioMinimoProductoSeleccionado > 0
+                            ? precioMinimoProductoSeleccionado
+                            : 0
+                        }
+                        step="0"
+                        placeholder="0.00"
+                        className={numberFieldClass}
+                      />
+
+                      {precioMinimoProductoSeleccionado > 0 && (
+                        <p className="text-xs text-amber-600">
+                          Mínimo permitido:{" "}
+                          {formatMoney(precioMinimoProductoSeleccionado)}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-end">
+                      <Button
+                        type="button"
+                        onClick={handleAgregarProducto}
+                        className="h-11 w-full bg-green-600 hover:bg-green-700"
+                      >
+                        <Plus size={16} className="mr-2" />
+                        Agregar
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {productosOrden.length > 0 ? (
+                  <div className="mt-4 overflow-hidden rounded-lg border border-gray-200">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-gray-50">
+                          <TableHead>Producto</TableHead>
+                          <TableHead className="text-center">Cantidad</TableHead>
+                          <TableHead className="text-right">Precio Unit.</TableHead>
+                          <TableHead className="text-center">IVA</TableHead>
+                          <TableHead className="text-right">Subtotal</TableHead>
+                          <TableHead className="w-20 text-center">Acción</TableHead>
+                        </TableRow>
+                      </TableHeader>
+
+                      <TableBody>
+                        {productosOrden.map((item) => (
+                          <TableRow key={item.producto.id}>
+                            <TableCell className="font-medium text-gray-900">
+                              {item.producto.nombre}
+                            </TableCell>
+
+                            <TableCell className="text-center">
+                              <Input
+                                type="number"
+                                min="1"
+                                value={item.cantidad}
+                                onChange={(e) =>
+                                  handleActualizarCantidadProducto(
+                                    item.producto.id,
+                                    e.target.value
+                                  )
+                                }
+                                className="mx-auto h-9 w-24 text-center"
+                              />
+                            </TableCell>
+
+                            <TableCell className="text-right">
+                              <Input
+                                type="number"
+                                min={getPrecioMinimoProducto(item.producto.id)}
+                                value={item.precio}
+                                onChange={(e) =>
+                                  handleActualizarPrecioProducto(
+                                    item.producto.id,
+                                    e.target.value
+                                  )
+                                }
+                                className="ml-auto h-9 w-36 text-right"
+                              />
+                            </TableCell>
+
+                            <TableCell className="text-center">
+                              IVA {formatIvaPorcentaje(item.producto.iva)}%
+                            </TableCell>
+
+                            <TableCell className="text-right font-medium">
+                              {formatMoney(item.subtotal)}
+                            </TableCell>
+
+                            <TableCell className="text-center">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEliminarProducto(item.producto.id)}
+                                className="hover:bg-red-50"
+                              >
+                                <Trash2 size={16} className="text-red-600" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+
+                    <div className="flex justify-end border-t bg-gray-50 px-4 py-3">
+                      <div className="w-full max-w-sm space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">N° de Items:</span>
+                          <span className="font-medium">{calcularTotales.items}</span>
+                        </div>
+
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Subtotal:</span>
+                          <span className="font-medium">
+                            {formatMoney(calcularTotales.subtotal)}
+                          </span>
+                        </div>
+
+                        {Object.entries(calcularTotales.impuestosPorPorcentaje)
+                          .sort(([a], [b]) => Number(a) - Number(b))
+                          .map(([porcentaje, monto]) => (
+                            <div key={porcentaje} className="flex justify-between text-sm">
+                              <span className="text-gray-600">
+                                IVA {porcentaje}%:
+                              </span>
+                              <span className="font-medium">
+                                {formatMoney(monto)}
+                              </span>
+                            </div>
+                          ))}
+
+                        <div className="flex justify-between border-t pt-2 text-base">
+                          <span className="font-semibold">Total:</span>
+                          <span className="font-bold text-blue-600">
+                            {formatMoney(calcularTotales.total)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-lg border border-dashed border-gray-300 py-10 text-center text-gray-500">
+                    <Package size={48} className="mx-auto mb-3 text-gray-300" />
+                    <p className="font-medium">No hay productos agregados</p>
+                    <p className="mt-1 text-sm">
+                      Selecciona un producto y agrégalo a la cotización
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <div>
+                  <h3 className="font-semibold text-gray-900">Observaciones</h3>
+                  <p className="text-sm text-gray-500">
+                    Notas adicionales para esta cotización
+                  </p>
+                </div>
+
+                <Textarea
+                  id="observacionesEdit"
+                  value={formData.observaciones}
+                  onChange={(e) =>
+                    setFormData({ ...formData, observaciones: e.target.value })
+                  }
+                  placeholder="Escribe cualquier observación sobre la cotización..."
+                  rows={3}
+                  className="resize-none rounded-lg border-gray-300 shadow-none focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/20"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="mt-2 border-t pt-4">
             <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
 
             <Button
               onClick={confirmEdit}
-              className="bg-blue-600 hover:bg-blue-700"
+              disabled={
+                !cotizacionSeleccionada ||
+                !puedeEditarCotizacion(cotizacionSeleccionada.estado)
+              }
+              className="bg-blue-600 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Guardar Cambios
             </Button>
@@ -2546,72 +2734,87 @@ export default function Cotizaciones() {
 
           {cotizacionSeleccionada && (
             <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4 rounded-lg bg-gray-50 p-4">
-                <div>
-                  <p className="text-sm text-gray-600">Número de Cotización</p>
-                  <p className="font-medium text-blue-600">
-                    {cotizacionSeleccionada.numeroCotizacion}
-                  </p>
-                </div>
+              <div className="rounded-lg bg-gray-50 p-5">
+                <div className="mb-4 flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">
+                      Información general
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      Datos principales y gestión de la cotización
+                    </p>
+                  </div>
 
-                <div>
-                  <p className="text-sm text-gray-600">Estado</p>
-                  <div className="mt-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleToggleEstado(cotizacionSeleccionada)}
-                      className={`h-7 px-3 ${cotizacionSeleccionada.estado === "Aprobada"
-                        ? "bg-green-100 text-green-800 hover:bg-green-200"
-                        : cotizacionSeleccionada.estado === "Pendiente"
-                          ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                          : cotizacionSeleccionada.estado === "Rechazada"
-                            ? "bg-red-100 text-red-800 hover:bg-red-200"
-                            : cotizacionSeleccionada.estado === "Anulada"
-                              ? "cursor-not-allowed bg-gray-100 text-gray-800 opacity-60 hover:bg-gray-100"
-                              : "bg-gray-100 text-gray-800 hover:bg-gray-200"
-                        }`}
-                      disabled={cotizacionSeleccionada.estado === "Anulada"}
+                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                    <Badge
+                      variant="outline"
+                      className="border-blue-200 bg-blue-50 px-3 py-1 text-blue-700"
+                    >
+                      {cotizacionSeleccionada.numeroCotizacion}
+                    </Badge>
+
+                    <Badge
+                      variant="outline"
+                      className={getEstadoCotizacionBadgeClass(cotizacionSeleccionada.estado)}
                     >
                       {cotizacionSeleccionada.estado}
-                    </Button>
+                    </Badge>
+
+                    <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-2 text-right">
+                      <p className="text-xs font-medium text-blue-700">
+                        Fecha de Cotización
+                      </p>
+                      <p className="text-sm font-semibold text-blue-900">
+                        {formatDateDisplay(cotizacionSeleccionada.fecha)}
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-2 text-right">
+                      <p className="text-xs font-medium text-blue-700">
+                        Vencimiento
+                      </p>
+                      <p className="text-sm font-semibold text-blue-900">
+                        {formatDateDisplay(cotizacionSeleccionada.fechaVencimiento)}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
-                <div>
-                  <p className="text-sm text-gray-600">Cliente</p>
-                  <p className="font-medium">{cotizacionSeleccionada.cliente}</p>
-                </div>
+                <div className="grid grid-cols-1 gap-x-10 gap-y-5 md:grid-cols-2 xl:grid-cols-3">
+                  <div>
+                    <p className="text-sm text-gray-600">Cliente</p>
+                    <p className="font-medium text-gray-900">
+                      {cotizacionSeleccionada.cliente}
+                    </p>
+                  </div>
 
-                <div>
-                  <p className="text-sm text-gray-600">Documento / NIT</p>
-                  <p className="font-medium">
-                    {getDocumentoClienteCotizacion(cotizacionSeleccionada)}
-                  </p>
-                </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Documento / NIT</p>
+                    <p className="font-medium text-gray-900">
+                      {getDocumentoClienteCotizacion(cotizacionSeleccionada)}
+                    </p>
+                  </div>
 
-                <div>
-                  <p className="text-sm text-gray-600">Bodega</p>
-                  <p className="font-medium">{cotizacionSeleccionada.bodega || "-"}</p>
-                </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Bodega</p>
+                    <p className="font-medium text-gray-900">
+                      {cotizacionSeleccionada.bodega || "-"}
+                    </p>
+                  </div>
 
-                <div>
-                  <p className="text-sm text-gray-600">Fecha</p>
-                  <p className="font-medium">
-                    {formatDateDisplay(cotizacionSeleccionada.fecha)}
-                  </p>
-                </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Gestión</p>
+                    <p className="font-medium text-gray-900">
+                      {getGestionEstadoCotizacion(cotizacionSeleccionada)}
+                    </p>
+                  </div>
 
-                <div>
-                  <p className="text-sm text-gray-600">Fecha de Vencimiento</p>
-                  <p className="font-medium">
-                    {formatDateDisplay(cotizacionSeleccionada.fechaVencimiento)}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-600">N° de Items</p>
-                  <p className="font-medium">{totalesCotizacionSeleccionada.items}</p>
+                  <div>
+                    <p className="text-sm text-gray-600">N° de Items</p>
+                    <p className="font-medium text-gray-900">
+                      {totalesCotizacionSeleccionada.items}
+                    </p>
+                  </div>
                 </div>
               </div>
 
@@ -2624,8 +2827,8 @@ export default function Cotizaciones() {
                       <TableRow className="bg-gray-50">
                         <TableHead>Producto</TableHead>
                         <TableHead className="text-center">Cantidad</TableHead>
+                        <TableHead className="text-center">IVA</TableHead>
                         <TableHead className="text-right">Precio Unit.</TableHead>
-                        <TableHead className="text-center">IVA%</TableHead>
                         <TableHead className="text-right">Subtotal</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -2643,15 +2846,14 @@ export default function Cotizaciones() {
                               {item.cantidad}
                             </TableCell>
 
+                            <TableCell className="text-center">
+                              IVA {formatIvaPorcentaje(item.producto.iva)}%
+                            </TableCell>
+
                             <TableCell className="text-right">
                               {formatMoney(item.precio)}
                             </TableCell>
 
-                            <TableCell className="text-center">
-                              <Badge variant="outline" className="bg-blue-50">
-                                {item.producto.iva}%
-                              </Badge>
-                            </TableCell>
 
                             <TableCell className="text-right">
                               {formatMoney(item.subtotal)}
@@ -2724,7 +2926,7 @@ export default function Cotizaciones() {
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="mt-2 border-t pt-4">
             {cotizacionSeleccionada && (
               <Button
                 onClick={() => openPdfOptionsModal(cotizacionSeleccionada)}
