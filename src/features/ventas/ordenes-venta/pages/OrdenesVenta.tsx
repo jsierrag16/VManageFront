@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useNavigate, useOutletContext } from "react-router-dom";
 import {
   Search,
   Eye,
@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Building2,
   Download,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
@@ -99,6 +100,17 @@ function formatMoney(value: unknown) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+}
+
+function formatIvaPorcentaje(value: unknown) {
+  const porcentaje = Number(value ?? 0);
+
+  if (!Number.isFinite(porcentaje)) return "0";
+
+  return porcentaje.toLocaleString("es-CO", {
+    minimumFractionDigits: porcentaje % 1 === 0 ? 0 : 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 function formatDateInput(value?: string | null) {
@@ -188,6 +200,12 @@ function getDocumentoClienteTexto(cliente?: CatalogoCliente | null) {
 
 function getProductoNombre(producto?: CatalogoProducto) {
   return producto?.nombre_producto || producto?.nombre || "Producto";
+}
+
+function getProductoOrdenLabel(producto: CatalogoProducto) {
+  return `${getProductoNombre(producto)} — IVA ${formatIvaPorcentaje(
+    producto.iva?.porcentaje
+  )}%`;
 }
 
 function getTerminoNombre(termino?: CatalogoTerminoPago) {
@@ -318,28 +336,21 @@ function getSiguienteEstadoInfo(
     return { bloqueado: true as const };
   }
 
-  let siguienteEstadoId: number | undefined;
-
-  if (estadoActual.includes("pendiente")) {
-    siguienteEstadoId = findEstadoIdByNames(estados, [
-      "procesando",
-      "aprobada",
-      "aprobado",
-    ]);
-  } else if (
-    estadoActual.includes("procesando") ||
+  if (
     estadoActual.includes("aprobada") ||
     estadoActual.includes("aprobado")
   ) {
-    siguienteEstadoId = findEstadoIdByNames(estados, ["enviada"]);
-  } else if (estadoActual.includes("enviada")) {
-    siguienteEstadoId = findEstadoIdByNames(estados, ["entregada", "aplicada"]);
-  } else if (
-    estadoActual.includes("entregada") ||
-    estadoActual.includes("aplicada")
-  ) {
     return { final: true as const };
   }
+
+  if (!estadoActual.includes("pendiente")) {
+    return { error: true as const };
+  }
+
+  const siguienteEstadoId = findEstadoIdByNames(estados, [
+    "aprobada",
+    "aprobado",
+  ]);
 
   if (!siguienteEstadoId) {
     return { error: true as const };
@@ -405,7 +416,90 @@ const formatPdfMoney = (value: unknown) =>
 const formatPdfDate = (value?: string | null) =>
   value ? new Date(value).toLocaleDateString("es-CO") : "-";
 
+function esOrdenPendiente(orden?: OrdenVentaApi | null) {
+  const estado = normalizarTexto(getEstadoNombre(orden?.estado_orden_venta));
+  return estado.includes("pendiente");
+}
+
+function esOrdenAprobada(orden?: OrdenVentaApi | null) {
+  const estado = normalizarTexto(getEstadoNombre(orden?.estado_orden_venta));
+  return estado.includes("aprobada") || estado.includes("aprobado");
+}
+
+function esOrdenAnulada(orden?: OrdenVentaApi | null) {
+  const estado = normalizarTexto(getEstadoNombre(orden?.estado_orden_venta));
+
+  return (
+    estado.includes("anulada") ||
+    estado.includes("anulado") ||
+    estado.includes("cancelada") ||
+    estado.includes("cancelado")
+  );
+}
+
+function puedeEditarOrden(orden?: OrdenVentaApi | null) {
+  return esOrdenPendiente(orden);
+}
+
+function getNombreUsuarioGestionOrden(
+  usuario?: {
+    nombre?: string | null;
+    apellido?: string | null;
+  } | null
+) {
+  return `${usuario?.nombre ?? ""} ${usuario?.apellido ?? ""}`.trim();
+}
+
+function getGestionEstadoOrden(orden: OrdenVentaApi) {
+  if (esOrdenAprobada(orden)) {
+    const usuario = getNombreUsuarioGestionOrden(orden.usuario_aprobo) || "—";
+    const fecha = formatDateDisplay(orden.fecha_aprobacion);
+    return `${usuario} - ${fecha}`;
+  }
+
+  if (esOrdenAnulada(orden)) {
+    const usuario = getNombreUsuarioGestionOrden(orden.usuario_anulo) || "—";
+    const fecha = formatDateDisplay(orden.fecha_anulacion);
+    return `${usuario} - ${fecha}`;
+  }
+
+  return "Pendiente de aprobación";
+}
+
+function getEstadoOrdenClass(orden: OrdenVentaApi) {
+  if (esOrdenPendiente(orden)) {
+    return "bg-yellow-100 text-yellow-800 hover:bg-yellow-200";
+  }
+
+  if (esOrdenAprobada(orden)) {
+    return "bg-green-100 text-green-800 opacity-70 cursor-not-allowed hover:bg-green-100";
+  }
+
+  if (esOrdenAnulada(orden)) {
+    return "bg-red-100 text-red-800 opacity-70 cursor-not-allowed hover:bg-red-100";
+  }
+
+  return "bg-gray-100 text-gray-800 hover:bg-gray-200";
+}
+
+function getEstadoOrdenBadgeClass(orden: OrdenVentaApi) {
+  if (esOrdenPendiente(orden)) {
+    return "border-yellow-200 bg-yellow-50 text-yellow-700";
+  }
+
+  if (esOrdenAprobada(orden)) {
+    return "border-green-200 bg-green-50 text-green-700";
+  }
+
+  if (esOrdenAnulada(orden)) {
+    return "border-red-200 bg-red-50 text-red-700";
+  }
+
+  return "border-gray-200 bg-gray-50 text-gray-700";
+}
+
 export default function OrdenesVenta() {
+  const navigate = useNavigate();
   const { currentUser, selectedBodegaId, selectedBodegaNombre, bodegasDisponibles } =
     useOutletContext<AppOutletContext>();
 
@@ -429,6 +523,8 @@ export default function OrdenesVenta() {
   const [selectedOrden, setSelectedOrden] = useState<OrdenVentaApi | null>(null);
   const [selectedCotizacionId, setSelectedCotizacionId] =
     useState<string>("sin-cotizacion");
+  const [detalleCotizacionModificado, setDetalleCotizacionModificado] =
+    useState(false);
   const [selectedProductoId, setSelectedProductoId] = useState<string>("");
   const [cantidadProducto, setCantidadProducto] = useState<string>("");
   const [precioProducto, setPrecioProducto] = useState<string>("");
@@ -451,6 +547,19 @@ export default function OrdenesVenta() {
     descripcion: "",
     id_bodega: "",
   });
+
+  const isCrear = isFormModalOpen && formMode === "create";
+  const isEditar = isFormModalOpen && formMode === "edit";
+  const isVer = isViewModalOpen;
+
+  const fieldClass =
+    "h-11 rounded-lg border-gray-300 bg-white shadow-none focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/20";
+
+  const readonlyFieldClass =
+    "h-11 rounded-lg border-gray-200 bg-gray-100 cursor-not-allowed shadow-none";
+
+  const numberFieldClass =
+    "sin-flechas h-11 rounded-lg border-gray-300 bg-white text-right shadow-none focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/20";
 
   const estadoPendienteId = useMemo(() => {
     return (
@@ -579,16 +688,9 @@ export default function OrdenesVenta() {
       )
     ).length;
 
-    const procesando = ordenes.filter((orden) => {
-      const key = normalizarTexto(getEstadoNombre(orden.estado_orden_venta));
-      return (
-        key.includes("procesando") ||
-        key.includes("aprobada") ||
-        key.includes("aprobado")
-      );
-    }).length;
+    const aprobadas = ordenes.filter((orden) => esOrdenAprobada(orden)).length;
 
-    return { totalOrdenes, pendientes, procesando };
+    return { totalOrdenes, pendientes, aprobadas };
   }, [ordenes]);
 
   const clienteSeleccionado = useMemo(() => {
@@ -613,27 +715,6 @@ export default function OrdenesVenta() {
     });
   }, [cotizaciones, formData.id_cliente, formData.id_bodega]);
 
-  // const resetForm = () => {
-  //   const hoy = new Date().toISOString().slice(0, 10);
-
-  //   setFormData({
-  //     id_cliente: "",
-  //     fecha_creacion: hoy,
-  //     fecha_vencimiento: sumarDiasAFecha(hoy, 15),
-  //     id_estado_orden_venta: estadoPendienteId ? String(estadoPendienteId) : "",
-  //     id_termino_pago: "",
-  //     descripcion: "",
-  //     id_bodega:
-  //       selectedBodegaId && selectedBodegaId > 0 ? String(selectedBodegaId) : "",
-  //   });
-  //   setSelectedCotizacionId("sin-cotizacion");
-  //   setSelectedProductoId("");
-  //   setCantidadProducto("");
-  //   setPrecioProducto("");
-  //   setProductosOrden([]);
-  //   setSelectedOrden(null);
-  // };
-
   const resetForm = () => {
     const hoy = new Date().toISOString().slice(0, 10);
 
@@ -648,6 +729,7 @@ export default function OrdenesVenta() {
         selectedBodegaId && selectedBodegaId > 0 ? String(selectedBodegaId) : "",
     });
     setSelectedCotizacionId("sin-cotizacion");
+    setDetalleCotizacionModificado(false);
     setSelectedProductoId("");
     setCantidadProducto("");
     setPrecioProducto("");
@@ -663,6 +745,10 @@ export default function OrdenesVenta() {
   };
 
   const handleOpenEdit = (orden: OrdenVentaApi) => {
+    if (!puedeEditarOrden(orden)) {
+      toast.info("Solo se pueden editar órdenes pendientes");
+      return;
+    }
     const estadoActual = orden.id_estado_orden_venta || estadoPendienteId;
     const terminoActual = orden.id_termino_pago || "";
     const bodegaActual =
@@ -699,6 +785,11 @@ export default function OrdenesVenta() {
   };
 
   const handleOpenAnular = (orden: OrdenVentaApi) => {
+    if (!esOrdenPendiente(orden)) {
+      toast.info("Solo se pueden anular órdenes pendientes");
+      return;
+    }
+
     setSelectedOrden(orden);
     setIsAnularModalOpen(true);
   };
@@ -712,6 +803,7 @@ export default function OrdenesVenta() {
 
     if (!cotizacionId || cotizacionId === "sin-cotizacion") {
       setProductosOrden([]);
+      setDetalleCotizacionModificado(false);
       return;
     }
 
@@ -737,6 +829,7 @@ export default function OrdenesVenta() {
     setProductosOrden(
       mapDetalleCotizacionToForm(cotizacion.detalle_cotizacion)
     );
+    setDetalleCotizacionModificado(false);
     toast.success("Productos cargados desde la cotización");
   };
 
@@ -754,61 +847,6 @@ export default function OrdenesVenta() {
     !!precioProducto &&
     precioMinimoProductoSeleccionado > 0 &&
     precioIngresadoNumero < precioMinimoProductoSeleccionado;
-
-  // const handleAgregarProducto = () => {
-  //   if (!selectedProductoId) {
-  //     toast.error("Selecciona un producto");
-  //     return;
-  //   }
-
-  //   const cantidad = Number(cantidadProducto);
-  //   const precio = Number(precioProducto);
-
-  //   if (!cantidadProducto || cantidad <= 0) {
-  //     toast.error("La cantidad debe ser mayor a cero");
-  //     return;
-  //   }
-
-  //   if (!precioProducto || precio <= 0) {
-  //     toast.error("El precio unitario debe ser mayor a cero");
-  //     return;
-  //   }
-
-  //   const producto = productos.find(
-  //     (item) => Number(item.id_producto) === Number(selectedProductoId)
-  //   );
-
-  //   if (!producto) {
-  //     toast.error("No se encontró el producto");
-  //     return;
-  //   }
-
-  //   const yaExiste = productosOrden.some(
-  //     (item) => Number(item.id_producto) === Number(selectedProductoId)
-  //   );
-
-  //   if (yaExiste) {
-  //     toast.error("Ese producto ya está agregado");
-  //     return;
-  //   }
-
-  //   setProductosOrden((prev) => [
-  //     ...prev,
-  //     {
-  //       id_producto: Number(producto.id_producto),
-  //       nombre: getProductoNombre(producto),
-  //       cantidad,
-  //       precio_unitario: precio,
-  //       subtotal: cantidad * precio,
-  //       iva: Number(producto.iva?.porcentaje ?? 0),
-  //     },
-  //   ]);
-
-  //   setSelectedProductoId("");
-  //   setCantidadProducto("");
-  //   setPrecioProducto("");
-  //   setPrecioTouched(false);
-  // };
 
   const handleAgregarProducto = () => {
     if (!selectedProductoId) {
@@ -867,6 +905,10 @@ export default function OrdenesVenta() {
       },
     ]);
 
+    if (selectedCotizacionId !== "sin-cotizacion") {
+      setDetalleCotizacionModificado(true);
+    }
+
     setSelectedProductoId("");
     setCantidadProducto("");
     setPrecioProducto("");
@@ -876,6 +918,69 @@ export default function OrdenesVenta() {
   const handleEliminarProducto = (idProducto: number) => {
     setProductosOrden((prev) =>
       prev.filter((item) => Number(item.id_producto) !== Number(idProducto))
+    );
+
+    if (selectedCotizacionId !== "sin-cotizacion") {
+      setDetalleCotizacionModificado(true);
+    }
+  };
+
+  const getPrecioMinimoProductoPorId = (idProducto: number) => {
+    const producto = productos.find(
+      (item) => Number(item.id_producto) === Number(idProducto)
+    );
+
+    return getPrecioMinimoProductoCatalogo(producto);
+  };
+
+  const handleActualizarCantidadProducto = (
+    idProducto: number,
+    value: string
+  ) => {
+    const cantidad = Number(value);
+
+    if (Number.isNaN(cantidad) || cantidad < 0) return;
+
+    setProductosOrden((prev) =>
+      prev.map((item) => {
+        if (Number(item.id_producto) !== Number(idProducto)) return item;
+
+        return {
+          ...item,
+          cantidad,
+          subtotal: cantidad * Number(item.precio_unitario || 0),
+        };
+      })
+    );
+  };
+
+  const handleActualizarPrecioProducto = (
+    idProducto: number,
+    value: string
+  ) => {
+    const precio = Number(value);
+
+    if (Number.isNaN(precio) || precio < 0) return;
+
+    const precioMinimo = getPrecioMinimoProductoPorId(idProducto);
+
+    if (precioMinimo > 0 && precio < precioMinimo) {
+      toast.error(
+        `El precio no puede ser menor a ${precioMinimo.toLocaleString("es-CO")}`
+      );
+      return;
+    }
+
+    setProductosOrden((prev) =>
+      prev.map((item) => {
+        if (Number(item.id_producto) !== Number(idProducto)) return item;
+
+        return {
+          ...item,
+          precio_unitario: precio,
+          subtotal: Number(item.cantidad || 0) * precio,
+        };
+      })
     );
   };
 
@@ -924,7 +1029,9 @@ export default function OrdenesVenta() {
             : Number(formData.id_estado_orden_venta || estadoPendienteId),
         id_termino_pago: Number(formData.id_termino_pago),
         id_usuario: userId,
-        ...(selectedCotizacionId && selectedCotizacionId !== "sin-cotizacion"
+        ...(selectedCotizacionId &&
+          selectedCotizacionId !== "sin-cotizacion" &&
+          !detalleCotizacionModificado
           ? { id_cotizacion: Number(selectedCotizacionId) }
           : {}),
         detalle: productosOrden.map((item) => ({
@@ -963,6 +1070,11 @@ export default function OrdenesVenta() {
         return;
       }
 
+      if (!esOrdenPendiente(selectedOrden)) {
+        toast.error("Solo se pueden anular órdenes pendientes");
+        return;
+      }
+
       if (!estadoCanceladoId) {
         toast.error("No encontré el estado de cancelación en el catálogo");
         return;
@@ -984,6 +1096,11 @@ export default function OrdenesVenta() {
   };
 
   const handleToggleEstado = async (orden: OrdenVentaApi) => {
+    if (!esOrdenPendiente(orden)) {
+      toast.info("Solo las órdenes pendientes pueden aprobarse");
+      return;
+    }
+
     const info = getSiguienteEstadoInfo(orden, estados);
 
     if ("bloqueado" in info) {
@@ -1486,9 +1603,9 @@ export default function OrdenesVenta() {
         <div className="bg-white p-4 rounded-lg border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Procesando</p>
+              <p className="text-sm text-gray-600">Aprobadas</p>
               <p className="text-2xl font-semibold text-gray-900">
-                {stats.procesando}
+                {stats.aprobadas}
               </p>
             </div>
             <CheckCircle2 className="text-blue-600" size={32} />
@@ -1529,7 +1646,8 @@ export default function OrdenesVenta() {
                 <TableHead>Documento / NIT</TableHead>
                 <TableHead>Fecha</TableHead>
                 <TableHead>Vencimiento</TableHead>
-                <TableHead>Items</TableHead>
+                <TableHead className="text-center">Aprobación / Anulación</TableHead>
+                <TableHead className="text-center">Items</TableHead>
                 <TableHead className="text-center">Estado</TableHead>
                 <TableHead className="text-center">Acciones</TableHead>
               </TableRow>
@@ -1539,7 +1657,7 @@ export default function OrdenesVenta() {
               {filteredOrdenes.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={9}
+                    colSpan={10}
                     className="text-center py-8 text-gray-500"
                   >
                     <Package size={48} className="mx-auto mb-2 text-gray-300" />
@@ -1549,12 +1667,9 @@ export default function OrdenesVenta() {
               ) : (
                 currentOrdenes.map((orden, index) => {
                   const estadoNombre = getEstadoNombre(orden.estado_orden_venta);
-                  const estadoKey = normalizarTexto(estadoNombre);
-                  const isCancelada =
-                    estadoKey.includes("anulada") ||
-                    estadoKey.includes("anulado") ||
-                    estadoKey.includes("cancelada") ||
-                    estadoKey.includes("cancelado");
+                  const puedeCambiarEstado = esOrdenPendiente(orden);
+                  const puedeEditar = puedeEditarOrden(orden);
+                  const puedeAnular = esOrdenPendiente(orden);
 
                   return (
                     <TableRow
@@ -1577,27 +1692,26 @@ export default function OrdenesVenta() {
 
                       <TableCell>{formatDateDisplay(orden.fecha_vencimiento)}</TableCell>
 
-                      <TableCell>{getItemsOrden(orden)}</TableCell>
+                      <TableCell className="text-center text-gray-700">
+                        {getGestionEstadoOrden(orden)}
+                      </TableCell>
+
+                      <TableCell className="text-center">
+                        {getItemsOrden(orden)}
+                      </TableCell>
 
                       <TableCell className="text-center">
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleToggleEstado(orden)}
-                          disabled={isCancelada}
-                          className={`h-7 ${estadoKey.includes("pendiente")
-                            ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                            : estadoKey.includes("procesando") ||
-                              estadoKey.includes("aprobada") ||
-                              estadoKey.includes("aprobado")
-                              ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
-                              : estadoKey.includes("enviada")
-                                ? "bg-purple-100 text-purple-800 hover:bg-purple-200"
-                                : estadoKey.includes("entregada") ||
-                                  estadoKey.includes("aplicada")
-                                  ? "bg-green-100 text-green-800 hover:bg-green-200"
-                                  : "bg-red-100 text-red-800 hover:bg-red-100 opacity-60 cursor-not-allowed"
-                            }`}
+                          disabled={!puedeCambiarEstado}
+                          className={`h-7 ${getEstadoOrdenClass(orden)}`}
+                          title={
+                            puedeCambiarEstado
+                              ? "Aprobar orden"
+                              : "Solo las órdenes pendientes pueden cambiar de estado"
+                          }
                         >
                           {estadoNombre}
                         </Button>
@@ -1629,22 +1743,44 @@ export default function OrdenesVenta() {
                             variant="ghost"
                             size="sm"
                             onClick={() => handleEdit(orden)}
-                            className="hover:bg-yellow-50"
-                            title="Editar"
-                            disabled={isCancelada}
+                            disabled={!puedeEditar}
+                            className={
+                              puedeEditar
+                                ? "hover:bg-yellow-50"
+                                : "cursor-not-allowed hover:bg-transparent"
+                            }
+                            title={
+                              puedeEditar
+                                ? "Editar"
+                                : "Solo se pueden editar órdenes pendientes"
+                            }
                           >
-                            <Edit size={16} className="text-yellow-600" />
+                            <Edit
+                              size={16}
+                              className={puedeEditar ? "text-yellow-600" : "text-gray-400"}
+                            />
                           </Button>
 
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleAnularClick(orden)}
-                            className="hover:bg-red-50"
-                            title="Anular"
-                            disabled={isCancelada}
+                            disabled={!puedeAnular}
+                            className={
+                              puedeAnular
+                                ? "hover:bg-red-50"
+                                : "cursor-not-allowed hover:bg-transparent"
+                            }
+                            title={
+                              puedeAnular
+                                ? "Anular"
+                                : "Solo se pueden anular órdenes pendientes"
+                            }
                           >
-                            <Ban size={16} className="text-red-600" />
+                            <Ban
+                              size={16}
+                              className={puedeAnular ? "text-red-600" : "text-gray-400"}
+                            />
                           </Button>
                         </div>
                       </TableCell>
@@ -1710,528 +1846,650 @@ export default function OrdenesVenta() {
       </div>
 
       <Dialog open={isFormModalOpen} onOpenChange={setIsFormModalOpen}>
-        <DialogContent className="max-w-6xl max-h-[92vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="space-y-2 pb-3">
             <DialogTitle>
-              {formMode === "create"
-                ? "Nueva orden de venta"
-                : "Editar orden de venta"}
+              {isCrear ? "Nueva orden de venta" : "Editar orden de venta"}
             </DialogTitle>
-            <DialogDescription>
-              Completa la información de la orden
-            </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div>
-                <Label>Fecha *</Label>
-                <Input
-                  type="date"
-                  value={formData.fecha_creacion}
-                  disabled
-                  readOnly
-                  className="bg-gray-100 cursor-not-allowed"
-                />
-              </div>
+          {isEditar && !selectedOrden ? (
+            <div className="py-8 text-center text-gray-500">
+              Cargando información de la orden...
+            </div>
+          ) : (
+            <div className="space-y-6 py-2">
+              <div className="rounded-lg bg-gray-50 p-5">
+                <div className="mb-4 flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">
+                      Información general
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      Selecciona el cliente, la bodega y revisa las fechas de la orden
+                    </p>
+                  </div>
 
-              <div>
-                <Label>Fecha de vencimiento</Label>
-                <Input
-                  type="date"
-                  value={formData.fecha_vencimiento}
-                  readOnly
-                  disabled
-                  className="bg-gray-100"
-                />
-              </div>
+                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                    {isEditar && selectedOrden && (
+                      <Badge
+                        variant="outline"
+                        className="border-blue-200 bg-blue-50 px-3 py-1 text-blue-700"
+                      >
+                        {selectedOrden.codigo_orden_venta ||
+                          `OV-${selectedOrden.id_orden_venta}`}
+                      </Badge>
+                    )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:col-span-2">
-                <div>
-                  <Label>Cliente *</Label>
-                  <Select
-                    value={formData.id_cliente}
-                    onValueChange={(value) =>
-                      setFormData((prev) => ({ ...prev, id_cliente: value }))
-                    }
-                  >
-                    <SelectTrigger>
-                      {clienteSeleccionado ? (
-                        <span className="truncate">
-                          {getClienteNombre(clienteSeleccionado)}
-                        </span>
-                      ) : (
-                        <SelectValue placeholder="Selecciona un cliente" />
-                      )}
-                    </SelectTrigger>
+                    {isEditar && selectedOrden ? (
+                      <Badge
+                        variant="outline"
+                        className={getEstadoOrdenBadgeClass(selectedOrden)}
+                      >
+                        {getEstadoNombre(selectedOrden.estado_orden_venta)}
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="border-yellow-200 bg-yellow-50 text-yellow-700"
+                      >
+                        Pendiente
+                      </Badge>
+                    )}
 
-                    <SelectContent>
-                      {clientes.map((cliente) => (
-                        <SelectItem
-                          key={cliente.id_cliente}
-                          value={String(cliente.id_cliente)}
-                          textValue={getClienteNombre(cliente)}
-                        >
-                          <div className="flex flex-col">
-                            <span>{getClienteNombre(cliente)}</span>
-                            <span className="text-xs text-gray-500">
-                              {getDocumentoClienteTexto(cliente)}
-                            </span>
+                    <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-2 text-right">
+                      <p className="text-xs font-medium text-blue-700">
+                        Fecha de Orden
+                      </p>
+                      <p className="text-sm font-semibold text-blue-900">
+                        {formatDateDisplay(formData.fecha_creacion)}
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-2 text-right">
+                      <p className="text-xs font-medium text-blue-700">
+                        Vencimiento
+                      </p>
+                      <p className="text-sm font-semibold text-blue-900">
+                        {formatDateDisplay(formData.fecha_vencimiento)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_180px]">
+                  <div className="space-y-2">
+                    <Label>Cliente *</Label>
+
+                    <Select
+                      value={formData.id_cliente}
+                      onValueChange={(value) =>
+                        setFormData((prev) => ({ ...prev, id_cliente: value }))
+                      }
+                    >
+                      <SelectTrigger className={fieldClass}>
+                        {clienteSeleccionado ? (
+                          <span className="truncate">
+                            {getClienteNombre(clienteSeleccionado)}
+                          </span>
+                        ) : (
+                          <SelectValue placeholder="Selecciona un cliente" />
+                        )}
+                      </SelectTrigger>
+
+                      <SelectContent>
+                        {clientes.length === 0 ? (
+                          <div className="px-3 py-2 text-sm text-gray-500">
+                            No hay clientes disponibles
                           </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                        ) : (
+                          clientes.map((cliente) => (
+                            <SelectItem
+                              key={cliente.id_cliente}
+                              value={String(cliente.id_cliente)}
+                              textValue={getClienteNombre(cliente)}
+                            >
+                              <div className="flex flex-col">
+                                <span>{getClienteNombre(cliente)}</span>
+                                <span className="text-xs text-gray-500">
+                                  {getDocumentoClienteTexto(cliente)}
+                                </span>
+                              </div>
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => navigate("/app/clientes/crear")}
+                      className="h-11 w-full border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
+                    >
+                      <Plus size={16} className="mr-2" />
+                      Nuevo Cliente
+                    </Button>
+                  </div>
                 </div>
 
-                <div>
-                  <Label>Documento / NIT</Label>
-                  <Input
-                    value={getDocumentoClienteTexto(clienteSeleccionado)}
-                    readOnly
-                    disabled
-                    placeholder="Se completa al seleccionar cliente"
-                    className="bg-gray-100"
-                  />
+                <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label>Documento / NIT</Label>
+                    <Input
+                      value={getDocumentoClienteTexto(clienteSeleccionado)}
+                      readOnly
+                      disabled
+                      placeholder="Se completa al seleccionar cliente"
+                      className={readonlyFieldClass}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Bodega *</Label>
+                    {selectedBodegaId && selectedBodegaId > 0 ? (
+                      <Input
+                        value={selectedBodegaNombre}
+                        disabled
+                        className={readonlyFieldClass}
+                      />
+                    ) : (
+                      <Select
+                        value={formData.id_bodega}
+                        onValueChange={(value) =>
+                          setFormData((prev) => ({ ...prev, id_bodega: value }))
+                        }
+                      >
+                        <SelectTrigger className={fieldClass}>
+                          <SelectValue placeholder="Selecciona una bodega" />
+                        </SelectTrigger>
+
+                        <SelectContent>
+                          {bodegasDisponibles.map((bodega) => (
+                            <SelectItem key={bodega.id} value={String(bodega.id)}>
+                              {bodega.nombre}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Término de pago *</Label>
+                    <Select
+                      value={formData.id_termino_pago}
+                      onValueChange={(value) =>
+                        setFormData((prev) => ({ ...prev, id_termino_pago: value }))
+                      }
+                    >
+                      <SelectTrigger className={fieldClass}>
+                        <SelectValue placeholder="Selecciona un término" />
+                      </SelectTrigger>
+
+                      <SelectContent>
+                        {terminosPago.map((termino) => (
+                          <SelectItem
+                            key={termino.id_termino_pago}
+                            value={String(termino.id_termino_pago)}
+                          >
+                            {getTerminoNombre(termino)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <Label>Bodega *</Label>
-                {selectedBodegaId && selectedBodegaId > 0 ? (
-                  <Input
-                    value={selectedBodegaNombre}
-                    disabled
-                    className="bg-gray-100"
-                  />
-                ) : (
-                  <Select
-                    value={formData.id_bodega}
-                    onValueChange={(value) =>
-                      setFormData((prev) => ({ ...prev, id_bodega: value }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona una bodega" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {bodegasDisponibles.map((bodega) => (
-                        <SelectItem key={bodega.id} value={String(bodega.id)}>
-                          {bodega.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-5">
+                <div className="mb-3">
+                  <h3 className="text-base font-semibold text-blue-900">
+                    Cargar productos desde cotización
+                  </h3>
+                  <p className="text-sm text-blue-700">
+                    Puedes cargar automáticamente los productos de una cotización aprobada.
+                  </p>
+                </div>
 
-              <div>
-                <Label>Estado</Label>
-                <Input
-                  value={
-                    formMode === "create"
-                      ? getEstadoNombre(
-                        estados.find(
-                          (estado) =>
-                            estado.id_estado_orden_venta === estadoPendienteId
-                        )
-                      )
-                      : getEstadoNombre(
-                        estados.find(
-                          (estado) =>
-                            String(estado.id_estado_orden_venta) ===
-                            String(formData.id_estado_orden_venta)
-                        )
-                      )
-                  }
-                  readOnly
-                  disabled
-                  className="bg-gray-100"
-                />
-              </div>
-
-              <div>
-                <Label>Término de pago *</Label>
                 <Select
-                  value={formData.id_termino_pago}
-                  onValueChange={(value) =>
-                    setFormData((prev) => ({ ...prev, id_termino_pago: value }))
-                  }
+                  value={selectedCotizacionId}
+                  onValueChange={handleCargarCotizacion}
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona un término de pago" />
+                  <SelectTrigger className="h-11 rounded-lg bg-white">
+                    <SelectValue placeholder="Selecciona una cotización" />
                   </SelectTrigger>
                   <SelectContent>
-                    {terminosPago.map((termino) => (
+                    <SelectItem value="sin-cotizacion">Sin cotización</SelectItem>
+                    {cotizacionesDisponibles.map((cotizacion) => (
                       <SelectItem
-                        key={termino.id_termino_pago}
-                        value={String(termino.id_termino_pago)}
+                        key={cotizacion.id_cotizacion}
+                        value={String(cotizacion.id_cotizacion)}
                       >
-                        {getTerminoNombre(termino)}
+                        {(cotizacion.codigo_cotizacion ||
+                          cotizacion.numero_cotizacion ||
+                          `Cotización ${cotizacion.id_cotizacion}`) +
+                          " - " +
+                          getClienteNombre(cotizacion.cliente)}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-            </div>
 
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
-              <Label className="mb-2 block text-blue-900">
-                Cargar productos desde cotización
-              </Label>
-              <Select
-                value={selectedCotizacionId}
-                onValueChange={handleCargarCotizacion}
-              >
-                <SelectTrigger className="bg-white">
-                  <SelectValue placeholder="Selecciona una cotización" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="sin-cotizacion">Sin cotización</SelectItem>
-                  {cotizacionesDisponibles.map((cotizacion) => (
-                    <SelectItem
-                      key={cotizacion.id_cotizacion}
-                      value={String(cotizacion.id_cotizacion)}
-                    >
-                      {(cotizacion.codigo_cotizacion ||
-                        cotizacion.numero_cotizacion ||
-                        `Cotización ${cotizacion.id_cotizacion}`) +
-                        " - " +
-                        getClienteNombre(cotizacion.cliente)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="rounded-lg border p-4">
-              <div className="mb-4 flex items-center gap-2">
-                <Package size={18} />
-                <h3 className="font-semibold text-gray-900">
-                  Productos de la orden
-                </h3>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
-                <div className="md:col-span-5">
-                  <Label>Producto</Label>
-                  <Select
-                    value={selectedProductoId}
-                    onValueChange={setSelectedProductoId}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona un producto" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {productos.map((producto) => (
-                        <SelectItem
-                          key={producto.id_producto}
-                          value={String(producto.id_producto)}
-                        >
-                          {getProductoNombre(producto)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              <div>
+                <div className="mb-3 flex items-center gap-2">
+                  <Package size={20} className="text-blue-600" />
+                  <div>
+                    <h3 className="font-semibold text-gray-900">
+                      Productos de la orden
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      Selecciona los productos, cantidad y precio de venta
+                    </p>
+                  </div>
                 </div>
 
-                <div className="md:col-span-2">
-                  <Label>Cantidad</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    placeholder="0"
-                    value={cantidadProducto}
-                    onChange={(e) => setCantidadProducto(e.target.value)}
-                    className="placeholder:text-gray-400"
-                  />
-                </div>
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1.5fr)_160px_220px_180px]">
+                    <div className="space-y-2">
+                      <Label>Producto *</Label>
+                      <Select
+                        value={selectedProductoId}
+                        onValueChange={setSelectedProductoId}
+                      >
+                        <SelectTrigger className={fieldClass}>
+                          <SelectValue placeholder="Selecciona un producto" />
+                        </SelectTrigger>
 
-                {/* <div className="md:col-span-3">
-                  <Label>Precio unitario</Label>
-                  <div className="space-y-1">
-                    <Input
-                      type="number"
-                      placeholder={
-                        precioMinimoProductoSeleccionado > 0
-                          ? `Mínimo: ${precioMinimoProductoSeleccionado}`
-                          : "0"
-                      }
-                      value={precioProducto}
-                      onChange={(e) => {
-                        setPrecioProducto(e.target.value);
-                        if (!precioTouched) setPrecioTouched(true);
-                      }}
-                      onBlur={() => setPrecioTouched(true)}
-                      className={`placeholder:text-gray-400 ${
-                        precioTouched && precioEsMenorAlMinimo
-                          ? "border-red-500 focus-visible:ring-red-500"
+                        <SelectContent>
+                          {productos.length === 0 ? (
+                            <div className="px-3 py-2 text-sm text-gray-500">
+                              No hay productos disponibles
+                            </div>
+                          ) : (
+                            productos.map((producto) => (
+                              <SelectItem
+                                key={producto.id_producto}
+                                value={String(producto.id_producto)}
+                                textValue={getProductoOrdenLabel(producto)}
+                              >
+                                {getProductoOrdenLabel(producto)}
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Cantidad *</Label>
+                      <Input
+                        type="number"
+                        value={cantidadProducto}
+                        min="0"
+                        onFocus={() => {
+                          if (cantidadProducto === "0") {
+                            setCantidadProducto("");
+                          }
+                        }}
+                        onBlur={() => {
+                          if (!cantidadProducto.trim()) {
+                            setCantidadProducto("0");
+                          }
+                        }}
+                        onChange={(e) => setCantidadProducto(e.target.value)}
+                        className={numberFieldClass}
+                        placeholder="0"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Precio Unitario *</Label>
+                      <Input
+                        type="number"
+                        value={precioProducto}
+                        onChange={(e) => {
+                          setPrecioProducto(e.target.value);
+                          if (!precioTouched) setPrecioTouched(true);
+                        }}
+                        onBlur={() => setPrecioTouched(true)}
+                        min={
+                          precioMinimoProductoSeleccionado > 0
+                            ? precioMinimoProductoSeleccionado
+                            : 0
+                        }
+                        step="0"
+                        placeholder="0.00"
+                        className={`${numberFieldClass} ${precioTouched && precioEsMenorAlMinimo
+                          ? "border-red-500 bg-red-50 text-red-700 focus-visible:ring-red-500"
                           : ""
-                      }`}
-                    />
+                          }`}
+                      />
 
-                    {precioMinimoProductoSeleccionado > 0 && (
-                      <p className="text-xs text-gray-500">
-                        Precio mínimo del producto: $
-                        {precioMinimoProductoSeleccionado.toLocaleString("es-CO")}
-                      </p>
-                    )}
+                      {precioMinimoProductoSeleccionado > 0 && (
+                        <p className="text-xs text-amber-600">
+                          Mínimo permitido: {formatMoney(precioMinimoProductoSeleccionado)}
+                        </p>
+                      )}
 
-                    {precioTouched && precioEsMenorAlMinimo && (
-                      <p className="text-xs font-medium text-red-600">
-                        Valor menor al precio mínimo permitido
-                      </p>
-                    )}
-                  </div>
-                </div> */}
+                      {precioTouched && precioEsMenorAlMinimo && (
+                        <p className="text-xs font-medium text-red-600">
+                          Precio menor al permitido
+                        </p>
+                      )}
+                    </div>
 
-                <div className="md:col-span-3">
-                  <Label>Precio unitario</Label>
-                  <div className="space-y-1">
-                    <Input
-                      type="number"
-                      placeholder={
-                        precioMinimoProductoSeleccionado > 0
-                          ? `Precio compra: ${precioMinimoProductoSeleccionado}`
-                          : "0"
-                      }
-                      value={precioProducto}
-                      onChange={(e) => {
-                        setPrecioProducto(e.target.value);
-                        if (!precioTouched) setPrecioTouched(true);
-                      }}
-                      onBlur={() => setPrecioTouched(true)}
-                      className={`placeholder:text-gray-400 ${precioTouched && precioEsMenorAlMinimo
-                        ? "border-red-500 bg-red-50 text-red-700 focus-visible:ring-red-500"
-                        : ""
-                        }`}
-                    />
-
-                    {precioMinimoProductoSeleccionado > 0 && (
-                      <p className="text-xs text-gray-500">
-                        Precio de compra del producto: $
-                        {precioMinimoProductoSeleccionado.toLocaleString("es-CO")}
-                      </p>
-                    )}
-
-                    {precioTouched && precioEsMenorAlMinimo && (
-                      <p className="text-xs font-medium text-red-600">
-                        Precio menor al permitido
-                      </p>
-                    )}
+                    <div className="flex items-end">
+                      <Button
+                        type="button"
+                        onClick={handleAgregarProducto}
+                        disabled={precioTouched && precioEsMenorAlMinimo}
+                        className="h-11 w-full bg-green-600 hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <Plus size={16} className="mr-2" />
+                        Agregar
+                      </Button>
+                    </div>
                   </div>
                 </div>
 
-                {/* <div className="flex items-end md:col-span-2">
-                  <Button
-                    type="button"
-                    onClick={handleAgregarProducto}
-                    className="w-full bg-blue-600 hover:bg-blue-700"
-                  >
-                    Agregar
-                  </Button>
-                </div> */}
-
-                <div className="flex items-end md:col-span-2">
-                  <Button
-                    type="button"
-                    onClick={handleAgregarProducto}
-                    disabled={precioTouched && precioEsMenorAlMinimo}
-                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    Agregar
-                  </Button>
-                </div>
-              </div>
-
-              <div className="mt-4 overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Producto</TableHead>
-                      <TableHead>Cantidad</TableHead>
-                      <TableHead>Precio</TableHead>
-                      <TableHead>IVA %</TableHead>
-                      <TableHead>Subtotal</TableHead>
-                      <TableHead className="text-right">Acción</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {productosOrden.length === 0 ? (
-                      <TableRow>
-                        <TableCell
-                          colSpan={6}
-                          className="py-8 text-center text-gray-500"
-                        >
-                          No hay productos agregados
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      productosOrden.map((item) => (
-                        <TableRow key={item.id_producto}>
-                          <TableCell>{item.nombre}</TableCell>
-                          <TableCell>{item.cantidad}</TableCell>
-                          <TableCell>{formatMoney(item.precio_unitario)}</TableCell>
-                          <TableCell>{item.iva}%</TableCell>
-                          <TableCell>{formatMoney(item.subtotal)}</TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                handleEliminarProducto(item.id_producto)
-                              }
-                            >
-                              Quitar
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-
-              <div className="mt-4 flex justify-end">
-                <div className="rounded-lg bg-gray-50 px-4 py-3 text-right min-w-70">
-                  <p className="text-sm text-gray-500">
-                    Items: {productosOrden.length}
-                  </p>
-                  <p className="text-sm text-gray-600 mt-2">
-                    Subtotal sin IVA:{" "}
-                    <span className="font-medium text-gray-900">
-                      {formatMoney(totalesFormulario.subtotalSinIva)}
-                    </span>
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    Total IVA:{" "}
-                    <span className="font-medium text-gray-900">
-                      {formatMoney(totalesFormulario.totalIva)}
-                    </span>
-                  </p>
-                  <p className="text-lg font-bold text-gray-900 mt-2">
-                    Total: {formatMoney(totalesFormulario.total)}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <Label>Observaciones</Label>
-              <Textarea
-                value={formData.descripcion}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    descripcion: e.target.value,
-                  }))
-                }
-                placeholder="Escribe observaciones de la orden"
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsFormModalOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700">
-              {formMode === "create" ? "Crear orden" : "Guardar cambios"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
-        <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Detalle de la orden de venta</DialogTitle>
-            <DialogDescription className="sr-only">
-              Información completa de la orden seleccionada
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedOrden && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4 rounded-lg bg-gray-50 p-4">
-                <div>
-                  <p className="text-sm text-gray-600">Número de Orden</p>
-                  <p className="font-medium text-blue-600">
-                    {selectedOrden.codigo_orden_venta ||
-                      `OV-${selectedOrden.id_orden_venta}`}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-600">Estado</p>
-                  <div className="mt-1">
-                    <Badge>
-                      {getEstadoNombre(selectedOrden.estado_orden_venta)}
-                    </Badge>
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-600">Cliente</p>
-                  <p className="font-medium">
-                    {getClienteNombre(selectedOrden.cliente)}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-600">Documento / NIT</p>
-                  <p className="font-medium">
-                    {getDocumentoClienteTexto(selectedOrden.cliente)}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-600">Bodega</p>
-                  <p className="font-medium">
-                    {getBodegaNombre(selectedOrden.bodega)}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-600">Término de pago</p>
-                  <p className="font-medium">
-                    {getTerminoNombre(selectedOrden.termino_pago)}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-600">Fecha</p>
-                  <p className="font-medium">
-                    {formatDateDisplay(selectedOrden.fecha_creacion)}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-600">Fecha de Vencimiento</p>
-                  <p className="font-medium">
-                    {formatDateDisplay(selectedOrden.fecha_vencimiento)}
-                  </p>
-                </div>
-              </div>
-
-              {detalleOrdenSeleccionada.length > 0 && (
-                <div>
-                  <h3 className="mb-3 text-lg font-medium">Productos</h3>
-
-                  <div className="overflow-hidden rounded-lg border">
+                {productosOrden.length > 0 ? (
+                  <div className="mt-4 overflow-hidden rounded-lg border border-gray-200">
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-gray-50">
                           <TableHead>Producto</TableHead>
                           <TableHead className="text-center">Cantidad</TableHead>
                           <TableHead className="text-right">Precio Unit.</TableHead>
-                          <TableHead className="text-center">IVA%</TableHead>
+                          <TableHead className="text-center">IVA</TableHead>
                           <TableHead className="text-right">Subtotal</TableHead>
+                          <TableHead className="w-20 text-center">Acción</TableHead>
                         </TableRow>
                       </TableHeader>
 
                       <TableBody>
-                        {detalleOrdenSeleccionada.map((item, index) => (
+                        {productosOrden.map((item) => (
+                          <TableRow key={item.id_producto}>
+                            <TableCell className="font-medium text-gray-900">
+                              {item.nombre}
+                            </TableCell>
+
+                            <TableCell className="text-center">
+                              {isEditar ? (
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  value={item.cantidad}
+                                  onChange={(e) =>
+                                    handleActualizarCantidadProducto(
+                                      item.id_producto,
+                                      e.target.value
+                                    )
+                                  }
+                                  className="mx-auto h-9 w-24 text-center"
+                                />
+                              ) : (
+                                item.cantidad
+                              )}
+                            </TableCell>
+
+                            <TableCell className="text-right">
+                              {isEditar ? (
+                                <Input
+                                  type="number"
+                                  min={getPrecioMinimoProductoPorId(item.id_producto)}
+                                  value={item.precio_unitario}
+                                  onChange={(e) =>
+                                    handleActualizarPrecioProducto(
+                                      item.id_producto,
+                                      e.target.value
+                                    )
+                                  }
+                                  className="ml-auto h-9 w-36 text-right"
+                                />
+                              ) : (
+                                formatMoney(item.precio_unitario)
+                              )}
+                            </TableCell>
+
+                            <TableCell className="text-center">
+                              IVA {formatIvaPorcentaje(item.iva)}%
+                            </TableCell>
+
+                            <TableCell className="text-right font-medium">
+                              {formatMoney(item.subtotal)}
+                            </TableCell>
+
+                            <TableCell className="text-center">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEliminarProducto(item.id_producto)}
+                                className="hover:bg-red-50"
+                              >
+                                <Trash2 size={16} className="text-red-600" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+
+                    <div className="flex justify-end border-t bg-gray-50 px-4 py-3">
+                      <div className="w-full max-w-sm space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">N° de Items:</span>
+                          <span className="font-medium">{productosOrden.length}</span>
+                        </div>
+
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Subtotal:</span>
+                          <span className="font-medium">
+                            {formatMoney(totalesFormulario.subtotalSinIva)}
+                          </span>
+                        </div>
+
+                        {Object.entries(totalesFormulario.impuestosPorPorcentaje)
+                          .sort(([a], [b]) => Number(a) - Number(b))
+                          .map(([porcentaje, monto]) => (
+                            <div key={porcentaje} className="flex justify-between text-sm">
+                              <span className="text-gray-600">
+                                IVA {porcentaje}%:
+                              </span>
+                              <span className="font-medium">
+                                {formatMoney(monto)}
+                              </span>
+                            </div>
+                          ))}
+
+                        <div className="flex justify-between border-t pt-2 text-base">
+                          <span className="font-semibold">Total:</span>
+                          <span className="font-bold text-blue-600">
+                            {formatMoney(totalesFormulario.total)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-lg border border-dashed border-gray-300 py-10 text-center text-gray-500">
+                    <Package size={48} className="mx-auto mb-3 text-gray-300" />
+                    <p className="font-medium">No hay productos agregados</p>
+                    <p className="mt-1 text-sm">
+                      Selecciona un producto y agrégalo a la orden
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Observaciones</h3>
+                <p className="mb-3 text-sm text-gray-500">
+                  Notas adicionales para esta orden de venta
+                </p>
+
+                <Textarea
+                  value={formData.descripcion}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      descripcion: e.target.value,
+                    }))
+                  }
+                  placeholder="Escribe observaciones de la orden"
+                  className="min-h-24 rounded-lg bg-white"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="mt-2 border-t pt-4">
+            <Button variant="outline" onClick={() => setIsFormModalOpen(false)}>
+              Cancelar
+            </Button>
+
+            <Button
+              onClick={handleSave}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {isCrear ? "Crear orden" : "Guardar cambios"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isVer} onOpenChange={setIsViewModalOpen}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="space-y-2 pb-3">
+            <DialogTitle>Detalle de la orden de venta</DialogTitle>
+            <DialogDescription>
+              Consulta la información completa de la orden seleccionada.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedOrden ? (
+            <div className="space-y-6 py-2">
+              <div className="rounded-lg bg-gray-50 p-5">
+                <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900">
+                      Información general
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      Datos principales de la orden de venta.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Badge
+                      variant="outline"
+                      className="border-blue-200 bg-blue-50 text-blue-700"
+                    >
+                      {selectedOrden.codigo_orden_venta ||
+                        `OV-${selectedOrden.id_orden_venta}`}
+                    </Badge>
+
+                    <Badge
+                      variant="outline"
+                      className={getEstadoOrdenBadgeClass(selectedOrden)}
+                    >
+                      {getEstadoNombre(selectedOrden.estado_orden_venta)}
+                    </Badge>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div>
+                    <p className="text-sm text-gray-600">Cliente</p>
+                    <p className="font-medium text-gray-900">
+                      {getClienteNombre(selectedOrden.cliente)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-gray-600">Documento / NIT</p>
+                    <p className="font-medium text-gray-900">
+                      {getDocumentoClienteTexto(selectedOrden.cliente)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-gray-600">Bodega</p>
+                    <p className="font-medium text-gray-900">
+                      {getBodegaNombre(selectedOrden.bodega)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-gray-600">Término de pago</p>
+                    <p className="font-medium text-gray-900">
+                      {getTerminoNombre(selectedOrden.termino_pago)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-gray-600">Fecha</p>
+                    <p className="font-medium text-gray-900">
+                      {formatDateDisplay(selectedOrden.fecha_creacion)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-gray-600">Fecha de vencimiento</p>
+                    <p className="font-medium text-gray-900">
+                      {formatDateDisplay(selectedOrden.fecha_vencimiento)}
+                    </p>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <p className="text-sm text-gray-600">Aprobación / Anulación</p>
+                    <p className="font-medium text-gray-900">
+                      {getGestionEstadoOrden(selectedOrden)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg bg-gray-50 p-5">
+                <div className="mb-4 flex items-center gap-2">
+                  <Package size={18} className="text-blue-600" />
+                  <div>
+                    <h3 className="font-semibold text-gray-900">
+                      Productos de la orden
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      Detalle de productos, cantidades, precios e IVA.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="overflow-hidden rounded-lg border bg-white">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-gray-50">
+                        <TableHead>Producto</TableHead>
+                        <TableHead className="text-center">Cantidad</TableHead>
+                        <TableHead className="text-right">Precio Unit.</TableHead>
+                        <TableHead className="text-center">IVA %</TableHead>
+                        <TableHead className="text-right">Subtotal</TableHead>
+                      </TableRow>
+                    </TableHeader>
+
+                    <TableBody>
+                      {detalleOrdenSeleccionada.length === 0 ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={5}
+                            className="py-8 text-center text-gray-500"
+                          >
+                            No hay productos registrados en esta orden
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        detalleOrdenSeleccionada.map((item, index) => (
                           <TableRow key={`${item.id_producto}-${index}`}>
                             <TableCell className="font-medium">
                               {item.nombre}
@@ -2246,74 +2504,79 @@ export default function OrdenesVenta() {
                             </TableCell>
 
                             <TableCell className="text-center">
-                              <Badge variant="outline" className="bg-blue-50">
-                                {item.iva}%
-                              </Badge>
+                              {item.iva}%
                             </TableCell>
 
                             <TableCell className="text-right">
                               {formatMoney(item.subtotal)}
                             </TableCell>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
                 </div>
-              )}
 
-              <div className="flex justify-end">
-                <div className="min-w-75 rounded-lg border border-blue-200 bg-blue-50 p-4">
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">N° de Items:</span>
-                      <span className="font-medium">
-                        {detalleOrdenSeleccionada.length}
-                      </span>
-                    </div>
+                <div className="mt-5 flex justify-end">
+                  <div className="min-w-[18rem] rounded-lg border border-blue-200 bg-blue-50 p-4">
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">N° de Items:</span>
+                        <span className="font-medium text-gray-900">
+                          {detalleOrdenSeleccionada.length}
+                        </span>
+                      </div>
 
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Subtotal:</span>
-                      <span className="font-medium">
-                        {formatMoney(totalesOrdenSeleccionada.subtotalSinIva)}
-                      </span>
-                    </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Subtotal sin IVA:</span>
+                        <span className="font-medium text-gray-900">
+                          {formatMoney(totalesOrdenSeleccionada.subtotalSinIva)}
+                        </span>
+                      </div>
 
-                    {Object.entries(totalesOrdenSeleccionada.impuestosPorPorcentaje)
-                      .sort(([a], [b]) => Number(a) - Number(b))
-                      .map(([porcentaje, monto]) => (
-                        <div key={porcentaje} className="flex justify-between text-sm">
-                          <span className="text-gray-600">
-                            Total IVA {porcentaje}%:
-                          </span>
-                          <span className="font-medium">
-                            {formatMoney(monto)}
-                          </span>
-                        </div>
-                      ))}
+                      {Object.entries(totalesOrdenSeleccionada.impuestosPorPorcentaje)
+                        .sort(([a], [b]) => Number(a) - Number(b))
+                        .map(([porcentaje, monto]) => (
+                          <div key={porcentaje} className="flex justify-between text-sm">
+                            <span className="text-gray-600">
+                              Total IVA {porcentaje}%:
+                            </span>
+                            <span className="font-medium text-gray-900">
+                              {formatMoney(monto)}
+                            </span>
+                          </div>
+                        ))}
 
-                    <div className="flex justify-between border-t border-blue-300 pt-2 text-lg">
-                      <span className="font-semibold text-gray-700">Total:</span>
-                      <span className="font-bold text-blue-600">
-                        {formatMoney(totalesOrdenSeleccionada.total)}
-                      </span>
+                      <div className="flex justify-between border-t border-blue-300 pt-2 text-lg">
+                        <span className="font-semibold text-gray-700">Total:</span>
+                        <span className="font-bold text-blue-700">
+                          {formatMoney(totalesOrdenSeleccionada.total)}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div>
-                <h3 className="mb-2 text-lg font-medium">Observaciones</h3>
-                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <div className="rounded-lg bg-gray-50 p-5">
+                <h3 className="mb-2 text-base font-semibold text-gray-900">
+                  Observaciones
+                </h3>
+
+                <div className="rounded-lg border border-gray-200 bg-white p-4">
                   <p className="whitespace-pre-wrap text-gray-700">
                     {selectedOrden.descripcion || "Sin observaciones"}
                   </p>
                 </div>
               </div>
             </div>
+          ) : (
+            <div className="py-8 text-center text-gray-500">
+              No hay una orden seleccionada.
+            </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="mt-2 border-t pt-4">
             {selectedOrden && (
               <Button
                 onClick={() => void handleDownloadPDF(selectedOrden)}

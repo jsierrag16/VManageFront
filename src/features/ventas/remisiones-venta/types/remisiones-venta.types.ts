@@ -96,7 +96,7 @@ export type RemisionVentaApi = {
   id_cliente: number;
   id_estado_remision_venta: number;
   id_usuario_creador: number;
-  firma_digital?: string | null;
+  firma_digital?: string | number[] | { type?: string; data?: number[] | string } | null;
   nombre_firmante?: string | null;
   fecha_firma?: string | null;
   cliente?: {
@@ -104,6 +104,23 @@ export type RemisionVentaApi = {
     nombre_cliente?: string;
     num_documento?: string;
   };
+
+  fecha_despacho?: string | null;
+  id_usuario_despacho?: number | null;
+  usuario_despacho?: {
+    id_usuario: number;
+    nombre?: string | null;
+    apellido?: string | null;
+  } | null;
+
+  fecha_anulacion?: string | null;
+  id_usuario_anulo?: number | null;
+  usuario_anulo?: {
+    id_usuario: number;
+    nombre?: string | null;
+    apellido?: string | null;
+  } | null;
+
   orden_venta?: {
     id_orden_venta: number;
     codigo_orden_venta?: string | null;
@@ -133,9 +150,15 @@ export type CreateRemisionVentaPayload = {
       cantidad: number;
     }>;
   }>;
-  firma_digital?: string | null;
+  firma_digital?: string | { type?: string; data?: number[] } | null;
   nombre_firmante?: string | null;
   fecha_firma?: string | null;
+};
+
+export type UsuarioGestionRemisionVenta = {
+  id_usuario: number;
+  nombre?: string | null;
+  apellido?: string | null;
 };
 
 export type UpdateRemisionVentaPayload = CreateRemisionVentaPayload;

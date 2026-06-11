@@ -39,6 +39,12 @@ export type CatalogoEstadoOrdenVenta = {
   nombre?: string;
 };
 
+export type UsuarioGestionOrdenVenta = {
+  id_usuario: number;
+  nombre?: string | null;
+  apellido?: string | null;
+};
+
 export type DetalleCotizacionApi = {
   id_detalle_cotizacion?: number;
   id_producto: number;
@@ -86,6 +92,13 @@ export type OrdenVentaApi = {
   id_usuario?: number;
   id_cotizacion?: number | null;
   cliente?: CatalogoCliente;
+  fecha_aprobacion?: string | null;
+  id_usuario_aprobo?: number | null;
+  usuario_aprobo?: UsuarioGestionOrdenVenta | null;
+
+  fecha_anulacion?: string | null;
+  id_usuario_anulo?: number | null;
+  usuario_anulo?: UsuarioGestionOrdenVenta | null;
   bodega?: {
     id_bodega?: number;
     nombre_bodega?: string;

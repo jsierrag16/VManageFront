@@ -25,7 +25,6 @@ import {
   Package,
   Plus,
   Search,
-  ShoppingCart,
   X,
   Building2,
 } from "lucide-react";
@@ -79,6 +78,13 @@ type RemisionListadoUi = {
   observaciones: string;
   bodega: string;
   estadoId: number;
+  fechaDespacho?: string | null;
+  usuarioDespacho?: string;
+  fechaAnulacion?: string | null;
+  usuarioAnulo?: string;
+  firmaDigital?: FirmaDigitalValue;
+  nombreFirmante?: string | null;
+  fechaFirma?: string | null;
   detalle: Array<{
     producto: string;
     lote: string;
@@ -120,16 +126,131 @@ function normalizeText(value?: string | null) {
 }
 
 function formatMoney(value: unknown) {
-  return new Intl.NumberFormat("es-CO", {
-    style: "currency",
-    currency: "COP",
-    maximumFractionDigits: 0,
-  }).format(Number(value || 0));
+  return `COP$${Number(value || 0).toLocaleString("es-CO", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 function normalizeDate(value?: string | null) {
   if (!value) return "";
   return String(value).slice(0, 10);
+}
+
+function formatDateDisplay(value?: string | null) {
+  if (!value) return "—";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "—";
+
+  return date.toLocaleDateString("es-CO");
+}
+
+function formatDateTimeDisplay(value?: string | null) {
+  if (!value) return "—";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "—";
+
+  return date.toLocaleString("es-CO", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function getNombreUsuarioGestion(
+  usuario?: {
+    nombre?: string | null;
+    apellido?: string | null;
+  } | null
+) {
+  return `${usuario?.nombre ?? ""} ${usuario?.apellido ?? ""}`.trim();
+}
+
+type FirmaDigitalValue =
+  | string
+  | number[]
+  | { type?: string; data?: number[] | string }
+  | null
+  | undefined;
+
+function bytesToBase64(bytes: number[]) {
+  let binary = "";
+  const chunkSize = 0x8000;
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.slice(index, index + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+
+  return btoa(binary);
+}
+
+function bytesToText(bytes: number[]) {
+  try {
+    return new TextDecoder().decode(new Uint8Array(bytes)).trim();
+  } catch {
+    return "";
+  }
+}
+
+function normalizarFirmaString(value?: string | null) {
+  const firma = String(value ?? "").trim();
+
+  if (!firma) return "";
+
+  if (firma.startsWith("data:image")) {
+    return firma;
+  }
+
+  return `data:image/png;base64,${firma}`;
+}
+
+function getFirmaSrc(firma?: FirmaDigitalValue) {
+  if (!firma) return "";
+
+  if (typeof firma === "string") {
+    return normalizarFirmaString(firma);
+  }
+
+  if (Array.isArray(firma)) {
+    const texto = bytesToText(firma);
+
+    if (texto.startsWith("data:image")) {
+      return texto;
+    }
+
+    if (texto.startsWith("iVBOR") || texto.startsWith("/9j/")) {
+      return normalizarFirmaString(texto);
+    }
+
+    return `data:image/png;base64,${bytesToBase64(firma)}`;
+  }
+
+  if (typeof firma.data === "string") {
+    return normalizarFirmaString(firma.data);
+  }
+
+  if (Array.isArray(firma.data) && firma.data.length > 0) {
+    const texto = bytesToText(firma.data);
+
+    if (texto.startsWith("data:image")) {
+      return texto;
+    }
+
+    if (texto.startsWith("iVBOR") || texto.startsWith("/9j/")) {
+      return normalizarFirmaString(texto);
+    }
+
+    return `data:image/png;base64,${bytesToBase64(firma.data)}`;
+  }
+
+  return "";
 }
 
 function toNumber(value: unknown) {
@@ -229,12 +350,14 @@ function buildRemisionUi(item: RemisionVentaApi): RemisionListadoUi {
   });
 
   const totales = calcularTotalesConIva(detalle);
+  const usuarioDespacho = getNombreUsuarioGestion(item.usuario_despacho);
+  const usuarioAnulo = getNombreUsuarioGestion(item.usuario_anulo);
 
   return {
     id: item.id_remision_venta,
     numeroRemision:
       item.codigo_remision_venta ||
-      `RMV-${String(item.id_remision_venta).padStart(4, "0")}`,
+      `RV-${String(item.id_remision_venta).padStart(4, "0")}`,
     ordenVenta:
       item.orden_venta?.codigo_orden_venta ||
       `OV-${String(item.id_orden_venta).padStart(4, "0")}`,
@@ -249,6 +372,13 @@ function buildRemisionUi(item: RemisionVentaApi): RemisionListadoUi {
     estadoId:
       item.estado_remision_venta?.id_estado_remision_venta ??
       item.id_estado_remision_venta,
+    fechaDespacho: item.fecha_despacho ?? null,
+    usuarioDespacho,
+    fechaAnulacion: item.fecha_anulacion ?? null,
+    usuarioAnulo,
+    firmaDigital: item.firma_digital ?? null,
+    nombreFirmante: item.nombre_firmante ?? null,
+    fechaFirma: item.fecha_firma ?? null,
     detalle,
   };
 }
@@ -262,20 +392,44 @@ const puedeAnularRemision = (estado: EstadoUi) =>
 const puedeCambiarEstadoRemision = (estado: EstadoUi) =>
   estado !== "Entregado" && estado !== "Facturada" && estado !== "Anulada";
 
-function getEstadoBadgeClass(estado: EstadoUi) {
+function getEstadoRemisionButtonClass(estado: EstadoUi) {
   if (estado === "Pendiente") {
     return "bg-yellow-100 text-yellow-800 hover:bg-yellow-200";
   }
+
   if (estado === "Despachado") {
     return "bg-blue-100 text-blue-800 hover:bg-blue-200";
   }
+
   if (estado === "Entregado") {
-    return "bg-emerald-100 text-emerald-800 hover:bg-emerald-200";
+    return "bg-green-100 text-green-800 opacity-70 cursor-not-allowed hover:bg-green-100";
   }
+
   if (estado === "Facturada") {
-    return "bg-indigo-100 text-indigo-800 hover:bg-indigo-200";
+    return "bg-indigo-100 text-indigo-800 opacity-70 cursor-not-allowed hover:bg-indigo-100";
   }
-  return "bg-red-100 text-red-800 hover:bg-red-200";
+
+  return "bg-red-100 text-red-800 opacity-70 cursor-not-allowed hover:bg-red-100";
+}
+
+function getEstadoRemisionBadgeClass(estado: EstadoUi) {
+  if (estado === "Pendiente") {
+    return "border-yellow-200 bg-yellow-50 text-yellow-700";
+  }
+
+  if (estado === "Despachado") {
+    return "border-blue-200 bg-blue-50 text-blue-700";
+  }
+
+  if (estado === "Entregado") {
+    return "border-green-200 bg-green-50 text-green-700";
+  }
+
+  if (estado === "Facturada") {
+    return "border-indigo-200 bg-indigo-50 text-indigo-700";
+  }
+
+  return "border-red-200 bg-red-50 text-red-700";
 }
 
 function getSiguienteEstadoTexto(estado: EstadoUi) {
@@ -284,6 +438,28 @@ function getSiguienteEstadoTexto(estado: EstadoUi) {
   if (estado === "Entregado") return "Ya está entregada";
   if (estado === "Facturada") return "Ya está facturada";
   return "Ya está anulada";
+}
+
+function getGestionRemisionTexto(remision: RemisionListadoUi) {
+  if (remision.estado === "Despachado") {
+    return `${remision.usuarioDespacho || "—"} - ${formatDateDisplay(
+      remision.fechaDespacho
+    )}`;
+  }
+
+  if (remision.estado === "Entregado" || remision.estado === "Facturada") {
+    return `${remision.usuarioDespacho || "—"} - ${formatDateDisplay(
+      remision.fechaDespacho
+    )}`;
+  }
+
+  if (remision.estado === "Anulada") {
+    return `${remision.usuarioAnulo || "—"} - ${formatDateDisplay(
+      remision.fechaAnulacion
+    )}`;
+  }
+
+  return "Pendiente de despacho";
 }
 
 type PdfImageInfo = {
@@ -361,13 +537,13 @@ export default function RemisionesVenta() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  const [formNumeroRemision, setFormNumeroRemision] = useState("");
+  const [, setFormNumeroRemision] = useState("");
   const [formFecha, setFormFecha] = useState("");
   const [formObservaciones, setFormObservaciones] = useState("");
   const [formOrdenId, setFormOrdenId] = useState("");
   const [formOrdenOriginalId, setFormOrdenOriginalId] = useState("");
   const [formEstadoId, setFormEstadoId] = useState("");
-  const [formCliente, setFormCliente] = useState("");
+  const [, setFormCliente] = useState("");
   const [formProductos, setFormProductos] = useState<FormProductoState[]>([]);
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -385,15 +561,25 @@ export default function RemisionesVenta() {
   const [showFirmaModal, setShowFirmaModal] = useState(false);
   const [firmaDigital, setFirmaDigital] = useState("");
   const [firmaValida, setFirmaValida] = useState(false);
+  const [nombreFirmante, setNombreFirmante] = useState("");
   const firmaCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const firmaDibujandoRef = useRef(false);
 
-  const remisionSeleccionada = useMemo(() => {
+  const [remisionDetalleCompleta, setRemisionDetalleCompleta] =
+    useState<RemisionListadoUi | null>(null);
+
+  const remisionListadoSeleccionada = useMemo(() => {
     if (!params.id) return null;
+
     const id = Number(params.id);
+
     if (!Number.isFinite(id)) return null;
+
     return remisiones.find((item) => item.id === id) ?? null;
   }, [params.id, remisiones]);
+
+  const remisionSeleccionada =
+    remisionDetalleCompleta ?? remisionListadoSeleccionada;
 
   const estadoPendienteId = useMemo(
     () =>
@@ -436,6 +622,41 @@ export default function RemisionesVenta() {
   useEffect(() => {
     void cargarTodo();
   }, [selectedBodegaId]);
+
+  useEffect(() => {
+    if (!isVer || !params.id) {
+      setRemisionDetalleCompleta(null);
+      return;
+    }
+
+    const idRemision = Number(params.id);
+
+    if (!Number.isFinite(idRemision)) {
+      setRemisionDetalleCompleta(null);
+      return;
+    }
+
+    let activo = true;
+
+    const cargarDetalleCompleto = async () => {
+      try {
+        const remision = await remisionesVentaService.getOne(idRemision);
+
+        if (!activo) return;
+
+        setRemisionDetalleCompleta(buildRemisionUi(remision));
+      } catch (error: any) {
+        console.error(error);
+        toast.error(error?.message || "No se pudo cargar el detalle de la remisión");
+      }
+    };
+
+    void cargarDetalleCompleto();
+
+    return () => {
+      activo = false;
+    };
+  }, [isVer, params.id]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -638,8 +859,13 @@ export default function RemisionesVenta() {
     return mapEstado(estado?.nombre_estado);
   }, [estados, formEstadoId]);
 
+  const isEditarPendiente = isEditar && estadoFormularioActual === "Pendiente";
+  const isEditarDespachado = isEditar && estadoFormularioActual === "Despachado";
+  const formularioSoloLecturaOperativa =
+    isEditar && estadoFormularioActual !== "Pendiente";
+
   const puedeCambiarOrdenFormulario =
-    !isEditar || estadoFormularioActual === "Pendiente";
+    isCrear || isEditarPendiente;
 
   const documentoClienteSeleccionado = useMemo(() => {
     return getDocumentoClienteTexto(ordenSeleccionada?.cliente);
@@ -864,6 +1090,55 @@ export default function RemisionesVenta() {
   const getCantidadSolicitadaProducto = (producto: FormProductoState) =>
     producto.lotes.reduce((acc, lote) => acc + toNumber(lote.cantidad), 0);
 
+  const getCantidadFaltanteProducto = (producto: FormProductoState) => {
+    const seleccionada = getCantidadSolicitadaProducto(producto);
+    return Math.max(producto.cantidad_pendiente - seleccionada, 0);
+  };
+
+  const getCantidadExcedidaProducto = (producto: FormProductoState) => {
+    const seleccionada = getCantidadSolicitadaProducto(producto);
+    return Math.max(seleccionada - producto.cantidad_pendiente, 0);
+  };
+
+  const handleUsarFaltanteLote = (
+    idProducto: number,
+    idExistencia: number
+  ) => {
+    const producto = formProductos.find(
+      (item) => Number(item.id_producto) === Number(idProducto)
+    );
+
+    if (!producto) return;
+
+    const lote = producto.lotes.find(
+      (item) => Number(item.id_existencia) === Number(idExistencia)
+    );
+
+    if (!lote) return;
+
+    const cantidadActualLote = toNumber(lote.cantidad);
+    const seleccionadoProducto = getCantidadSolicitadaProducto(producto);
+    const faltanteProducto = Math.max(
+      producto.cantidad_pendiente - seleccionadoProducto,
+      0
+    );
+
+    const cantidadAUsar = Math.min(
+      lote.cantidad_disponible,
+      cantidadActualLote + faltanteProducto
+    );
+
+    handleCantidadLoteChange(
+      producto.id_producto,
+      lote.id_existencia,
+      cantidadAUsar > 0 ? String(cantidadAUsar) : ""
+    );
+  };
+
+  const handleLimpiarLote = (idProducto: number, idExistencia: number) => {
+    handleCantidadLoteChange(idProducto, idExistencia, "");
+  };
+
   const validarFormulario = () => {
     if (!currentUserId) {
       toast.error("No se pudo identificar el usuario actual");
@@ -915,6 +1190,52 @@ export default function RemisionesVenta() {
   };
 
   const handleGuardar = async () => {
+    if (!currentUserId) {
+      toast.error("No se pudo identificar el usuario actual");
+      return;
+    }
+
+    if (isEditarDespachado) {
+      if (!params.id) return;
+
+      if (!formObservaciones.trim()) {
+        toast.error("Debes ingresar una observación para actualizar la remisión");
+        return;
+      }
+
+      const payload: UpdateRemisionVentaPayload = {
+        fecha_creacion: formFecha,
+        fecha_vencimiento: null,
+        observaciones: formObservaciones.trim(),
+        id_orden_venta: Number(formOrdenOriginalId || formOrdenId),
+        id_estado_remision_venta: Number(formEstadoId),
+        id_usuario_creador: currentUserId,
+        detalle: formProductos
+          .map((producto) => ({
+            id_producto: producto.id_producto,
+            lotes: producto.lotes
+              .map((lote) => ({
+                id_existencia: lote.id_existencia,
+                cantidad: toNumber(lote.cantidad),
+              }))
+              .filter((lote) => lote.cantidad > 0),
+          }))
+          .filter((producto) => producto.lotes.length > 0),
+      };
+
+      try {
+        await remisionesVentaService.update(Number(params.id), payload);
+        await cargarTodo();
+        toast.success("Observaciones actualizadas correctamente");
+        navigate("/app/remisiones-venta");
+      } catch (error: any) {
+        console.error(error);
+        toast.error(error?.message || "No se pudieron actualizar las observaciones");
+      }
+
+      return;
+    }
+
     if (!validarFormulario()) return;
 
     const idOrdenVentaParaGuardar =
@@ -970,9 +1291,13 @@ export default function RemisionesVenta() {
   };
 
   const handleEdit = (remision: RemisionListadoUi) => {
+    if (!puedeEditarRemision(remision.estado)) {
+      toast.info("Solo se pueden editar remisiones pendientes o despachadas");
+      return;
+    }
+
     navigate(`/app/remisiones-venta/${remision.id}/editar`);
   };
-
   const handleAnular = (remision: RemisionListadoUi) => {
     navigate(`/app/remisiones-venta/${remision.id}/anular`);
   };
@@ -1019,6 +1344,7 @@ export default function RemisionesVenta() {
     setEstadoDestino(null);
     setFirmaDigital("");
     setFirmaValida(false);
+    setNombreFirmante("");
   };
 
   const handleConfirmEstado = async () => {
@@ -1028,11 +1354,20 @@ export default function RemisionesVenta() {
       toast.error("Debes capturar la firma del cliente antes de continuar");
       return;
     }
+    if (estadoDestino.nombre === "Entregado" && !nombreFirmante.trim()) {
+      toast.error("Debes ingresar el nombre de la persona que recibe");
+      return;
+    }
 
     try {
       await remisionesVentaService.updateEstado(remisionCambioEstado.id, {
         id_estado_remision_venta: estadoDestino.id,
-        firma_digital: estadoDestino.nombre === "Entregado" ? firmaDigital : undefined,
+        firma_digital:
+          estadoDestino.nombre === "Entregado" ? firmaDigital : undefined,
+        nombre_firmante:
+          estadoDestino.nombre === "Entregado"
+            ? nombreFirmante.trim()
+            : undefined,
       });
       await cargarTodo();
       toast.success(`Estado actualizado a ${estadoDestino.nombre}`);
@@ -1444,11 +1779,15 @@ export default function RemisionesVenta() {
       return {
         subtotalSinIva: 0,
         totalIva: 0,
+        impuestosPorPorcentaje: {},
         total: 0,
       };
     }
-
     return calcularTotalesConIva(remisionSeleccionada.detalle);
+  }, [remisionSeleccionada]);
+
+  const firmaSrcRemisionSeleccionada = useMemo(() => {
+    return getFirmaSrc(remisionSeleccionada?.firmaDigital);
   }, [remisionSeleccionada]);
 
   return (
@@ -1534,11 +1873,12 @@ export default function RemisionesVenta() {
               <TableRow className="bg-gray-50">
                 <TableHead>#</TableHead>
                 <TableHead>N° Remisión</TableHead>
-                <TableHead>Orden de Venta</TableHead>
+                <TableHead>N° Orden</TableHead>
                 <TableHead>Cliente</TableHead>
                 <TableHead>Documento / NIT</TableHead>
                 <TableHead>Fecha</TableHead>
-                <TableHead>Items</TableHead>
+                <TableHead className="text-center">Despacho / Anulación</TableHead>
+                <TableHead className="text-center">Items</TableHead>
                 <TableHead className="text-center">Estado</TableHead>
                 <TableHead className="text-center">Acciones</TableHead>
               </TableRow>
@@ -1547,13 +1887,13 @@ export default function RemisionesVenta() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">
+                  <TableCell colSpan={10} className="text-center py-8">
                     Cargando...
                   </TableCell>
                 </TableRow>
               ) : currentRemisiones.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={10} className="text-center py-8 text-gray-500">
                     No se encontraron remisiones de venta
                   </TableCell>
                 </TableRow>
@@ -1567,8 +1907,13 @@ export default function RemisionesVenta() {
                     <TableCell>{remision.ordenVenta}</TableCell>
                     <TableCell>{remision.cliente}</TableCell>
                     <TableCell>{remision.documentoCliente}</TableCell>
-                    <TableCell>{remision.fecha}</TableCell>
-                    <TableCell>{remision.items}</TableCell>
+                    <TableCell>{formatDateDisplay(remision.fecha)}</TableCell>
+
+                    <TableCell className="text-center text-gray-700">
+                      {getGestionRemisionTexto(remision)}
+                    </TableCell>
+
+                    <TableCell className="text-center">{remision.items}</TableCell>
 
                     <TableCell className="text-center">
                       <Button
@@ -1576,12 +1921,7 @@ export default function RemisionesVenta() {
                         size="sm"
                         onClick={() => handleToggleEstado(remision)}
                         disabled={!puedeCambiarEstadoRemision(remision.estado)}
-                        className={`h-8 rounded-full px-3 text-xs font-medium ${getEstadoBadgeClass(
-                          remision.estado
-                        )} ${!puedeCambiarEstadoRemision(remision.estado)
-                          ? "cursor-not-allowed opacity-70"
-                          : ""
-                          }`}
+                        className={`h-7 ${getEstadoRemisionButtonClass(remision.estado)}`}
                         title={getSiguienteEstadoTexto(remision.estado)}
                       >
                         {remision.estado}
@@ -1617,8 +1957,8 @@ export default function RemisionesVenta() {
                           disabled={!puedeEditarRemision(remision.estado)}
                           className={
                             puedeEditarRemision(remision.estado)
-                              ? "hover:bg-amber-50"
-                              : "cursor-not-allowed opacity-50"
+                              ? "hover:bg-yellow-50"
+                              : "cursor-not-allowed hover:bg-transparent"
                           }
                           title={
                             remision.estado === "Entregado"
@@ -1632,7 +1972,14 @@ export default function RemisionesVenta() {
                                     : "Editar"
                           }
                         >
-                          <Edit size={16} className="text-amber-600" />
+                          <Edit
+                            size={16}
+                            className={
+                              puedeEditarRemision(remision.estado)
+                                ? "text-yellow-600"
+                                : "text-gray-400"
+                            }
+                          />
                         </Button>
 
                         <Button
@@ -1643,7 +1990,7 @@ export default function RemisionesVenta() {
                           className={
                             puedeAnularRemision(remision.estado)
                               ? "hover:bg-red-50"
-                              : "cursor-not-allowed opacity-50"
+                              : "cursor-not-allowed hover:bg-transparent"
                           }
                           title={
                             remision.estado === "Entregado"
@@ -1655,7 +2002,14 @@ export default function RemisionesVenta() {
                                   : "Anular"
                           }
                         >
-                          <Ban size={16} className="text-red-600" />
+                          <Ban
+                            size={16}
+                            className={
+                              puedeAnularRemision(remision.estado)
+                                ? "text-red-600"
+                                : "text-gray-400"
+                            }
+                          />
                         </Button>
                       </div>
                     </TableCell>
@@ -1703,62 +2057,66 @@ export default function RemisionesVenta() {
         )}
       </div>
 
-      <Dialog open={isFormularioAbierto} onOpenChange={(open) => !open && closeToList()}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+      <Dialog
+        open={isFormularioAbierto}
+        onOpenChange={(open) => {
+          if (!open) closeToList();
+        }}
+      >
+        <DialogContent className="max-h-[90vh] max-w-7xl overflow-y-auto">
+          <DialogHeader className="space-y-2 pb-3">
             <DialogTitle>
-              {isEditar ? "Editar Remisión de Venta" : "Nueva Remisión de Venta"}
+              {isCrear
+                ? "Nueva remisión de venta"
+                : isEditarDespachado
+                  ? "Editar observaciones de remisión"
+                  : "Editar remisión de venta"}
             </DialogTitle>
-            <DialogDescription>
-              {isEditar
-                ? "Edita la remisión manteniéndola ligada a una orden de venta aprobada."
-                : "La remisión solo puede crearse desde una orden de venta aprobada."}
-            </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-6">
-            <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-4">
-              <div className="flex items-center gap-2 mb-4">
-                <FileText size={18} className="text-blue-600" />
-                <h3 className="font-semibold text-gray-900">
-                  Información general
-                </h3>
+          <div className="space-y-6 py-2">
+            <div className="rounded-lg bg-gray-50 p-4">
+              <div className="mb-4 flex items-center justify-between gap-4">
+                <div>
+                  <h3 className="font-semibold text-gray-900">
+                    Información general
+                  </h3>
+                </div>
+
+                <div className="flex shrink-0 items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className={getEstadoRemisionBadgeClass(estadoFormularioActual)}
+                  >
+                    {estadoFormularioActual}
+                  </Badge>
+
+                  <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-1.5 text-right">
+                    <p className="text-xs font-medium text-blue-700">
+                      Fecha
+                    </p>
+                    <p className="text-sm font-semibold text-blue-900">
+                      {formatDateDisplay(formFecha)}
+                    </p>
+                  </div>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <Label>N° Remisión</Label>
-                  <Input value={formNumeroRemision} disabled />
-                </div>
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)_220px]">
+                <div className="space-y-2">
+                  <Label>Orden de venta aprobada *</Label>
 
-                <div>
-                  <Label>Fecha</Label>
-                  <Input
-                    type="date"
-                    value={formFecha}
-                    disabled
-                    readOnly
-                    className="bg-gray-100 cursor-not-allowed"
-                  />
-                </div>
-
-                <div>
-                  <Label>Bodega</Label>
-                  <Input value={bodegaFormularioNombre} disabled />
-                </div>
-
-                <div className="md:col-span-3">
-                  <Label>Orden de Venta Aprobada</Label>
                   <select
-                    className={`w-full h-10 rounded-md border border-gray-300 px-3 ${puedeCambiarOrdenFormulario
+                    className={`h-11 w-full rounded-lg border border-gray-300 px-3 shadow-none focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${puedeCambiarOrdenFormulario
                       ? "bg-white"
-                      : "bg-gray-100 text-gray-500 cursor-not-allowed"
+                      : "cursor-not-allowed bg-gray-100 text-gray-500"
                       }`}
                     value={formOrdenId}
                     disabled={!puedeCambiarOrdenFormulario}
                     onChange={(e) => handleOrdenChange(e.target.value)}
                   >
                     <option value="">Selecciona una orden</option>
+
                     {ordenesDisponibles.map((orden) => (
                       <option
                         key={orden.id_orden_venta}
@@ -1772,285 +2130,488 @@ export default function RemisionesVenta() {
                   </select>
 
                   {!puedeCambiarOrdenFormulario && (
-                    <p className="mt-1 text-xs text-amber-600">
-                      La orden asociada no se puede cambiar cuando la remisión está en estado{" "}
-                      {estadoFormularioActual}.
+                    <p className="text-xs text-amber-600">
+                      La orden asociada no se puede cambiar en estado {estadoFormularioActual}.
                     </p>
                   )}
                 </div>
 
-                <div>
-                  <p className="text-sm text-gray-600">Cliente</p>
-                  <p className="font-medium text-gray-900 truncate">
-                    {formCliente || "Se completa al seleccionar la orden"}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-600">Documento / NIT</p>
-                  <p className="font-medium text-gray-900">
-                    {documentoClienteSeleccionado || "Se completa al seleccionar la orden"}
-                  </p>
-                </div>
-
-                <div>
-                  <Label>Estado inicial</Label>
+                <div className="space-y-2">
+                  <Label>Documento / NIT</Label>
                   <Input
-                    value={
-                      estados.find(
-                        (estado) =>
-                          String(estado.id_estado_remision_venta) === formEstadoId
-                      )?.nombre_estado ?? "Pendiente"
-                    }
+                    value={documentoClienteSeleccionado || ""}
+                    readOnly
                     disabled
+                    placeholder="Documento"
+                    className="h-11 cursor-not-allowed rounded-lg border-gray-200 bg-gray-100 shadow-none"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Bodega</Label>
+                  <Input
+                    value={bodegaFormularioNombre || "Sin bodega"}
+                    readOnly
+                    disabled
+                    className="h-11 cursor-not-allowed rounded-lg border-blue-100 bg-blue-50 font-medium text-blue-900 shadow-none"
                   />
                 </div>
               </div>
             </div>
-          </div>
 
-          <div className="rounded-xl border border-gray-200 p-4">
-            <div className="flex items-center gap-2 mb-4">
-              <ShoppingCart size={18} className="text-blue-600" />
-              <h3 className="font-semibold text-gray-900">
-                Orden asociada
-              </h3>
-            </div>
-
-
-
-            <div className="rounded-xl border border-gray-200 p-4">
-              <div className="flex items-center gap-2 mb-4">
-                <Package size={18} className="text-blue-600" />
-                <h3 className="font-semibold text-gray-900">
-                  Observaciones y resumen
-                </h3>
+            {isEditarDespachado && (
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700">
+                Esta remisión ya fue despachada. Solo puedes actualizar las observaciones.
+                Las cantidades, lotes y orden asociada quedan bloqueadas para conservar
+                la trazabilidad del despacho.
               </div>
+            )}
 
-              <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-4">
-                <div>
-                  <Label>Observaciones</Label>
-                  <textarea
-                    className="w-full min-h-25 rounded-md border border-gray-300 px-3 py-2"
-                    value={formObservaciones}
-                    onChange={(e) => setFormObservaciones(e.target.value)}
-                    placeholder="Observaciones de la remisión"
-                  />
-                </div>
-
-                <div className="rounded-lg border bg-gray-50 p-4 space-y-3">
+            {!isEditarDespachado && (
+              <div>
+                <div className="mb-3 flex items-center gap-2">
+                  <Package size={20} className="text-blue-600" />
                   <div>
-                    <p className="text-sm text-gray-500">Items seleccionados</p>
-                    <p className="text-2xl font-semibold text-gray-900">
-                      {cantidadTotalItemsFormulario}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-sm text-gray-500">Subtotal sin IVA</p>
-                    <p className="text-base font-semibold text-gray-900">
-                      $
-                      {totalesFormulario.subtotalSinIva.toLocaleString("es-CO", {
-                        minimumFractionDigits: 2,
-                      })}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-sm text-gray-500">Total IVA</p>
-                    <p className="text-base font-semibold text-gray-900">
-                      $
-                      {totalesFormulario.totalIva.toLocaleString("es-CO", {
-                        minimumFractionDigits: 2,
-                      })}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-sm text-gray-500">Total remisión</p>
-                    <p className="text-xl font-semibold text-blue-700">
-                      $
-                      {totalesFormulario.total.toLocaleString("es-CO", {
-                        minimumFractionDigits: 2,
-                      })}
+                    <h3 className="font-semibold text-gray-900">
+                      Productos y lotes a remitir
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      Selecciona el lote y la cantidad que se entregará al cliente.
                     </p>
                   </div>
                 </div>
-              </div>
-            </div>
 
-            <div className="rounded-xl border border-gray-200 p-4">
-              <div className="flex items-center gap-2 mb-4">
-                <Package size={18} className="text-blue-600" />
-                <h3 className="font-semibold text-gray-900">
-                  Productos y lotes a remitir
-                </h3>
-              </div>
+                {ordenSeleccionada ? (
+                  <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-gray-50">
+                          <TableHead className="min-w-70">Producto</TableHead>
+                          <TableHead className="text-center">IVA</TableHead>
+                          <TableHead>Lote</TableHead>
+                          <TableHead>Vence</TableHead>
+                          <TableHead className="text-center">Disponible</TableHead>
+                          <TableHead className="text-center">A remitir</TableHead>
+                          <TableHead className="text-center">Faltante</TableHead>
+                          <TableHead className="text-center">Acción</TableHead>
+                        </TableRow>
+                      </TableHeader>
 
-              {ordenSeleccionada ? (
-                <div className="space-y-4">
-                  {formProductos.map((producto) => (
-                    <div
-                      key={producto.id_producto}
-                      className="border rounded-xl p-4 space-y-4 bg-white"
-                    >
-                      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
-                        <div>
-                          <p className="font-semibold text-gray-900">
-                            {producto.nombre}
-                          </p>
-                          <div className="flex flex-wrap gap-2 mt-2 text-xs">
-                            <span className="rounded-full bg-gray-100 px-3 py-1 text-gray-700">
-                              Orden: {producto.cantidad_orden}
-                            </span>
-                            <span className="rounded-full bg-blue-100 px-3 py-1 text-blue-700">
-                              Remitido: {producto.cantidad_remitida}
-                            </span>
-                            <span className="rounded-full bg-yellow-100 px-3 py-1 text-yellow-700">
-                              Pendiente: {producto.cantidad_pendiente}
-                            </span>
-                          </div>
-                        </div>
+                      <TableBody>
+                        {formProductos.length > 0 ? (
+                          formProductos.flatMap((producto, productoIndex) => {
+                            const seleccionadoProducto = getCantidadSolicitadaProducto(producto);
 
-                        <div className="rounded-lg bg-blue-50 px-4 py-3 text-sm font-medium text-blue-700">
-                          Precio unitario: $
-                          {producto.precio_unitario.toLocaleString("es-CO", {
-                            minimumFractionDigits: 2,
-                          })}
-                        </div>
-                      </div>
+                            const faltanteProducto = getCantidadFaltanteProducto(producto);
+                            const excedidoProducto = getCantidadExcedidaProducto(producto);
 
-                      {producto.lotes.length === 0 ? (
-                        <div className="rounded-md bg-red-50 text-red-700 px-3 py-2 text-sm">
-                          Este producto no tiene existencias disponibles en la bodega
-                          de la orden.
-                        </div>
-                      ) : (
-                        <div className="overflow-x-auto rounded-lg border">
-                          <Table>
-                            <TableHeader>
-                              <TableRow className="bg-gray-50">
-                                <TableHead>Lote</TableHead>
-                                <TableHead>Cód. barras</TableHead>
-                                <TableHead>Vence</TableHead>
-                                <TableHead>Disponible</TableHead>
-                                <TableHead>Cantidad a remitir</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {producto.lotes.map((lote) => (
-                                <TableRow key={lote.id_existencia}>
-                                  <TableCell>{lote.lote || "-"}</TableCell>
-                                  <TableCell>{lote.codigo_barras || "-"}</TableCell>
+                            const productoCompleto =
+                              producto.cantidad_pendiente > 0 &&
+                              seleccionadoProducto >= producto.cantidad_pendiente &&
+                              excedidoProducto === 0;
+
+                            if (producto.lotes.length === 0) {
+                              return [
+                                <TableRow key={`${producto.id_producto}-sin-lotes`}>
+                                  <TableCell>
+                                    <div>
+                                      <p className="font-medium text-gray-900">
+                                        {producto.nombre}
+                                      </p>
+                                      <p className="text-xs text-gray-500">
+                                        Precio: {formatMoney(producto.precio_unitario)}
+                                      </p>
+                                    </div>
+                                  </TableCell>
+
+                                  <TableCell className="text-center">
+                                    <Badge
+                                      variant="outline"
+                                      className="border-blue-200 bg-blue-50 text-blue-700"
+                                    >
+                                      IVA {producto.iva}%
+                                    </Badge>
+                                  </TableCell>
+
+                                  <TableCell colSpan={6}>
+                                    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                      Este producto no tiene existencias disponibles en la bodega de la orden.
+                                    </div>
+                                  </TableCell>
+                                </TableRow>,
+                              ];
+                            }
+
+                            return producto.lotes.map((lote, loteIndex) => {
+                              const cantidadLote = toNumber(lote.cantidad);
+                              const disponibleLoteActual = Math.max(
+                                lote.cantidad_disponible - cantidadLote,
+                                0
+                              );
+
+                              return (
+                                <TableRow
+                                  key={`${producto.id_producto}-${lote.id_existencia}`}
+                                  className={[
+                                    productoIndex > 0 && loteIndex === 0
+                                      ? "border-t-4 border-t-gray-100"
+                                      : "",
+                                    excedidoProducto > 0 || cantidadLote > lote.cantidad_disponible
+                                      ? "bg-red-50/50"
+                                      : productoCompleto
+                                        ? "bg-green-50/70"
+                                        : loteIndex === 0
+                                          ? "bg-gray-50/40"
+                                          : "",
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" ")}
+                                >
+                                  <TableCell>
+                                    <div>
+                                      <p className="font-medium text-gray-900">
+                                        {producto.nombre}
+                                      </p>
+                                      <p className="text-xs text-gray-500">
+                                        Precio: {formatMoney(producto.precio_unitario)}
+                                      </p>
+                                    </div>
+                                  </TableCell>
+
+                                  <TableCell className="text-center">
+                                    <Badge
+                                      variant="outline"
+                                      className="border-blue-200 bg-blue-50 text-blue-700"
+                                    >
+                                      IVA {producto.iva}%
+                                    </Badge>
+                                  </TableCell>
+
+                                  <TableCell>
+                                    <div>
+                                      <p className="font-medium text-gray-900">
+                                        {lote.lote || "-"}
+                                      </p>
+                                      <p className="text-xs text-gray-500">
+                                        {lote.codigo_barras || "Sin código"}
+                                      </p>
+                                    </div>
+                                  </TableCell>
+
                                   <TableCell>{lote.fecha_vencimiento || "-"}</TableCell>
-                                  <TableCell>{lote.cantidad_disponible}</TableCell>
+
+                                  <TableCell className="text-center">
+                                    <span
+                                      className={
+                                        disponibleLoteActual === 0
+                                          ? "font-medium text-orange-700"
+                                          : "text-gray-700"
+                                      }
+                                    >
+                                      {disponibleLoteActual}
+                                    </span>
+                                  </TableCell>
+
                                   <TableCell>
                                     <Input
-                                      type="number"
-                                      min="0"
-                                      step="0.01"
+                                      type="text"
+                                      inputMode="decimal"
                                       value={lote.cantidad}
-                                      onChange={(e) =>
-                                        handleCantidadLoteChange(
-                                          producto.id_producto,
-                                          lote.id_existencia,
-                                          e.target.value
-                                        )
-                                      }
+                                      disabled={formularioSoloLecturaOperativa}
+                                      onWheel={(e) => e.currentTarget.blur()}
+                                      onFocus={(e) => e.currentTarget.select()}
+                                      onChange={(e) => {
+                                        const value = e.target.value.replace(",", ".");
+
+                                        if (
+                                          value === "" ||
+                                          /^\d*\.?\d{0,2}$/.test(value)
+                                        ) {
+                                          handleCantidadLoteChange(
+                                            producto.id_producto,
+                                            lote.id_existencia,
+                                            value
+                                          );
+                                        }
+                                      }}
                                       placeholder="0"
-                                      className="max-w-37.5"
+                                      className={`mx-auto h-9 max-w-24 rounded-lg text-right shadow-none focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/20 
+                                        ${cantidadLote > lote.cantidad_disponible || excedidoProducto > 0
+                                          ? "border-red-300 bg-red-50 text-red-700"
+                                          : productoCompleto && cantidadLote > 0
+                                            ? "border-green-300 bg-green-50 text-green-700"
+                                            : ""
+                                        } ${formularioSoloLecturaOperativa
+                                          ? "cursor-not-allowed bg-gray-100 text-gray-500"
+                                          : ""
+                                        }`}
                                     />
                                   </TableCell>
+
+                                  <TableCell className="text-center">
+                                    {productoCompleto ? (
+                                      <span className="inline-flex rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">
+                                        Completo
+                                      </span>
+                                    ) : (
+                                      <span className="font-medium text-orange-700">
+                                        {faltanteProducto}
+                                      </span>
+                                    )}
+                                  </TableCell>
+
+                                  <TableCell>
+                                    <div className="flex justify-center gap-2">
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={
+                                          formularioSoloLecturaOperativa ||
+                                          faltanteProducto === 0
+                                        }
+                                        onClick={() =>
+                                          handleUsarFaltanteLote(
+                                            producto.id_producto,
+                                            lote.id_existencia
+                                          )
+                                        }
+                                        className="h-8 px-3"
+                                      >
+                                        Completar
+                                      </Button>
+
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        disabled={formularioSoloLecturaOperativa}
+                                        onClick={() =>
+                                          handleLimpiarLote(
+                                            producto.id_producto,
+                                            lote.id_existencia
+                                          )
+                                        }
+                                        className="text-red-600 hover:bg-red-50"
+                                      >
+                                        Limpiar
+                                      </Button>
+                                    </div>
+                                  </TableCell>
                                 </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
+                              );
+                            });
+                          })
+                        ) : (
+                          <TableRow>
+                            <TableCell
+                              colSpan={8}
+                              className="py-8 text-center text-gray-500"
+                            >
+                              No hay productos disponibles para remitir.
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+
+                    <div className="flex justify-end border-t bg-gray-50 px-4 py-3">
+                      <div className="w-full max-w-sm space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Items seleccionados:</span>
+                          <span className="font-medium">
+                            {cantidadTotalItemsFormulario}
+                          </span>
                         </div>
-                      )}
+
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Subtotal:</span>
+                          <span className="font-medium">
+                            {formatMoney(totalesFormulario.subtotalSinIva)}
+                          </span>
+                        </div>
+
+                        {Object.entries(totalesFormulario.impuestosPorPorcentaje)
+                          .sort(([a], [b]) => Number(a) - Number(b))
+                          .map(([porcentaje, monto]) => (
+                            <div
+                              key={porcentaje}
+                              className="flex justify-between text-sm"
+                            >
+                              <span className="text-gray-600">
+                                IVA {porcentaje}%:
+                              </span>
+                              <span className="font-medium">
+                                {formatMoney(monto)}
+                              </span>
+                            </div>
+                          ))}
+
+                        <div className="flex justify-between border-t pt-2 text-base">
+                          <span className="font-semibold">Total remisión:</span>
+                          <span className="font-bold text-blue-700">
+                            {formatMoney(totalesFormulario.total)}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="rounded-lg border border-dashed p-10 text-center text-gray-500">
-                  Selecciona una orden de venta aprobada para cargar sus productos
-                  pendientes por remitir.
-                </div>
-              )}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-gray-300 py-10 text-center text-gray-500">
+                    <Package size={48} className="mx-auto mb-3 text-gray-300" />
+                    <p className="font-medium">
+                      Selecciona una orden de venta aprobada
+                    </p>
+                    <p className="mt-1 text-sm">
+                      Al seleccionar una orden se cargarán los productos pendientes por remitir.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <div>
+                <h3 className="font-semibold text-gray-900">Observaciones</h3>
+                <p className="text-sm text-gray-500">
+                  Notas adicionales de la remisión
+                </p>
+              </div>
+
+              <textarea
+                className="min-h-24 w-full resize-none rounded-lg border border-gray-300 bg-white px-3 py-2 shadow-none focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                value={formObservaciones}
+                onChange={(e) => setFormObservaciones(e.target.value)}
+                placeholder="Escribe cualquier observación sobre la remisión..."
+              />
             </div>
           </div>
 
-          <DialogFooter className="pt-2">
+          <DialogFooter className="mt-2 border-t pt-4">
             <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
+
             <Button
               onClick={handleGuardar}
               className="bg-blue-600 hover:bg-blue-700"
             >
-              {isEditar ? "Guardar Cambios" : "Guardar Remisión"}
+              {isCrear
+                ? "Guardar remisión"
+                : isEditarDespachado
+                  ? "Guardar observaciones"
+                  : "Guardar cambios"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={isVer} onOpenChange={(open) => !open && closeToList()}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Detalle de Remisión</DialogTitle>
-            <DialogDescription>
-              Información completa de la remisión de venta
-            </DialogDescription>
+        <DialogContent className="max-h-[90vh] max-w-7xl overflow-y-auto">
+          <DialogHeader className="space-y-2 pb-3">
+            <DialogTitle>Detalle de remisión de venta</DialogTitle>
           </DialogHeader>
 
-          {remisionSeleccionada && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-gray-600">N° Remisión</Label>
-                  <p className="font-medium">{remisionSeleccionada.numeroRemision}</p>
+          {remisionSeleccionada ? (
+            <div className="space-y-6 py-2">
+              <div className="rounded-lg bg-gray-50 p-5">
+                <div className="mb-4 flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">
+                      Información general
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      Datos principales, estado y trazabilidad de la remisión.
+                    </p>
+                  </div>
+
+                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                    <Badge
+                      variant="outline"
+                      className="border-blue-200 bg-blue-50 px-3 py-1 text-blue-700"
+                    >
+                      {remisionSeleccionada.numeroRemision}
+                    </Badge>
+
+                    <Badge
+                      variant="outline"
+                      className={getEstadoRemisionBadgeClass(
+                        remisionSeleccionada.estado
+                      )}
+                    >
+                      {remisionSeleccionada.estado}
+                    </Badge>
+
+                    <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-2 text-right">
+                      <p className="text-xs font-medium text-blue-700">
+                        Fecha de Remisión
+                      </p>
+                      <p className="text-sm font-semibold text-blue-900">
+                        {formatDateDisplay(remisionSeleccionada.fecha)}
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <Label className="text-gray-600">Estado</Label>
-                  <p className="font-medium">{remisionSeleccionada.estado}</p>
-                </div>
+                <div className="grid grid-cols-1 gap-x-10 gap-y-5 md:grid-cols-2 xl:grid-cols-3">
+                  <div>
+                    <p className="text-sm text-gray-600">Orden de venta</p>
+                    <p className="font-medium text-gray-900">
+                      {remisionSeleccionada.ordenVenta}
+                    </p>
+                  </div>
 
-                <div>
-                  <Label className="text-gray-600">Orden de Venta</Label>
-                  <p className="font-medium">{remisionSeleccionada.ordenVenta}</p>
-                </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Cliente</p>
+                    <p className="font-medium text-gray-900">
+                      {remisionSeleccionada.cliente}
+                    </p>
+                  </div>
 
-                <div>
-                  <Label className="text-gray-600">Fecha</Label>
-                  <p className="font-medium">
-                    {remisionSeleccionada.fecha
-                      ? new Date(remisionSeleccionada.fecha).toLocaleDateString("es-CO")
-                      : "-"}
-                  </p>
-                </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Documento / NIT</p>
+                    <p className="font-medium text-gray-900">
+                      {remisionSeleccionada.documentoCliente || "No registrado"}
+                    </p>
+                  </div>
 
-                <div>
-                  <Label className="text-gray-600">Cliente</Label>
-                  <p className="font-medium">{remisionSeleccionada.cliente}</p>
-                </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Bodega</p>
+                    <p className="font-medium text-gray-900">
+                      {remisionSeleccionada.bodega || "-"}
+                    </p>
+                  </div>
 
-                <div>
-                  <Label className="text-gray-600">Documento / NIT</Label>
-                  <p className="font-medium">
-                    {remisionSeleccionada.documentoCliente || "No registrado"}
-                  </p>
-                </div>
+                  <div>
+                    <p className="text-sm text-gray-600">N° de Items</p>
+                    <p className="font-medium text-gray-900">
+                      {remisionSeleccionada.items}
+                    </p>
+                  </div>
 
-                <div className="md:col-span-2">
-                  <Label className="text-gray-600">Bodega</Label>
-                  <p className="font-medium">{remisionSeleccionada.bodega || "-"}</p>
+                  <div>
+                    <p className="text-sm text-gray-600">Despacho / Anulación</p>
+                    <p className="font-medium text-gray-900">
+                      {getGestionRemisionTexto(remisionSeleccionada)}
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              <div className="border-t pt-4">
-                <Label className="text-gray-600 mb-2 block">Productos</Label>
+              <div>
+                <div className="mb-3 flex items-center gap-2">
+                  <Package size={20} className="text-blue-600" />
+                  <div>
+                    <h3 className="font-semibold text-gray-900">
+                      Productos remitidos
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      Detalle de productos, lotes, cantidades, precios e IVA.
+                    </p>
+                  </div>
+                </div>
 
-                <div className="overflow-x-auto rounded-lg border">
+                <div className="overflow-hidden rounded-lg border border-gray-200">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-gray-50">
@@ -2064,86 +2625,171 @@ export default function RemisionesVenta() {
                     </TableHeader>
 
                     <TableBody>
-                      {remisionSeleccionada.detalle.map((item, index) => (
-                        <TableRow key={`${item.producto}-${index}`}>
-                          <TableCell className="font-medium">
-                            {item.producto}
-                          </TableCell>
+                      {remisionSeleccionada.detalle.length > 0 ? (
+                        remisionSeleccionada.detalle.map((item, index) => (
+                          <TableRow key={`${item.producto}-${item.lote}-${index}`}>
+                            <TableCell className="font-medium text-gray-900">
+                              {item.producto}
+                            </TableCell>
 
-                          <TableCell>{item.lote || "-"}</TableCell>
+                            <TableCell>{item.lote || "-"}</TableCell>
 
-                          <TableCell className="text-center">
-                            {item.cantidad}
-                          </TableCell>
+                            <TableCell className="text-center">
+                              {item.cantidad}
+                            </TableCell>
 
-                          <TableCell className="text-center">
-                            IVA {item.iva}%
-                          </TableCell>
+                            <TableCell className="text-center">
+                              IVA {item.iva}%
+                            </TableCell>
 
-                          <TableCell className="text-right">
-                            {formatMoney(item.precio)}
-                          </TableCell>
+                            <TableCell className="text-right">
+                              {formatMoney(item.precio)}
+                            </TableCell>
 
-                          <TableCell className="text-right">
-                            {formatMoney(item.subtotal)}
+                            <TableCell className="text-right font-medium">
+                              {formatMoney(item.subtotal)}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell
+                            colSpan={6}
+                            className="py-8 text-center text-gray-500"
+                          >
+                            No hay productos registrados en esta remisión
                           </TableCell>
                         </TableRow>
-                      ))}
+                      )}
                     </TableBody>
                   </Table>
+
+                  <div className="flex justify-end border-t bg-gray-50 px-4 py-3">
+                    <div className="w-full max-w-sm space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">N° de Items:</span>
+                        <span className="font-medium">
+                          {remisionSeleccionada.items}
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Subtotal:</span>
+                        <span className="font-medium">
+                          {formatMoney(totalesRemisionSeleccionada.subtotalSinIva)}
+                        </span>
+                      </div>
+
+                      {Object.entries(
+                        totalesRemisionSeleccionada.impuestosPorPorcentaje
+                      )
+                        .sort(([a], [b]) => Number(a) - Number(b))
+                        .map(([porcentaje, monto]) => (
+                          <div key={porcentaje} className="flex justify-between text-sm">
+                            <span className="text-gray-600">
+                              IVA {porcentaje}%:
+                            </span>
+                            <span className="font-medium">
+                              {formatMoney(monto)}
+                            </span>
+                          </div>
+                        ))}
+
+                      <div className="flex justify-between border-t pt-2 text-base">
+                        <span className="font-semibold">Total:</span>
+                        <span className="font-bold text-blue-600">
+                          {formatMoney(totalesRemisionSeleccionada.total)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div className="border-t pt-4">
-                <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">N° de Items:</span>
-                    <span className="font-medium">{remisionSeleccionada.items}</span>
-                  </div>
+              {(remisionSeleccionada.estado === "Entregado" ||
+                remisionSeleccionada.estado === "Facturada") && (
+                  <div className="rounded-lg bg-gray-50 p-5">
+                    <div className="mb-4">
+                      <h3 className="font-semibold text-gray-900">
+                        Firma del cliente
+                      </h3>
+                      <p className="text-sm text-gray-500">
+                        Evidencia de entrega registrada al cambiar la remisión a entregado.
+                      </p>
+                    </div>
 
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Subtotal:</span>
-                    <span className="font-medium">
-                      {formatMoney(totalesRemisionSeleccionada.subtotalSinIva)}
-                    </span>
-                  </div>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_300px]">
+                      <div className="rounded-lg border border-gray-200 bg-white p-4">
+                        {firmaSrcRemisionSeleccionada ? (
+                          <img
+                            src={firmaSrcRemisionSeleccionada}
+                            alt="Firma del cliente"
+                            className="h-44 w-full object-contain"
+                          />
+                        ) : (
+                          <div className="flex h-44 items-center justify-center rounded-lg border border-yellow-200 bg-yellow-50 px-4 text-center text-sm text-yellow-800">
+                            No se pudo visualizar la firma, aunque la remisión tiene registro de entrega.
+                          </div>
+                        )}
+                      </div>
 
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">IVA:</span>
-                    <span className="font-medium">
-                      {formatMoney(totalesRemisionSeleccionada.totalIva)}
-                    </span>
-                  </div>
+                      <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm">
+                        <p className="text-gray-600">Firmante</p>
+                        <p className="font-medium text-gray-900">
+                          {remisionSeleccionada.nombreFirmante ||
+                            remisionSeleccionada.cliente ||
+                            "Cliente"}
+                        </p>
 
-                  <div className="flex justify-between text-lg border-t pt-2 mt-2">
-                    <span className="font-semibold">Total:</span>
-                    <span className="font-bold text-blue-600">
-                      {formatMoney(totalesRemisionSeleccionada.total)}
-                    </span>
+                        <p className="mt-4 text-gray-600">Fecha de firma</p>
+                        <p className="font-medium text-gray-900">
+                          {formatDateTimeDisplay(remisionSeleccionada.fechaFirma)}
+                        </p>
+
+                        <p className="mt-4 text-gray-600">Estado</p>
+                        <Badge
+                          variant="outline"
+                          className={getEstadoRemisionBadgeClass(remisionSeleccionada.estado)}
+                        >
+                          {remisionSeleccionada.estado}
+                        </Badge>
+                      </div>
+                    </div>
                   </div>
+                )}
+
+              <div className="space-y-2">
+                <div>
+                  <h3 className="font-semibold text-gray-900">Observaciones</h3>
+                  <p className="text-sm text-gray-500">
+                    Notas adicionales de la remisión
+                  </p>
+                </div>
+
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                  <p className="whitespace-pre-wrap text-gray-700">
+                    {remisionSeleccionada.observaciones || "Sin observaciones"}
+                  </p>
                 </div>
               </div>
-
-              <div>
-                <Label className="text-gray-600">Observaciones</Label>
-                <p className="text-sm bg-gray-50 p-3 rounded-lg min-h-12">
-                  {remisionSeleccionada.observaciones || "Sin observaciones"}
-                </p>
-              </div>
-
-              <div className="flex justify-end">
-                <Button
-                  onClick={() => void handleDescargarPDF(remisionSeleccionada)}
-                  className="bg-green-600 hover:bg-green-700"
-                >
-                  <Download size={16} className="mr-2" />
-                  Descargar PDF
-                </Button>
-              </div>
+            </div>
+          ) : (
+            <div className="py-8 text-center text-gray-500">
+              No hay una remisión seleccionada.
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="mt-2 border-t pt-4">
+            {remisionSeleccionada && (
+              <Button
+                onClick={() => void handleDescargarPDF(remisionSeleccionada)}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Download size={16} className="mr-2" />
+                Descargar PDF
+              </Button>
+            )}
+
             <Button variant="outline" onClick={closeToList}>
               Cerrar
             </Button>
@@ -2214,50 +2860,109 @@ export default function RemisionesVenta() {
           else setShowFirmaModal(open);
         }}
       >
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
+          <DialogHeader className="space-y-2 pb-3">
             <DialogTitle>Firma del cliente</DialogTitle>
             <DialogDescription>
-              Para cambiar la remisión a <strong>Entregado</strong>, el cliente
-              debe firmar en el recuadro.
+              Para cambiar la remisión a <strong>Entregado</strong>, el cliente debe
+              firmar en el recuadro.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-3">
-              <canvas
-                ref={firmaCanvasRef}
-                className="h-56 w-full rounded-lg border border-gray-200 bg-white touch-none"
-                onMouseDown={iniciarFirma}
-                onMouseMove={moverFirma}
-                onMouseUp={finalizarFirma}
-                onMouseLeave={finalizarFirma}
-                onTouchStart={iniciarFirma}
-                onTouchMove={moverFirma}
-                onTouchEnd={finalizarFirma}
-              />
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_280px]">
+            <div className="space-y-3">
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <div className="space-y-2">
+                  <Label>Nombre de quien recibe</Label>
+                  <Input
+                    value={nombreFirmante}
+                    onChange={(e) => setNombreFirmante(e.target.value)}
+                    placeholder="Ej: Nombre cliente o receptor"
+                    className="h-11 rounded-lg border-gray-300 bg-white shadow-none focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/20"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Este nombre quedará asociado a la firma registrada.
+                  </p>
+                </div>
+                <canvas
+                  ref={firmaCanvasRef}
+                  className="h-64 w-full touch-none rounded-lg border border-gray-200 bg-white"
+                  onMouseDown={iniciarFirma}
+                  onMouseMove={moverFirma}
+                  onMouseUp={finalizarFirma}
+                  onMouseLeave={finalizarFirma}
+                  onTouchStart={iniciarFirma}
+                  onTouchMove={moverFirma}
+                  onTouchEnd={finalizarFirma}
+                />
+              </div>
+
+              <div className="flex flex-col gap-3 rounded-lg border border-blue-100 bg-blue-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-blue-700">
+                  La firma se guardará como evidencia de entrega de la remisión.
+                </p>
+
+                <Button variant="outline" onClick={limpiarFirma}>
+                  Limpiar firma
+                </Button>
+              </div>
             </div>
 
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm text-gray-500">
-                El botón de aceptar solo se habilita cuando la firma ya fue
-                dibujada.
-              </p>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <h3 className="font-semibold text-gray-900">Resumen</h3>
 
-              <Button variant="outline" onClick={limpiarFirma}>
-                Limpiar firma
-              </Button>
+              <div className="mt-4 space-y-4 text-sm">
+                <div>
+                  <p className="text-gray-500">Remisión</p>
+                  <p className="font-medium text-gray-900">
+                    {remisionCambioEstado?.numeroRemision || "-"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-gray-500">Cliente</p>
+                  <p className="font-medium text-gray-900">
+                    {remisionCambioEstado?.cliente || "-"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-gray-500">Estado actual</p>
+                  <p className="font-medium text-gray-900">
+                    {remisionCambioEstado?.estado || "-"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-gray-500">Nuevo estado</p>
+                  <Badge
+                    variant="outline"
+                    className="border-green-200 bg-green-50 text-green-700"
+                  >
+                    {estadoDestino?.nombre || "Entregado"}
+                  </Badge>
+                </div>
+
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-800">
+                  El botón de aceptar solo se habilita cuando la firma ya fue dibujada.
+                </div>
+              </div>
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="mt-2 border-t pt-4">
             <Button variant="outline" onClick={resetCambioEstado}>
               <X size={16} className="mr-2" />
               Cancelar
             </Button>
-            <Button onClick={handleConfirmEstado} disabled={!firmaValida}>
+
+            <Button
+              onClick={handleConfirmEstado}
+              disabled={!firmaValida || !nombreFirmante.trim()}
+              className="bg-green-600 hover:bg-green-700"
+            >
               <CheckCircle size={16} className="mr-2" />
-              Aceptar
+              Aceptar entrega
             </Button>
           </DialogFooter>
         </DialogContent>

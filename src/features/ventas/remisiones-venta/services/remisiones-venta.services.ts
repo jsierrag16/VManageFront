@@ -141,7 +141,11 @@ export const remisionesVentaService = {
 
   async updateEstado(
     id: number,
-    payload: { id_estado_remision_venta: number; firma_digital?: string }
+    payload: {
+      id_estado_remision_venta: number;
+      firma_digital?: string;
+      nombre_firmante?: string;
+    }
   ) {
     const response = await request<any>(`/remisiones-venta/${id}/estado`, {
       method: "PATCH",
