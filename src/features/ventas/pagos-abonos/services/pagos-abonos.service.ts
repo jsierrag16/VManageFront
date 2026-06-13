@@ -65,6 +65,11 @@ export type PagoAbonoApi = {
   id_metodo: number;
   id_factura: number;
   metodo_pago?: MetodoPagoApi | null;
+  id_usuario_registro?: number | null;
+  fecha_anulacion?: string | null;
+  id_usuario_anulo?: number | null;
+  usuario_registro?: UsuarioGestionApi | null;
+  usuario_anulo?: UsuarioGestionApi | null;
 };
 
 export type FacturaApi = {
@@ -77,6 +82,12 @@ export type FacturaApi = {
   id_cliente: number;
   id_estado_factura: number;
 
+  id_usuario_creador?: number | null;
+  fecha_anulacion?: string | null;
+  id_usuario_anulo?: number | null;
+  usuario_creador?: UsuarioGestionApi | null;
+  usuario_anulo?: UsuarioGestionApi | null;
+
   cliente?: {
     id_cliente: number;
     codigo_cliente?: string;
@@ -88,6 +99,12 @@ export type FacturaApi = {
   pagos_abonos: PagoAbonoApi[];
   remision_venta: RemisionPendienteApi[];
   resumen_pago?: ResumenPagoFacturaApi;
+};
+
+export type UsuarioGestionApi = {
+  id_usuario: number;
+  nombre?: string | null;
+  apellido?: string | null;
 };
 
 export type CatalogosPagosAbonosResponse = {
@@ -175,6 +192,14 @@ export const pagosAbonosService = {
 
   async anularAbono(idPago: number) {
     const response = await api.patch(`/pagos-abonos/abonos/${idPago}/anular`);
+    return unwrapResponse<{ message: string; factura: FacturaApi }>(response);
+  },
+
+  async anularFactura(idFactura: number) {
+    const response = await api.patch(
+      `/pagos-abonos/facturas/${idFactura}/anular`,
+    );
+
     return unwrapResponse<{ message: string; factura: FacturaApi }>(response);
   },
 };

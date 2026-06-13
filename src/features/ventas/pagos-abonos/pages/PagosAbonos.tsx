@@ -6,6 +6,7 @@ import {
   useParams,
 } from "react-router-dom";
 import {
+  Ban,
   CheckCircle,
   ChevronLeft,
   ChevronRight,
@@ -16,6 +17,7 @@ import {
   TrendingUp,
   Building2,
 } from "lucide-react";
+import { useAuth } from "@/shared/context/AuthContext";
 import { Badge } from "@/shared/components/ui/badge";
 import { toast } from "sonner";
 
@@ -53,6 +55,7 @@ import { clientesService } from "@/features/ventas/clientes/services/clientes.se
 import type { ClienteApi } from "@/features/ventas/clientes/types/clientes.types";
 import {
   pagosAbonosService,
+  type PagoAbonoApi,
   type FacturaApi,
   type MetodoPagoApi,
   type RemisionPendienteApi,
@@ -79,10 +82,11 @@ function onlyDate(value?: string | null) {
 
 function formatMoney(value?: number | string | null) {
   const numberValue = Number(value ?? 0);
-  return numberValue.toLocaleString("es-CO", {
+
+  return `COP$${numberValue.toLocaleString("es-CO", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  });
+  })}`;
 }
 
 function extractErrorMessage(error: any) {
@@ -183,6 +187,23 @@ function getFacturaSaldo(factura: FacturaApi) {
   return Number(factura.resumen_pago?.saldo_pendiente ?? 0);
 }
 
+function getUsuarioNombre(
+  usuario?: { nombre?: string | null; apellido?: string | null } | null,
+) {
+  const nombre = `${usuario?.nombre ?? ""} ${usuario?.apellido ?? ""}`.trim();
+  return nombre || "—";
+}
+
+function isFacturaAnulada(factura?: FacturaApi | null) {
+  return normalizeText(getEstadoFacturaLabel(factura as FacturaApi)).includes(
+    "anulad",
+  );
+}
+
+function hasAbonosActivos(factura?: FacturaApi | null) {
+  return (factura?.pagos_abonos ?? []).some((abono) => abono.estado);
+}
+
 export default function PagosAbonos() {
   const { selectedBodegaId, selectedBodegaNombre } =
     useOutletContext<AppOutletContext>();
@@ -190,6 +211,9 @@ export default function PagosAbonos() {
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams<{ id: string }>();
+
+  const { tienePermiso } = useAuth();
+  const canAnularPagos = tienePermiso("ventas", "pagos", "anular");
 
   const isCrear = location.pathname.endsWith("/crear");
   const isVer = location.pathname.endsWith("/ver");
@@ -202,6 +226,8 @@ export default function PagosAbonos() {
   const [loadingRemisiones, setLoadingRemisiones] = useState(false);
   const [savingFactura, setSavingFactura] = useState(false);
   const [savingAbono, setSavingAbono] = useState(false);
+  const [savingAnulacion, setSavingAnulacion] = useState(false);
+  const [abonoAAnular, setAbonoAAnular] = useState<PagoAbonoApi | null>(null);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -263,15 +289,6 @@ export default function PagosAbonos() {
     void loadInitialData();
   }, [loadInitialData]);
 
-  useEffect(() => {
-    if (!isAnular) return;
-
-    toast.info(
-      "La anulación de facturas todavía no está implementada en backend. Ya te dejé conectado crear, listar y abonar.",
-    );
-    closeToList();
-  }, [isAnular]);
-
   const facturaSeleccionada = useMemo(() => {
     const id = Number(params.id);
     if (!Number.isFinite(id)) return null;
@@ -279,10 +296,11 @@ export default function PagosAbonos() {
   }, [facturas, params.id]);
 
   useEffect(() => {
-    if (!isVer && !isAbonar) return;
+    if (!isVer && !isAbonar && !isAnular) return;
     if (!params.id) return;
 
     const id = Number(params.id);
+
     if (!Number.isFinite(id)) {
       closeToList();
       return;
@@ -291,7 +309,15 @@ export default function PagosAbonos() {
     if (!loading && facturas.length > 0 && !facturaSeleccionada) {
       closeToList();
     }
-  }, [isVer, isAbonar, params.id, facturaSeleccionada, loading, facturas.length]);
+  }, [
+    isVer,
+    isAbonar,
+    isAnular,
+    params.id,
+    facturaSeleccionada,
+    loading,
+    facturas.length,
+  ]);
 
   const facturasFiltradas = useMemo(() => {
     return facturas.filter((factura) => {
@@ -387,6 +413,39 @@ export default function PagosAbonos() {
   const handleOpenAbono = (factura: FacturaApi) => {
     resetAbonoForm();
     navigate(`${LIST_PATH}/${factura.id_factura}/abonar`);
+  };
+
+  const handleOpenAnularFactura = (factura: FacturaApi) => {
+    navigate(`${LIST_PATH}/${factura.id_factura}/anular`);
+  };
+
+  const handleOpenAnularAbono = (abono: PagoAbonoApi) => {
+    setAbonoAAnular(abono);
+  };
+
+  const handleConfirmarAnularAbono = async () => {
+    if (!abonoAAnular) return;
+
+    if (!canAnularPagos) {
+      toast.error("No tienes permiso para anular abonos");
+      return;
+    }
+
+    setSavingAnulacion(true);
+
+    try {
+      await pagosAbonosService.anularAbono(abonoAAnular.id_pago);
+
+      toast.success("Abono anulado correctamente");
+
+      setAbonoAAnular(null);
+
+      await loadInitialData();
+    } catch (error) {
+      toast.error(extractErrorMessage(error));
+    } finally {
+      setSavingAnulacion(false);
+    }
   };
 
   const handleClienteChange = async (value: string) => {
@@ -504,6 +563,35 @@ export default function PagosAbonos() {
     }
   };
 
+  const handleAnularPago = async () => {
+    if (!facturaSeleccionada) return;
+
+    if (!canAnularPagos) {
+      toast.error("No tienes permiso para anular facturas");
+      return;
+    }
+
+    if (hasAbonosActivos(facturaSeleccionada)) {
+      toast.error(
+        "No puedes anular una factura con abonos activos. Primero anula los abonos registrados.",
+      );
+      return;
+    }
+
+    setSavingAnulacion(true);
+
+    try {
+      await pagosAbonosService.anularFactura(facturaSeleccionada.id_factura);
+      toast.success("Factura anulada correctamente");
+      closeToList();
+      await loadInitialData();
+    } catch (error) {
+      toast.error(extractErrorMessage(error));
+    } finally {
+      setSavingAnulacion(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -528,7 +616,7 @@ export default function PagosAbonos() {
             <div>
               <p className="text-yellow-100 text-sm">Total facturado</p>
               <p className="text-3xl mt-2 font-semibold text-white">
-                ${formatMoney(stats.totalFacturado)}
+                {formatMoney(stats.totalFacturado)}
               </p>
             </div>
             <TrendingUp className="text-yellow-200" size={40} />
@@ -540,7 +628,7 @@ export default function PagosAbonos() {
             <div>
               <p className="text-green-100 text-sm">Total abonado</p>
               <p className="text-3xl mt-2 font-semibold text-white">
-                ${formatMoney(stats.totalAbonado)}
+                {formatMoney(stats.totalAbonado)}
               </p>
             </div>
             <CheckCircle className="text-green-200" size={40} />
@@ -552,7 +640,7 @@ export default function PagosAbonos() {
             <div>
               <p className="text-blue-100 text-sm">Saldo pendiente</p>
               <p className="text-3xl mt-2 font-semibold text-white">
-                ${formatMoney(stats.saldoPendiente)}
+                {formatMoney(stats.saldoPendiente)}
               </p>
             </div>
 
@@ -570,7 +658,7 @@ export default function PagosAbonos() {
             <Input
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar por factura, cliente, remisión o estado..."
+              placeholder="Buscar por pago, cliente, remisión o estado..."
               className="pl-10 w-full"
             />
           </div>
@@ -591,7 +679,7 @@ export default function PagosAbonos() {
             <TableHeader>
               <TableRow className="bg-gray-50">
                 <TableHead className="w-16">#</TableHead>
-                <TableHead>Factura</TableHead>
+                <TableHead>Pago</TableHead>
                 <TableHead>Cliente</TableHead>
                 <TableHead>Remisiones</TableHead>
                 <TableHead>Bodega</TableHead>
@@ -628,13 +716,13 @@ export default function PagosAbonos() {
                     </TableCell>
                     <TableCell>{getFacturaBodegaLabel(factura)}</TableCell>
                     <TableCell>{onlyDate(factura.fecha_factura)}</TableCell>
-                    <TableCell>${formatMoney(getFacturaTotal(factura))}</TableCell>
+                    <TableCell>{formatMoney(getFacturaTotal(factura))}</TableCell>
                     <TableCell
                       className={
                         getFacturaSaldo(factura) > 0 ? "text-red-600 font-medium" : ""
                       }
                     >
-                      ${formatMoney(getFacturaSaldo(factura))}
+                      {formatMoney(getFacturaSaldo(factura))}
                     </TableCell>
                     <TableCell className="text-center">
                       <span
@@ -645,29 +733,73 @@ export default function PagosAbonos() {
                         {getEstadoFacturaLabel(factura)}
                       </span>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="text-center">
                       <div className="flex items-center justify-center gap-2">
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleOpenView(factura)}
                           className="hover:bg-blue-50"
-                          title="Ver detalle"
+                          title="Ver pago"
                         >
                           <Eye size={16} className="text-blue-600" />
                         </Button>
 
-                        {getFacturaSaldo(factura) > 0 && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleOpenAbono(factura)}
-                            className="hover:bg-green-50"
-                            title="Agregar abono"
-                          >
-                            <DollarSign size={16} className="text-green-600" />
-                          </Button>
-                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleOpenAbono(factura)}
+                          disabled={getFacturaSaldo(factura) <= 0 || isFacturaAnulada(factura)}
+                          className="hover:bg-green-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                          title={
+                            getFacturaSaldo(factura) <= 0
+                              ? "Pago completado"
+                              : isFacturaAnulada(factura)
+                                ? "Pago anulado"
+                                : "Registrar abono"
+                          }
+                        >
+                          <DollarSign
+                            size={16}
+                            className={
+                              getFacturaSaldo(factura) <= 0 || isFacturaAnulada(factura)
+                                ? "text-gray-400"
+                                : "text-green-600"
+                            }
+                          />
+                        </Button>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleOpenAnularFactura(factura)}
+                          disabled={
+                            !canAnularPagos ||
+                            isFacturaAnulada(factura) ||
+                            hasAbonosActivos(factura)
+                          }
+                          className="hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                          title={
+                            !canAnularPagos
+                              ? "No tienes permiso para anular"
+                              : isFacturaAnulada(factura)
+                                ? "Pago ya anulado"
+                                : hasAbonosActivos(factura)
+                                  ? "Primero debes anular los abonos"
+                                  : "Anular pago"
+                          }
+                        >
+                          <Ban
+                            size={16}
+                            className={
+                              !canAnularPagos ||
+                                isFacturaAnulada(factura) ||
+                                hasAbonosActivos(factura)
+                                ? "text-gray-400"
+                                : "text-red-600"
+                            }
+                          />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -779,7 +911,7 @@ export default function PagosAbonos() {
               </div>
 
               <div className="space-y-2">
-                <Label>Fecha factura *</Label>
+                <Label>Fecha pago *</Label>
                 <Input
                   type="date"
                   value={createForm.fechaFactura}
@@ -877,7 +1009,7 @@ export default function PagosAbonos() {
                           </div>
 
                           <div className="text-sm font-semibold text-green-700 whitespace-nowrap">
-                            ${formatMoney(remision.resumen?.total ?? 0)}
+                            {formatMoney(remision.resumen?.total ?? 0)}
                           </div>
                         </label>
                       );
@@ -896,7 +1028,7 @@ export default function PagosAbonos() {
               <div className="flex justify-between text-base border-t pt-2">
                 <span className="font-medium text-gray-700">Total a cobrar</span>
                 <span className="font-bold text-green-700">
-                  ${formatMoney(totalSeleccionado)}
+                  {formatMoney(totalSeleccionado)}
                 </span>
               </div>
             </div>
@@ -954,7 +1086,7 @@ export default function PagosAbonos() {
               Detalle de pago - {facturaSeleccionada?.codigo_factura ?? ""}
             </DialogTitle>
             <DialogDescription id="ver-pago-description" className="sr-only">
-              Detalle completo de la factura y de sus abonos.
+              Detalle completo del pago y de sus abonos.
             </DialogDescription>
           </DialogHeader>
 
@@ -982,7 +1114,7 @@ export default function PagosAbonos() {
                 </div>
 
                 <div>
-                  <p className="text-sm text-gray-600">Fecha factura</p>
+                  <p className="text-sm text-gray-600">Fecha pago</p>
                   <p className="font-semibold">
                     {onlyDate(facturaSeleccionada.fecha_factura)}
                   </p>
@@ -1012,23 +1144,23 @@ export default function PagosAbonos() {
 
               <div className="border rounded-lg p-4 space-y-2">
                 <div className="flex justify-between text-lg">
-                  <span className="text-gray-600">Total factura</span>
+                  <span className="text-gray-600">Total pago</span>
                   <span className="font-bold">
-                    ${formatMoney(getFacturaTotal(facturaSeleccionada))}
+                    {formatMoney(getFacturaTotal(facturaSeleccionada))}
                   </span>
                 </div>
 
                 <div className="flex justify-between text-lg">
                   <span className="text-gray-600">Total abonado</span>
                   <span className="font-semibold text-green-600">
-                    ${formatMoney(getFacturaAbonado(facturaSeleccionada))}
+                    {formatMoney(getFacturaAbonado(facturaSeleccionada))}
                   </span>
                 </div>
 
                 <div className="flex justify-between text-lg border-t pt-2">
                   <span className="text-gray-600">Saldo pendiente</span>
                   <span className="font-bold text-red-600">
-                    ${formatMoney(getFacturaSaldo(facturaSeleccionada))}
+                    {formatMoney(getFacturaSaldo(facturaSeleccionada))}
                   </span>
                 </div>
               </div>
@@ -1068,7 +1200,7 @@ export default function PagosAbonos() {
                             {remision.estado_remision_venta?.nombre_estado ?? "-"}
                           </TableCell>
                           <TableCell className="text-right">
-                            ${formatMoney(remision.resumen?.total ?? 0)}
+                            {formatMoney(remision.resumen?.total ?? 0)}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -1086,39 +1218,80 @@ export default function PagosAbonos() {
                       <TableRow className="bg-gray-50">
                         <TableHead>Fecha</TableHead>
                         <TableHead>Método</TableHead>
-                        <TableHead>Estado</TableHead>
+                        <TableHead className="text-center">Abonado / Anulado</TableHead>
+                        <TableHead className="text-center">Estado</TableHead>
                         <TableHead className="text-right">Valor</TableHead>
+                        <TableHead className="text-center">Acción</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {(facturaSeleccionada.pagos_abonos ?? []).length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={4} className="text-center py-6 text-gray-500">
+                          <TableCell colSpan={6} className="text-center py-6 text-gray-500">
                             No hay abonos registrados
                           </TableCell>
                         </TableRow>
                       ) : (
-                        facturaSeleccionada.pagos_abonos.map((abono) => (
-                          <TableRow key={abono.id_pago}>
-                            <TableCell>{onlyDate(abono.fecha_pago)}</TableCell>
-                            <TableCell>
-                              {abono.metodo_pago?.nombre_metodo ?? "-"}
-                            </TableCell>
-                            <TableCell>
-                              <span
-                                className={`inline-flex items-center rounded-md px-3 h-7 text-sm border ${abono.estado
-                                  ? "bg-green-100 text-green-800 border-green-200"
-                                  : "bg-red-100 text-red-800 border-red-200"
-                                  }`}
-                              >
-                                {abono.estado ? "Activo" : "Anulado"}
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-right font-medium">
-                              ${formatMoney(abono.valor)}
-                            </TableCell>
-                          </TableRow>
-                        ))
+                        facturaSeleccionada.pagos_abonos.map((abono) => {
+                          const estaAnulado = !abono.estado;
+
+                          return (
+                            <TableRow key={abono.id_pago}>
+                              <TableCell>{onlyDate(abono.fecha_pago)}</TableCell>
+
+                              <TableCell>
+                                {abono.metodo_pago?.nombre_metodo ?? "-"}
+                              </TableCell>
+
+                              <TableCell className="text-center">
+                                <div className="flex flex-col gap-1">
+                                  <span className="text-sm text-gray-700">
+                                    {estaAnulado
+                                      ? `${getUsuarioNombre(abono.usuario_anulo)} - ${abono.fecha_anulacion
+                                        ? onlyDate(abono.fecha_anulacion)
+                                        : "Sin fecha de anulación"
+                                      }`
+                                      : `${getUsuarioNombre(abono.usuario_registro)} - ${onlyDate(
+                                        abono.fecha_pago,
+                                      )}`}
+                                  </span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <span
+                                  className={`inline-flex items-center rounded-md px-3 h-7 text-sm border ${estaAnulado
+                                    ? "bg-red-100 text-red-800 border-red-200"
+                                    : "bg-green-100 text-green-800 border-green-200"
+                                    }`}
+                                >
+                                  {estaAnulado ? "Anulado" : "Abonado"}
+                                </span>
+                              </TableCell>
+
+
+                              <TableCell className="text-right font-semibold">
+                                {formatMoney(abono.valor)}
+                              </TableCell>
+
+                              <TableCell className="text-center">
+                                {canAnularPagos && abono.estado ? (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleOpenAnularAbono(abono)}
+                                    disabled={savingAnulacion}
+                                    className="hover:bg-red-50"
+                                    title="Anular abono"
+                                  >
+                                    <Ban size={16} className="text-red-600" />
+                                  </Button>
+                                ) : (
+                                  <span className="text-gray-400">—</span>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
                       )}
                     </TableBody>
                   </Table>
@@ -1161,7 +1334,7 @@ export default function PagosAbonos() {
               Registrar abono - {facturaSeleccionada?.codigo_factura ?? ""}
             </DialogTitle>
             <DialogDescription id="abonar-pago-description">
-              Registra un abono sobre la factura seleccionada.
+              Registra un abono sobre el pago seleccionado.
             </DialogDescription>
           </DialogHeader>
 
@@ -1176,16 +1349,16 @@ export default function PagosAbonos() {
                 </div>
 
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Total factura</span>
+                  <span className="text-sm text-gray-600">Total pago</span>
                   <span className="font-medium">
-                    ${formatMoney(getFacturaTotal(facturaSeleccionada))}
+                    {formatMoney(getFacturaTotal(facturaSeleccionada))}
                   </span>
                 </div>
 
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600">Saldo pendiente</span>
                   <span className="font-bold text-red-600">
-                    ${formatMoney(getFacturaSaldo(facturaSeleccionada))}
+                    {formatMoney(getFacturaSaldo(facturaSeleccionada))}
                   </span>
                 </div>
               </div>
@@ -1267,6 +1440,173 @@ export default function PagosAbonos() {
               disabled={savingAbono}
             >
               {savingAbono ? "Guardando..." : "Registrar abono"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isAnular}
+        onOpenChange={(open) => {
+          if (!open) closeToList();
+        }}
+      >
+        <DialogContent
+          className="max-w-lg"
+          onInteractOutside={(e) => e.preventDefault()}
+          aria-describedby="anular-factura-description"
+        >
+          <DialogHeader>
+            <DialogTitle>Anular pago</DialogTitle>
+            <DialogDescription id="anular-factura-description">
+              Esta acción anulará el pago interno y liberará las remisiones asociadas.
+            </DialogDescription>
+          </DialogHeader>
+
+          {facturaSeleccionada ? (
+            <div className="space-y-4 py-2">
+              <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                Vas a anular el pago{" "}
+                <strong>{facturaSeleccionada.codigo_factura}</strong>.
+              </div>
+
+              <div className="space-y-2 rounded-lg bg-gray-50 p-4 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Cliente</span>
+                  <span className="font-medium">
+                    {facturaSeleccionada.cliente?.nombre_cliente ?? "-"}
+                  </span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Total</span>
+                  <span className="font-medium">
+                    {formatMoney(getFacturaTotal(facturaSeleccionada))}
+                  </span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Abonado activo</span>
+                  <span className="font-medium">
+                    {formatMoney(getFacturaAbonado(facturaSeleccionada))}
+                  </span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Estado</span>
+                  <Badge
+                    variant="outline"
+                    className={getEstadoFacturaBadge(
+                      getEstadoFacturaLabel(facturaSeleccionada),
+                    )}
+                  >
+                    {getEstadoFacturaLabel(facturaSeleccionada)}
+                  </Badge>
+                </div>
+              </div>
+
+              {hasAbonosActivos(facturaSeleccionada) && (
+                <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
+                  Este pago tiene abonos activos. Primero debes anular los abonos
+                  para poder anular el pago.
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="py-8 text-center text-gray-500">
+              No se encontró el pago
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={closeToList}
+              disabled={savingAnulacion}
+            >
+              Cancelar
+            </Button>
+
+            <Button
+              onClick={handleAnularPago}
+              disabled={
+                savingAnulacion ||
+                !facturaSeleccionada ||
+                hasAbonosActivos(facturaSeleccionada) ||
+                isFacturaAnulada(facturaSeleccionada)
+              }
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {savingAnulacion ? "Anulando..." : "Anular factura"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!abonoAAnular}
+        onOpenChange={(open) => {
+          if (!open) setAbonoAAnular(null);
+        }}
+      >
+        <DialogContent
+          className="max-w-md"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>Anular abono</DialogTitle>
+            <DialogDescription>
+              Esta acción marcará el abono como anulado y recalculará el saldo del pago.
+            </DialogDescription>
+          </DialogHeader>
+
+          {abonoAAnular && (
+            <div className="space-y-4 py-2">
+              <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                Vas a anular este abono. Esta acción no eliminará el registro, solo lo
+                dejará marcado como anulado.
+              </div>
+
+              <div className="space-y-2 rounded-lg bg-gray-50 p-4 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Fecha</span>
+                  <span className="font-medium">
+                    {onlyDate(abonoAAnular.fecha_pago)}
+                  </span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Método</span>
+                  <span className="font-medium">
+                    {abonoAAnular.metodo_pago?.nombre_metodo ?? "-"}
+                  </span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Valor</span>
+                  <span className="font-medium">
+                    {formatMoney(abonoAAnular.valor)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setAbonoAAnular(null)}
+              disabled={savingAnulacion}
+            >
+              Cancelar
+            </Button>
+
+            <Button
+              onClick={handleConfirmarAnularAbono}
+              disabled={savingAnulacion || !abonoAAnular}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {savingAnulacion ? "Anulando..." : "Anular abono"}
             </Button>
           </DialogFooter>
         </DialogContent>

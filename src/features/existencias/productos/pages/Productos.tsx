@@ -372,6 +372,8 @@ export default function Productos({
 
   useEffect(() => {
     setCurrentPage(1);
+    setLotesPages({});
+    setModalLotesPage(1);
   }, [searchTerm, selectedBodega]);
 
   useEffect(() => {
@@ -950,7 +952,7 @@ export default function Productos({
                 <TableHead>Descripción</TableHead>
                 <TableHead>Categoría</TableHead>
                 <TableHead className="text-center">IVA</TableHead>
-                <TableHead className="text-center">Stock</TableHead>
+                <TableHead className="text-center">Disponible</TableHead>
                 <TableHead className="text-center">Estado</TableHead>
                 <TableHead className="text-center w-32">Acciones</TableHead>
               </TableRow>
@@ -977,9 +979,13 @@ export default function Productos({
                 </TableRow>
               ) : (
                 currentProductos.map((producto, index) => {
-                  const lotesPage = lotesPages[String(producto.id)] || 1;
-                  const totalLotesPages = Math.ceil(
-                    producto.lotes.length / lotesPerPage
+                  const totalLotesPages = Math.max(
+                    1,
+                    Math.ceil(producto.lotes.length / lotesPerPage)
+                  );
+                  const lotesPage = Math.min(
+                    lotesPages[String(producto.id)] || 1,
+                    totalLotesPages
                   );
                   const lotesStartIndex = (lotesPage - 1) * lotesPerPage;
                   const lotesEndIndex = lotesStartIndex + lotesPerPage;
@@ -1128,7 +1134,7 @@ export default function Productos({
                                         N° Lote
                                       </TableHead>
                                       <TableHead className="text-xs text-center">
-                                        Cantidad por Lote
+                                        Disponible
                                       </TableHead>
                                       <TableHead className="text-xs text-center">
                                         Fecha de Vencimiento
@@ -1449,7 +1455,7 @@ export default function Productos({
                     <TableHeader>
                       <TableRow className="bg-gray-50">
                         <TableHead>N° Lote</TableHead>
-                        <TableHead className="text-center">Cantidad</TableHead>
+                        <TableHead className="text-center">Disponible</TableHead>
                         <TableHead className="text-center">Vencimiento</TableHead>
                         <TableHead>Bodega</TableHead>
                         <TableHead>Nota</TableHead>

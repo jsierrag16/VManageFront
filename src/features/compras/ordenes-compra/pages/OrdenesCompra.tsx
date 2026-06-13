@@ -283,6 +283,7 @@ export default function Compras() {
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const MAX_CANTIDAD_COMPRA = 10000;
 
   const [storedBodega, setStoredBodega] = useState<{
     id?: number;
@@ -418,7 +419,7 @@ export default function Compras() {
 
     const numero = parseInt(limpio, 10);
 
-    if (numero > 1000) return;
+    if (numero > MAX_CANTIDAD_COMPRA) return;
 
     setCantidadProductoInput(String(numero));
   };
@@ -1278,8 +1279,10 @@ export default function Compras() {
       return;
     }
 
-    if (cantidadNormalizada > 1000) {
-      toast.error("La cantidad máxima permitida es 1000");
+    if (cantidadNormalizada > MAX_CANTIDAD_COMPRA) {
+      toast.error(
+        `La cantidad máxima permitida es ${MAX_CANTIDAD_COMPRA.toLocaleString("es-CO")}`
+      );
       return;
     }
 
@@ -2116,7 +2119,7 @@ export default function Compras() {
                       placeholder="Ej: 50"
                       className={numberFieldClass}
                     />
-                    <p className="text-xs text-gray-500">Máximo 1000 unidades.</p>
+                    <p className="text-xs text-gray-500">Máximo {MAX_CANTIDAD_COMPRA.toLocaleString("es-CO")} unidades.</p>
                   </div>
 
                   <div className="space-y-2">
@@ -2528,7 +2531,7 @@ export default function Compras() {
                         className={numberFieldClass}
                       />
                       <p className="text-xs text-gray-500">
-                        Máximo 1000 unidades.
+                        Máximo {MAX_CANTIDAD_COMPRA.toLocaleString("es-CO")} unidades.
                       </p>
                     </div>
 

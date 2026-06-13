@@ -18,6 +18,8 @@ export type ProductoVistaUI = {
   lotes: {
     id: number;
     numeroLote: string;
+    cantidadTotal: number;
+    cantidadReservada: number;
     cantidadDisponible: number;
     fechaVencimiento: string;
     bodega: string;
@@ -53,15 +55,25 @@ export const productoVistaBackendToUI = (
     stockTotal: Number(producto.stock_total ?? 0),
     estado: Boolean(producto.estado),
 
-    lotes: producto.lotes.map((lote) => ({
-      id: Number(lote.id_existencia ?? 0),
-      numeroLote: toText(lote.lote, "Sin lote"),
-      cantidadDisponible: Number(lote.cantidad ?? 0),
-      fechaVencimiento: lote.fecha_vencimiento ?? "",
-      bodega: toText(lote.nombre_bodega, "Sin bodega"),
-      idBodega: Number(lote.id_bodega ?? 0),
-      nota: toText(lote.nota, "Sin nota"),
-    })),
+    lotes: producto.lotes.map((lote) => {
+      const cantidadTotal = toNumber(lote.cantidad);
+      const cantidadReservada = toNumber(lote.cantidad_reservada);
+      const cantidadDisponible = toNumber(
+        lote.cantidad_disponible ?? Math.max(cantidadTotal - cantidadReservada, 0)
+      );
+
+      return {
+        id: Number(lote.id_existencia ?? 0),
+        numeroLote: toText(lote.lote, "Sin lote"),
+        cantidadTotal,
+        cantidadReservada,
+        cantidadDisponible,
+        fechaVencimiento: lote.fecha_vencimiento ?? "",
+        bodega: toText(lote.nombre_bodega, "Sin bodega"),
+        idBodega: Number(lote.id_bodega ?? 0),
+        nota: toText(lote.nota, "Sin nota"),
+      };
+    }),
 
     raw: producto,
   };
@@ -88,12 +100,12 @@ export type ProductoUI = {
 export type ProductosUIResponse =
   | ProductoUI[]
   | {
-      page: number;
-      limit: number;
-      total: number;
-      pages: number;
-      data: ProductoUI[];
-    };
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+    data: ProductoUI[];
+  };
 
 export type ProductoFormValues = {
   nombre: string;
