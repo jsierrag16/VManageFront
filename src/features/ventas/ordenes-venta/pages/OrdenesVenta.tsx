@@ -82,6 +82,14 @@ type ProductoForm = {
   precio_unitario: number;
   subtotal: number;
   iva: number;
+  costoReferencia?: number | null;
+  loteReferencia?: string | null;
+  cantidadDisponibleReferencia?: number;
+  nombreBodegaReferencia?: string | null;
+  origenReferencia?:
+  | "BODEGA_CLIENTE"
+  | "OTRA_BODEGA"
+  | "SIN_EXISTENCIAS_CON_COSTO";
 };
 
 const ITEMS_PER_PAGE = 10;
@@ -220,12 +228,78 @@ function getBodegaNombre(bodega?: OrdenVentaApi["bodega"]) {
   return bodega?.nombre_bodega || bodega?.nombre || "—";
 }
 
-function getPrecioMinimoProductoCatalogo(producto?: CatalogoProducto) {
-  return Number(producto?.precio_minimo_venta ?? 0);
+function getClienteBodegaId(cliente?: CatalogoCliente | null) {
+  if (!cliente) return 0;
+
+  const clienteAny = cliente as any;
+
+  return Number(
+    clienteAny?.id_bodega ??
+    clienteAny?.bodega?.id_bodega ??
+    clienteAny?.bodega?.id ??
+    0
+  );
+}
+
+function getClienteBodegaNombre(cliente?: CatalogoCliente | null) {
+  if (!cliente) return "";
+
+  const clienteAny = cliente as any;
+
+  return (
+    clienteAny?.bodega?.nombre_bodega ??
+    clienteAny?.bodega?.nombre ??
+    clienteAny?.nombre_bodega ??
+    clienteAny?.bodega_nombre ??
+    ""
+  );
 }
 
 function getPrecioDetalleCotizacion(item: DetalleCotizacionApi) {
   return Number(item.precio_unitario ?? item.precio ?? item.valor_unitario ?? 0);
+}
+
+function getEstadoCotizacionNombre(cotizacion?: CatalogoCotizacion | null) {
+  const cotizacionAny = cotizacion as any;
+
+  return (
+    cotizacionAny?.estado_cotizacion?.nombre_estado ??
+    cotizacionAny?.estado_cotizacion?.nombre ??
+    cotizacionAny?.estado?.nombre_estado ??
+    cotizacionAny?.estado?.nombre ??
+    ""
+  );
+}
+
+function esCotizacionDisponibleParaOrden(
+  cotizacion: CatalogoCotizacion,
+  idOrdenActual?: number
+) {
+  const estado = normalizarTexto(getEstadoCotizacionNombre(cotizacion));
+
+  const esAprobada =
+    estado.includes("aprobada") || estado.includes("aprobado");
+
+  const estaBloqueada =
+    estado.includes("anulada") ||
+    estado.includes("anulado") ||
+    estado.includes("rechazada") ||
+    estado.includes("rechazado") ||
+    estado.includes("vencida") ||
+    estado.includes("vencido");
+
+  const cotizacionAny = cotizacion as any;
+  const fechaVencimiento = formatDateInput(cotizacionAny?.fecha_vencimiento);
+  const hoy = new Date().toISOString().slice(0, 10);
+
+  const vencidaPorFecha = Boolean(fechaVencimiento && fechaVencimiento < hoy);
+
+  const idOrdenAsociada = cotizacion.orden_venta?.id_orden_venta;
+  const usadaEnOtraOrden =
+    Boolean(idOrdenAsociada) &&
+    Number(idOrdenAsociada) !== Number(idOrdenActual || 0);
+
+  return esAprobada && !estaBloqueada && !vencidaPorFecha && !usadaEnOtraOrden;
 }
 
 function mapDetalleOrdenToForm(detalles?: DetalleOrdenVentaApi[]): ProductoForm[] {
@@ -513,6 +587,28 @@ export default function OrdenesVenta() {
   const [cotizaciones, setCotizaciones] = useState<CatalogoCotizacion[]>([]);
   const [precioTouched, setPrecioTouched] = useState(false);
 
+  const [costosReferenciaPorProducto, setCostosReferenciaPorProducto] = useState<
+    Record<
+      string,
+      {
+        costoReferencia: number | null;
+        loteReferencia: string | null;
+        cantidadDisponible: number;
+        nombreBodegaReferencia: string | null;
+        origenReferencia:
+        | "BODEGA_CLIENTE"
+        | "OTRA_BODEGA"
+        | "SIN_EXISTENCIAS_CON_COSTO";
+      }
+    >
+  >({});
+
+  const getCostoReferenciaProducto = (productoId: string) => {
+    return Number(
+      costosReferenciaPorProducto[productoId]?.costoReferencia ?? 0
+    );
+  };
+
   const [currentPage, setCurrentPage] = useState(1);
 
   const [formMode, setFormMode] = useState<FormMode>("create");
@@ -621,9 +717,55 @@ export default function OrdenesVenta() {
       return;
     }
 
-    setPrecioProducto("");
-    setPrecioTouched(false);
-  }, [selectedProductoId]);
+    if (!formData.id_cliente) {
+      setPrecioProducto("");
+      setPrecioTouched(false);
+      return;
+    }
+
+    let cancelado = false;
+
+    const cargarCostoReferencia = async () => {
+      try {
+        const respuesta = await ordenesVentaService.getCostoReferencia(
+          Number(formData.id_cliente),
+          Number(selectedProductoId)
+        );
+
+        if (cancelado) return;
+
+        setCostosReferenciaPorProducto((prev) => ({
+          ...prev,
+          [selectedProductoId]: {
+            costoReferencia: respuesta.costo_referencia,
+            loteReferencia: respuesta.lote_referencia,
+            cantidadDisponible: respuesta.cantidad_disponible,
+            nombreBodegaReferencia: respuesta.nombre_bodega_referencia,
+            origenReferencia: respuesta.origen_referencia,
+          },
+        }));
+
+        if (respuesta.costo_referencia && respuesta.costo_referencia > 0) {
+          setPrecioProducto(String(respuesta.costo_referencia));
+        } else {
+          setPrecioProducto("");
+        }
+
+        setPrecioTouched(false);
+      } catch (error) {
+        console.error("Error consultando costo referencia:", error);
+        toast.error("No se pudo consultar el costo de referencia");
+        setPrecioProducto("");
+        setPrecioTouched(false);
+      }
+    };
+
+    void cargarCostoReferencia();
+
+    return () => {
+      cancelado = true;
+    };
+  }, [selectedProductoId, formData.id_cliente]);
 
   useEffect(() => {
     if (!formData.fecha_creacion) return;
@@ -701,6 +843,36 @@ export default function OrdenesVenta() {
     );
   }, [clientes, formData.id_cliente]);
 
+  const bodegaClienteSeleccionado = useMemo(() => {
+    const idBodega = getClienteBodegaId(clienteSeleccionado);
+    const nombreDesdeCliente = getClienteBodegaNombre(clienteSeleccionado);
+
+    const nombreDesdeCatalogo =
+      bodegasDisponibles.find((bodega) => Number(bodega.id) === Number(idBodega))
+        ?.nombre ?? "";
+
+    return {
+      id: idBodega,
+      nombre: nombreDesdeCliente || nombreDesdeCatalogo,
+    };
+  }, [clienteSeleccionado, bodegasDisponibles]);
+
+  useEffect(() => {
+    if (!isFormModalOpen) return;
+
+    const idBodegaCliente = getClienteBodegaId(clienteSeleccionado);
+    const idBodegaTexto = idBodegaCliente ? String(idBodegaCliente) : "";
+
+    setFormData((prev) => {
+      if (prev.id_bodega === idBodegaTexto) return prev;
+
+      return {
+        ...prev,
+        id_bodega: idBodegaTexto,
+      };
+    });
+  }, [clienteSeleccionado, isFormModalOpen]);
+
   const cotizacionesDisponibles = useMemo(() => {
     return cotizaciones.filter((cotizacion) => {
       const matchCliente =
@@ -711,9 +883,21 @@ export default function OrdenesVenta() {
         !formData.id_bodega ||
         Number(cotizacion.id_bodega) === Number(formData.id_bodega);
 
-      return matchCliente && matchBodega;
+      return (
+        matchCliente &&
+        matchBodega &&
+        esCotizacionDisponibleParaOrden(
+          cotizacion,
+          selectedOrden?.id_orden_venta
+        )
+      );
     });
-  }, [cotizaciones, formData.id_cliente, formData.id_bodega]);
+  }, [
+    cotizaciones,
+    formData.id_cliente,
+    formData.id_bodega,
+    selectedOrden?.id_orden_venta,
+  ]);
 
   const resetForm = () => {
     const hoy = new Date().toISOString().slice(0, 10);
@@ -725,8 +909,7 @@ export default function OrdenesVenta() {
       id_estado_orden_venta: estadoPendienteId ? String(estadoPendienteId) : "",
       id_termino_pago: "",
       descripcion: "",
-      id_bodega:
-        selectedBodegaId && selectedBodegaId > 0 ? String(selectedBodegaId) : "",
+      id_bodega: "",
     });
     setSelectedCotizacionId("sin-cotizacion");
     setDetalleCotizacionModificado(false);
@@ -736,6 +919,7 @@ export default function OrdenesVenta() {
     setPrecioTouched(false);
     setProductosOrden([]);
     setSelectedOrden(null);
+    setCostosReferenciaPorProducto({});
   };
 
   const handleOpenCreate = () => {
@@ -833,20 +1017,17 @@ export default function OrdenesVenta() {
     toast.success("Productos cargados desde la cotización");
   };
 
-  const productoSeleccionado = productos.find(
-    (item) => Number(item.id_producto) === Number(selectedProductoId)
-  );
-
-  const precioMinimoProductoSeleccionado =
-    getPrecioMinimoProductoCatalogo(productoSeleccionado);
+  const costoReferenciaProductoSeleccionado = selectedProductoId
+    ? getCostoReferenciaProducto(selectedProductoId)
+    : 0;
 
   const precioIngresadoNumero = Number(precioProducto || 0);
 
-  const precioEsMenorAlMinimo =
+  const precioProductoMenorCostoRef =
     !!selectedProductoId &&
     !!precioProducto &&
-    precioMinimoProductoSeleccionado > 0 &&
-    precioIngresadoNumero < precioMinimoProductoSeleccionado;
+    costoReferenciaProductoSeleccionado > 0 &&
+    precioIngresadoNumero < costoReferenciaProductoSeleccionado;
 
   const handleAgregarProducto = () => {
     if (!selectedProductoId) {
@@ -876,12 +1057,13 @@ export default function OrdenesVenta() {
       return;
     }
 
-    const precioMinimoPermitido = getPrecioMinimoProductoCatalogo(producto);
+    const costoReferencia = getCostoReferenciaProducto(selectedProductoId);
+    const referencia = costosReferenciaPorProducto[selectedProductoId];
 
-    if (precioMinimoPermitido > 0 && precio < precioMinimoPermitido) {
-      setPrecioTouched(true);
-      toast.error("Precio menor al permitido");
-      return;
+    if (costoReferencia > 0 && precio < costoReferencia) {
+      toast.warning(
+        `El precio está por debajo del costo ref. (${formatMoney(costoReferencia)})`
+      );
     }
 
     const yaExiste = productosOrden.some(
@@ -902,6 +1084,11 @@ export default function OrdenesVenta() {
         precio_unitario: precio,
         subtotal: cantidad * precio,
         iva: Number(producto.iva?.porcentaje ?? 0),
+        costoReferencia: costoReferencia || null,
+        loteReferencia: referencia?.loteReferencia ?? null,
+        cantidadDisponibleReferencia: referencia?.cantidadDisponible ?? 0,
+        nombreBodegaReferencia: referencia?.nombreBodegaReferencia ?? null,
+        origenReferencia: referencia?.origenReferencia,
       },
     ]);
 
@@ -923,65 +1110,6 @@ export default function OrdenesVenta() {
     if (selectedCotizacionId !== "sin-cotizacion") {
       setDetalleCotizacionModificado(true);
     }
-  };
-
-  const getPrecioMinimoProductoPorId = (idProducto: number) => {
-    const producto = productos.find(
-      (item) => Number(item.id_producto) === Number(idProducto)
-    );
-
-    return getPrecioMinimoProductoCatalogo(producto);
-  };
-
-  const handleActualizarCantidadProducto = (
-    idProducto: number,
-    value: string
-  ) => {
-    const cantidad = Number(value);
-
-    if (Number.isNaN(cantidad) || cantidad < 0) return;
-
-    setProductosOrden((prev) =>
-      prev.map((item) => {
-        if (Number(item.id_producto) !== Number(idProducto)) return item;
-
-        return {
-          ...item,
-          cantidad,
-          subtotal: cantidad * Number(item.precio_unitario || 0),
-        };
-      })
-    );
-  };
-
-  const handleActualizarPrecioProducto = (
-    idProducto: number,
-    value: string
-  ) => {
-    const precio = Number(value);
-
-    if (Number.isNaN(precio) || precio < 0) return;
-
-    const precioMinimo = getPrecioMinimoProductoPorId(idProducto);
-
-    if (precioMinimo > 0 && precio < precioMinimo) {
-      toast.error(
-        `El precio no puede ser menor a ${precioMinimo.toLocaleString("es-CO")}`
-      );
-      return;
-    }
-
-    setProductosOrden((prev) =>
-      prev.map((item) => {
-        if (Number(item.id_producto) !== Number(idProducto)) return item;
-
-        return {
-          ...item,
-          precio_unitario: precio,
-          subtotal: Number(item.cantidad || 0) * precio,
-        };
-      })
-    );
   };
 
   const totalesFormulario = useMemo(() => {
@@ -1866,7 +1994,7 @@ export default function OrdenesVenta() {
                       Información general
                     </h3>
                     <p className="text-sm text-gray-500">
-                      Selecciona el cliente, la bodega y revisa las fechas de la orden
+                      Selecciona el cliente y revisa la bodega asociada a la orden
                     </p>
                   </div>
 
@@ -1923,9 +2051,26 @@ export default function OrdenesVenta() {
 
                     <Select
                       value={formData.id_cliente}
-                      onValueChange={(value) =>
-                        setFormData((prev) => ({ ...prev, id_cliente: value }))
-                      }
+                      onValueChange={(value) => {
+                        if (value === formData.id_cliente) return;
+
+                        setFormData((prev) => ({
+                          ...prev,
+                          id_cliente: value,
+                        }));
+
+                        if (selectedCotizacionId !== "sin-cotizacion") {
+                          setSelectedCotizacionId("sin-cotizacion");
+                          setDetalleCotizacionModificado(false);
+                          setProductosOrden([]);
+                        }
+
+                        setSelectedProductoId("");
+                        setCantidadProducto("");
+                        setPrecioProducto("");
+                        setPrecioTouched(false);
+                        setCostosReferenciaPorProducto({});
+                      }}
                     >
                       <SelectTrigger className={fieldClass}>
                         {clienteSeleccionado ? (
@@ -1988,32 +2133,23 @@ export default function OrdenesVenta() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Bodega *</Label>
-                    {selectedBodegaId && selectedBodegaId > 0 ? (
-                      <Input
-                        value={selectedBodegaNombre}
-                        disabled
-                        className={readonlyFieldClass}
-                      />
-                    ) : (
-                      <Select
-                        value={formData.id_bodega}
-                        onValueChange={(value) =>
-                          setFormData((prev) => ({ ...prev, id_bodega: value }))
-                        }
-                      >
-                        <SelectTrigger className={fieldClass}>
-                          <SelectValue placeholder="Selecciona una bodega" />
-                        </SelectTrigger>
+                    <Label>Bodega del cliente *</Label>
+                    <Input
+                      value={
+                        formData.id_cliente
+                          ? bodegaClienteSeleccionado.nombre || "Cliente sin bodega asignada"
+                          : ""
+                      }
+                      readOnly
+                      disabled
+                      placeholder="Se completa al seleccionar cliente"
+                      className={readonlyFieldClass}
+                    />
 
-                        <SelectContent>
-                          {bodegasDisponibles.map((bodega) => (
-                            <SelectItem key={bodega.id} value={String(bodega.id)}>
-                              {bodega.nombre}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                    {formData.id_cliente && !formData.id_bodega && (
+                      <p className="text-xs text-red-600">
+                        Este cliente no tiene una bodega asociada.
+                      </p>
                     )}
                   </div>
 
@@ -2093,7 +2229,7 @@ export default function OrdenesVenta() {
                 </div>
 
                 <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1.5fr)_160px_220px_180px]">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1.5fr)_160px_220px_180px] md:items-start">
                     <div className="space-y-2">
                       <Label>Producto *</Label>
                       <Select
@@ -2156,43 +2292,95 @@ export default function OrdenesVenta() {
                           if (!precioTouched) setPrecioTouched(true);
                         }}
                         onBlur={() => setPrecioTouched(true)}
-                        min={
-                          precioMinimoProductoSeleccionado > 0
-                            ? precioMinimoProductoSeleccionado
-                            : 0
-                        }
-                        step="0"
+                        min={0}
+                        step="0.01"
                         placeholder="0.00"
-                        className={`${numberFieldClass} ${precioTouched && precioEsMenorAlMinimo
+                        className={`${numberFieldClass} ${precioTouched && precioProductoMenorCostoRef
                           ? "border-red-500 bg-red-50 text-red-700 focus-visible:ring-red-500"
                           : ""
                           }`}
                       />
-
-                      {precioMinimoProductoSeleccionado > 0 && (
-                        <p className="text-xs text-amber-600">
-                          Mínimo permitido: {formatMoney(precioMinimoProductoSeleccionado)}
-                        </p>
-                      )}
-
-                      {precioTouched && precioEsMenorAlMinimo && (
-                        <p className="text-xs font-medium text-red-600">
-                          Precio menor al permitido
-                        </p>
-                      )}
                     </div>
 
-                    <div className="flex items-end">
+                    <div className="flex md:pt-8">
                       <Button
                         type="button"
                         onClick={handleAgregarProducto}
-                        disabled={precioTouched && precioEsMenorAlMinimo}
+                        disabled={!selectedProductoId}
                         className="h-11 w-full bg-green-600 hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <Plus size={16} className="mr-2" />
                         Agregar
                       </Button>
                     </div>
+                    {selectedProductoId && formData.id_cliente && (
+                      <div className="rounded-lg border border-gray-200 bg-white p-3 md:col-start-3 md:col-span-2">
+                        {costoReferenciaProductoSeleccionado > 0 ? (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                Referencia del producto
+                              </p>
+
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-xs font-medium ${precioProductoMenorCostoRef
+                                    ? "bg-red-50 text-red-600"
+                                    : "bg-amber-50 text-amber-700"
+                                  }`}
+                              >
+                                {costosReferenciaPorProducto[selectedProductoId]?.origenReferencia ===
+                                  "OTRA_BODEGA"
+                                  ? "Referencia global"
+                                  : "Bodega del cliente"}
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-2 text-xs text-gray-600 sm:grid-cols-2">
+                              <p>
+                                <span className="font-medium text-gray-700">Costo ref.:</span>{" "}
+                                <span
+                                  className={
+                                    precioProductoMenorCostoRef
+                                      ? "font-semibold text-red-600"
+                                      : "font-semibold text-amber-700"
+                                  }
+                                >
+                                  {formatMoney(costoReferenciaProductoSeleccionado)}
+                                </span>
+                              </p>
+
+                              <p>
+                                <span className="font-medium text-gray-700">Bodega ref.:</span>{" "}
+                                {costosReferenciaPorProducto[selectedProductoId]
+                                  ?.nombreBodegaReferencia ?? "No disponible"}
+                              </p>
+
+                              <p>
+                                <span className="font-medium text-gray-700">Lote ref.:</span>{" "}
+                                {costosReferenciaPorProducto[selectedProductoId]?.loteReferencia ??
+                                  "No disponible"}
+                              </p>
+
+                              <p>
+                                <span className="font-medium text-gray-700">Disponible:</span>{" "}
+                                {costosReferenciaPorProducto[selectedProductoId]?.cantidadDisponible ??
+                                  0}
+                              </p>
+                            </div>
+
+                            {precioTouched && precioProductoMenorCostoRef && (
+                              <p className="text-xs font-medium text-red-600">
+                                El precio está por debajo del costo de referencia.
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-gray-500">
+                            Sin costo de referencia disponible para este producto.
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -2218,41 +2406,11 @@ export default function OrdenesVenta() {
                             </TableCell>
 
                             <TableCell className="text-center">
-                              {isEditar ? (
-                                <Input
-                                  type="number"
-                                  min="1"
-                                  value={item.cantidad}
-                                  onChange={(e) =>
-                                    handleActualizarCantidadProducto(
-                                      item.id_producto,
-                                      e.target.value
-                                    )
-                                  }
-                                  className="mx-auto h-9 w-24 text-center"
-                                />
-                              ) : (
-                                item.cantidad
-                              )}
+                              {item.cantidad}
                             </TableCell>
 
                             <TableCell className="text-right">
-                              {isEditar ? (
-                                <Input
-                                  type="number"
-                                  min={getPrecioMinimoProductoPorId(item.id_producto)}
-                                  value={item.precio_unitario}
-                                  onChange={(e) =>
-                                    handleActualizarPrecioProducto(
-                                      item.id_producto,
-                                      e.target.value
-                                    )
-                                  }
-                                  className="ml-auto h-9 w-36 text-right"
-                                />
-                              ) : (
-                                formatMoney(item.precio_unitario)
-                              )}
+                              {formatMoney(item.precio_unitario)}
                             </TableCell>
 
                             <TableCell className="text-center">
@@ -2496,7 +2654,7 @@ export default function OrdenesVenta() {
                             </TableCell>
 
                             <TableCell className="text-center">
-                              {item.cantidad}
+                              {formatMoney(item.precio_unitario)}
                             </TableCell>
 
                             <TableCell className="text-right">

@@ -1595,24 +1595,6 @@ export default function Cotizaciones() {
     setCurrentPage(page);
   };
 
-  const handleActualizarCantidadProducto = (productoId: string, value: string) => {
-    const cantidad = Number(value);
-
-    if (Number.isNaN(cantidad) || cantidad < 0) return;
-
-    setProductosOrden((prev) =>
-      prev.map((item) => {
-        if (item.producto.id !== productoId) return item;
-
-        return {
-          ...item,
-          cantidad,
-          subtotal: cantidad * Number(item.precio || 0),
-        };
-      })
-    );
-  };
-
   const fieldClass =
     "h-11 rounded-lg border-gray-300 bg-white shadow-none focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/20";
 
@@ -1962,8 +1944,6 @@ export default function Cotizaciones() {
                           ? String(clienteSeleccionado.idBodega)
                           : "",
                       });
-
-                      setProductosOrden([]);
                       setSelectedProductoId("");
                       setCantidadProducto("0");
                       setPrecioProducto("");
@@ -2579,30 +2559,11 @@ export default function Cotizaciones() {
                             </TableCell>
 
                             <TableCell className="text-center">
-                              <Input
-                                type="number"
-                                min="1"
-                                value={item.cantidad}
-                                onChange={(e) =>
-                                  handleActualizarCantidadProducto(
-                                    item.producto.id,
-                                    e.target.value
-                                  )
-                                }
-                                className="mx-auto h-9 w-24 text-center"
-                              />
+                              {item.cantidad}
                             </TableCell>
 
                             <TableCell className="text-right">
-                              <Input
-                                type="number"
-                                min={0}
-                                className={`ml-auto h-9 w-36 text-right ${item.costoReferencia &&
-                                  Number(item.precio) < Number(item.costoReferencia)
-                                  ? "border-red-500"
-                                  : ""
-                                  }`}
-                              />
+                              {formatMoney(item.precio)}
                             </TableCell>
 
                             <TableCell className="text-center">

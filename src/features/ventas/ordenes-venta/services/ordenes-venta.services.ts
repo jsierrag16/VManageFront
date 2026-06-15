@@ -5,6 +5,18 @@ import type {
   UpdateOrdenVentaPayload,
 } from '../types/ordenes-venta.types';
 
+export type CostoReferenciaOrdenResponse = {
+  costo_referencia: number | null;
+  lote_referencia: string | null;
+  cantidad_disponible: number;
+  id_bodega_referencia: number | null;
+  nombre_bodega_referencia: string | null;
+  origen_referencia:
+  | "BODEGA_CLIENTE"
+  | "OTRA_BODEGA"
+  | "SIN_EXISTENCIAS_CON_COSTO";
+};
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 function getToken() {
@@ -35,10 +47,26 @@ function buildUrl(
 
 function extractMessage(errorData: any) {
   if (Array.isArray(errorData?.message)) {
-    return errorData.message.join(', ');
+    return errorData.message.join(", ");
   }
 
-  return errorData?.message || errorData?.error || 'Error en la solicitud';
+  if (typeof errorData?.message === "string") {
+    return errorData.message;
+  }
+
+  if (Array.isArray(errorData?.error?.message)) {
+    return errorData.error.message.join(", ");
+  }
+
+  if (typeof errorData?.error?.message === "string") {
+    return errorData.error.message;
+  }
+
+  if (typeof errorData?.error === "string") {
+    return errorData.error;
+  }
+
+  return "Error en la solicitud";
 }
 
 function unwrapResponse<T>(payload: any): T {
@@ -50,10 +78,10 @@ function normalizeOrden(orden: any): OrdenVentaApi {
     ...orden,
     detalle_orden_venta: Array.isArray(orden?.detalle_orden_venta)
       ? orden.detalle_orden_venta.map((item: any) => ({
-          ...item,
-          id_detalle_orden_venta:
-            item?.id_detalle_orden_venta ?? item?.id_orden_detalle_venta,
-        }))
+        ...item,
+        id_detalle_orden_venta:
+          item?.id_detalle_orden_venta ?? item?.id_orden_detalle_venta,
+      }))
       : [],
   };
 }
@@ -128,6 +156,14 @@ export const ordenesVentaService = {
     });
 
     return normalizeOrden(unwrapResponse(response));
+  },
+
+  async getCostoReferencia(id_cliente: number, id_producto: number) {
+    return request<CostoReferenciaOrdenResponse>(
+      '/ordenes-venta/costo-referencia',
+      { method: 'GET' },
+      { id_cliente, id_producto },
+    );
   },
 
   async getCatalogos(id_bodega?: number) {

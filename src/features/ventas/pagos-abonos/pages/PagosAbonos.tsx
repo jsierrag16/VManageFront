@@ -287,10 +287,6 @@ function getPagoBodegasLabel(factura: FacturaApi) {
   return bodegas.length > 0 ? bodegas.join(", ") : "Sin bodega";
 }
 
-function getPagoBodega(factura: FacturaApi) {
-  return getPagoBodegasLabel(factura);
-}
-
 function getUsuarioNombre(
   usuario?: { nombre?: string | null; apellido?: string | null } | null,
 ) {
@@ -1408,20 +1404,6 @@ export default function PagosAbonos() {
                     {onlyDate(facturaSeleccionada.fecha_vencimiento)}
                   </p>
                 </div>
-
-                <div>
-                  <p className="text-sm text-gray-600">Bodega</p>
-                  <p className="font-semibold">
-                    {getPagoBodega(facturaSeleccionada)}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-600">Remisión</p>
-                  <p className="font-semibold">
-                    {getPagoRemisiones(facturaSeleccionada)}
-                  </p>
-                </div>
               </div>
 
               <div className="border rounded-lg p-4 space-y-2">
@@ -1504,7 +1486,8 @@ export default function PagosAbonos() {
                       <TableRow className="bg-gray-50">
                         <TableHead>Fecha</TableHead>
                         <TableHead>Método</TableHead>
-                        <TableHead className="text-center">Abonado / Anulado</TableHead>
+                        <TableHead className="text-center">Registró</TableHead>
+                        <TableHead className="text-center">Anuló</TableHead>
                         <TableHead className="text-center">Estado</TableHead>
                         <TableHead className="text-right">Valor</TableHead>
                         <TableHead className="text-center">Acción</TableHead>
@@ -1513,7 +1496,7 @@ export default function PagosAbonos() {
                     <TableBody>
                       {(facturaSeleccionada.pagos_abonos ?? []).length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center py-6 text-gray-500">
+                          <TableCell colSpan={7} className="text-center py-6 text-gray-500">
                             No hay abonos registrados
                           </TableCell>
                         </TableRow>
@@ -1530,18 +1513,31 @@ export default function PagosAbonos() {
                               </TableCell>
 
                               <TableCell className="text-center">
-                                <div className="flex flex-col gap-1">
-                                  <span className="text-sm text-gray-700">
-                                    {estaAnulado
-                                      ? `${getUsuarioNombre(abono.usuario_anulo)} - ${abono.fecha_anulacion
-                                        ? onlyDate(abono.fecha_anulacion)
-                                        : "Sin fecha de anulación"
-                                      }`
-                                      : `${getUsuarioNombre(abono.usuario_registro)} - ${onlyDate(
-                                        abono.fecha_pago,
-                                      )}`}
+                                <div className="flex flex-col">
+                                  <span className="text-sm font-medium text-gray-800">
+                                    {getUsuarioNombre(abono.usuario_registro)}
+                                  </span>
+                                  <span className="text-xs text-gray-500">
+                                    {onlyDate(abono.fecha_pago)}
                                   </span>
                                 </div>
+                              </TableCell>
+
+                              <TableCell className="text-center">
+                                {estaAnulado ? (
+                                  <div className="flex flex-col">
+                                    <span className="text-sm font-medium text-red-700">
+                                      {getUsuarioNombre(abono.usuario_anulo)}
+                                    </span>
+                                    <span className="text-xs text-gray-500">
+                                      {abono.fecha_anulacion
+                                        ? onlyDate(abono.fecha_anulacion)
+                                        : "Sin fecha de anulación"}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-400">—</span>
+                                )}
                               </TableCell>
                               <TableCell className="text-center">
                                 <span

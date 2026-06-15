@@ -27,6 +27,8 @@ import {
   Search,
   X,
   Building2,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import jsPDF from "jspdf";
@@ -115,6 +117,7 @@ type FormProductoState = {
   cantidad_actual_remision: number;
   cantidad_maxima_editable: number;
   lotes: FormLoteState[];
+  existencias_otras_bodegas: FormLoteState[];
 };
 
 function normalizeText(value?: string | null) {
@@ -558,6 +561,17 @@ export default function RemisionesVenta() {
     nombre: EstadoUi;
   } | null>(null);
 
+  const [otrasBodegasAbiertas, setOtrasBodegasAbiertas] = useState<
+    Record<number, boolean>
+  >({});
+
+  const toggleOtrasBodegas = (idProducto: number) => {
+    setOtrasBodegasAbiertas((prev) => ({
+      ...prev,
+      [idProducto]: !prev[idProducto],
+    }));
+  };
+
   const [showFirmaModal, setShowFirmaModal] = useState(false);
   const [firmaDigital, setFirmaDigital] = useState("");
   const [firmaValida, setFirmaValida] = useState(false);
@@ -796,6 +810,16 @@ export default function RemisionesVenta() {
                 ? String(seleccionados.get(lote.id_existencia))
                 : "",
             })),
+            existencias_otras_bodegas: (detalle.existencias_otras_bodegas ?? []).map(
+              (lote) => ({
+                id_existencia: lote.id_existencia,
+                lote: lote.lote ?? "",
+                codigo_barras: lote.bodega?.nombre_bodega ?? "Otra bodega",
+                fecha_vencimiento: normalizeDate(lote.fecha_vencimiento),
+                cantidad_disponible: toNumber(lote.cantidad_disponible),
+                cantidad: "",
+              })
+            ),
           };
         });
 
@@ -1022,10 +1046,14 @@ export default function RemisionesVenta() {
 
   const handleOrdenChange = (ordenId: string) => {
     if (!puedeCambiarOrdenFormulario) {
-      toast.info("No puedes cambiar la orden asociada cuando la remisión ya fue despachada");
+      toast.info(
+        "No puedes cambiar la orden asociada cuando la remisión ya fue despachada"
+      );
       return;
     }
+
     setFormOrdenId(ordenId);
+    setOtrasBodegasAbiertas({});
 
     const orden = ordenesDisponibles.find(
       (item) => item.id_orden_venta === Number(ordenId)
@@ -1056,6 +1084,16 @@ export default function RemisionesVenta() {
           id_existencia: lote.id_existencia,
           lote: lote.lote ?? "",
           codigo_barras: lote.codigo_barras ?? "",
+          fecha_vencimiento: normalizeDate(lote.fecha_vencimiento),
+          cantidad_disponible: toNumber(lote.cantidad_disponible),
+          cantidad: "",
+        })),
+        existencias_otras_bodegas: (
+          detalle.existencias_otras_bodegas ?? []
+        ).map((lote) => ({
+          id_existencia: lote.id_existencia,
+          lote: lote.lote ?? "",
+          codigo_barras: lote.bodega?.nombre_bodega ?? "Otra bodega",
           fecha_vencimiento: normalizeDate(lote.fecha_vencimiento),
           cantidad_disponible: toNumber(lote.cantidad_disponible),
           cantidad: "",
@@ -2234,8 +2272,75 @@ export default function RemisionesVenta() {
                                   </TableCell>
 
                                   <TableCell colSpan={6}>
-                                    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                                      Este producto no tiene existencias disponibles en la bodega de la orden.
+                                    <div className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-800">
+                                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                          <p className="font-semibold">
+                                            Sin existencias en {bodegaFormularioNombre || "la bodega de la orden"}
+                                          </p>
+                                          <p className="text-xs text-orange-700">
+                                            Para remisionar este producto, primero realiza un traslado hacia esta bodega.
+                                          </p>
+                                        </div>
+
+                                        {producto.existencias_otras_bodegas.length > 0 && (
+                                          <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => toggleOtrasBodegas(producto.id_producto)}
+                                            className="h-8 border-orange-300 bg-white text-orange-700 hover:bg-orange-100"
+                                          >
+                                            {otrasBodegasAbiertas[producto.id_producto] ? (
+                                              <ChevronUp size={14} className="mr-1" />
+                                            ) : (
+                                              <ChevronDown size={14} className="mr-1" />
+                                            )}
+
+                                            {otrasBodegasAbiertas[producto.id_producto]
+                                              ? "Ocultar bodegas"
+                                              : `Ver otras bodegas (${producto.existencias_otras_bodegas.length})`}
+                                          </Button>
+                                        )}
+                                      </div>
+
+                                      {otrasBodegasAbiertas[producto.id_producto] && (
+                                        <div className="mt-3 rounded-md border border-orange-200 bg-white p-3">
+                                          {producto.existencias_otras_bodegas.length > 0 ? (
+                                            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                              {producto.existencias_otras_bodegas.map((existencia) => (
+                                                <div
+                                                  key={existencia.id_existencia}
+                                                  className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2"
+                                                >
+                                                  <p className="text-xs font-semibold text-gray-800">
+                                                    {existencia.codigo_barras || "Otra bodega"}
+                                                  </p>
+
+                                                  <p className="text-xs text-gray-600">
+                                                    Lote: {existencia.lote || "Sin lote"}
+                                                  </p>
+
+                                                  <p className="text-xs text-gray-600">
+                                                    Disponible:{" "}
+                                                    <span className="font-semibold text-gray-800">
+                                                      {existencia.cantidad_disponible}
+                                                    </span>
+                                                  </p>
+
+                                                  <p className="text-xs text-gray-500">
+                                                    Vence: {existencia.fecha_vencimiento || "Sin fecha"}
+                                                  </p>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          ) : (
+                                            <p className="text-xs text-gray-500">
+                                              No se encontraron existencias disponibles en otras bodegas.
+                                            </p>
+                                          )}
+                                        </div>
+                                      )}
                                     </div>
                                   </TableCell>
                                 </TableRow>,

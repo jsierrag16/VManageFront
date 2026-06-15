@@ -55,6 +55,7 @@ export type OrdenVentaCatalogoApi = {
       };
     };
     existencias_disponibles: ExistenciaDisponibleApi[];
+    existencias_otras_bodegas?: ExistenciaDisponibleApi[];
   }>;
 };
 

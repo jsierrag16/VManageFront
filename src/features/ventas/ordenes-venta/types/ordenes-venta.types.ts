@@ -1,3 +1,15 @@
+export type CostoReferenciaOrdenResponse = {
+  costo_referencia: number | null;
+  lote_referencia: string | null;
+  cantidad_disponible: number;
+  id_bodega_referencia: number | null;
+  nombre_bodega_referencia: string | null;
+  origen_referencia:
+  | 'BODEGA_CLIENTE'
+  | 'OTRA_BODEGA'
+  | 'SIN_EXISTENCIAS_CON_COSTO';
+};
+
 export type CatalogoCliente = {
   id_cliente: number;
   nombre_cliente?: string;
@@ -7,6 +19,13 @@ export type CatalogoCliente = {
   telefono?: string;
   direccion?: string;
   estado?: boolean | string;
+
+  id_bodega?: number | null;
+  bodega?: {
+    id_bodega?: number;
+    nombre_bodega?: string;
+    nombre?: string;
+  } | null;
 };
 
 export type CatalogoProducto = {
@@ -67,6 +86,13 @@ export type CatalogoCotizacion = {
   detalle_cotizacion?: DetalleCotizacionApi[];
   orden_venta?: {
     id_orden_venta: number;
+  } | null;
+  fecha_creacion?: string | null;
+  fecha_vencimiento?: string | null;
+  estado_cotizacion?: {
+    id_estado_cotizacion?: number;
+    nombre_estado?: string;
+    nombre?: string;
   } | null;
 };
 
