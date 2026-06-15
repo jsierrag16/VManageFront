@@ -19,7 +19,6 @@ export type CreateCotizacionPayload = {
   fecha: string;
   fecha_vencimiento: string;
   id_cliente: number;
-  id_bodega: number;
   id_usuario_creador: number;
   id_estado_cotizacion: number;
   observaciones?: string;
@@ -30,7 +29,6 @@ export type UpdateCotizacionPayload = {
   fecha: string;
   fecha_vencimiento: string;
   id_cliente: number;
-  id_bodega: number;
   id_estado_cotizacion: number;
   observaciones?: string;
   detalle: DetalleCotizacionPayload[];
@@ -128,6 +126,29 @@ export type CotizacionProductoUI = {
   precio: number;
   subtotal: number;
   idIva?: number;
+};
+
+export type CostoReferenciaCotizacionApi = {
+  id_cliente: number;
+  id_producto: number;
+  nombre_producto: string;
+
+  id_bodega_cliente: number;
+  nombre_bodega_cliente: string;
+
+  id_bodega_referencia: number | null;
+  nombre_bodega_referencia: string | null;
+
+  costo_referencia: number | null;
+  lote_referencia: string | null;
+  cantidad_disponible: number;
+
+  origen_referencia:
+  | "BODEGA_CLIENTE"
+  | "OTRA_BODEGA"
+  | "SIN_EXISTENCIAS_CON_COSTO";
+
+  criterio: string;
 };
 
 export type CotizacionUI = {
@@ -334,5 +355,18 @@ export const cotizacionesService = {
       payload
     );
     return mapCotizacionApiToUi(response.data);
+  },
+  async getCostoReferencia(idCliente: number, idProducto: number) {
+    const response = await api.get<CostoReferenciaCotizacionApi>(
+      "/cotizaciones/costo-referencia",
+      {
+        params: {
+          id_cliente: idCliente,
+          id_producto: idProducto,
+        },
+      }
+    );
+
+    return response.data;
   },
 };

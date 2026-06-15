@@ -21,6 +21,7 @@ export type ProductoVistaUI = {
     cantidadTotal: number;
     cantidadReservada: number;
     cantidadDisponible: number;
+    precioCompraUnitario: number | null;
     fechaVencimiento: string;
     bodega: string;
     idBodega: number;
@@ -29,11 +30,55 @@ export type ProductoVistaUI = {
   raw: ProductoVistaBackend;
 };
 
+export type ProductoUI = {
+  id: number;
+  nombre: string;
+  descripcion: string;
+  idCategoria: number;
+  categoria: string;
+  idIva: number;
+  iva: number;
+  estado: boolean;
+  raw: ProductoBackend;
+};
+
+export type ProductosUIResponse =
+  | ProductoUI[]
+  | {
+      page: number;
+      limit: number;
+      total: number;
+      pages: number;
+      data: ProductoUI[];
+    };
+
+export type ProductoFormValues = {
+  nombre: string;
+  descripcion: string;
+  idCategoria: number;
+  idIva: number;
+  estado?: boolean;
+};
+
+export type OpcionCatalogo = {
+  id: number;
+  nombre: string;
+};
+
 const toNumber = (value: string | number | null | undefined): number => {
   if (value === null || value === undefined || value === "") return 0;
 
   const parsed = Number(value);
   return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+const toNullableNumber = (
+  value: string | number | null | undefined
+): number | null => {
+  if (value === null || value === undefined || value === "") return null;
+
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? null : parsed;
 };
 
 const toText = (value: unknown, fallback = ""): string => {
@@ -59,7 +104,8 @@ export const productoVistaBackendToUI = (
       const cantidadTotal = toNumber(lote.cantidad);
       const cantidadReservada = toNumber(lote.cantidad_reservada);
       const cantidadDisponible = toNumber(
-        lote.cantidad_disponible ?? Math.max(cantidadTotal - cantidadReservada, 0)
+        lote.cantidad_disponible ??
+          Math.max(cantidadTotal - cantidadReservada, 0)
       );
 
       return {
@@ -68,6 +114,9 @@ export const productoVistaBackendToUI = (
         cantidadTotal,
         cantidadReservada,
         cantidadDisponible,
+        precioCompraUnitario: toNullableNumber(
+          lote.precio_compra_unitario
+        ),
         fechaVencimiento: lote.fecha_vencimiento ?? "",
         bodega: toText(lote.nombre_bodega, "Sin bodega"),
         idBodega: Number(lote.id_bodega ?? 0),
@@ -83,41 +132,6 @@ export const productosVistaBackendToUI = (
   productos: ProductoVistaBackend[]
 ): ProductoVistaUI[] => {
   return productos.map(productoVistaBackendToUI);
-};
-
-export type ProductoUI = {
-  id: number;
-  nombre: string;
-  descripcion: string;
-  idCategoria: number;
-  categoria: string;
-  idIva: number;
-  iva: number;
-  estado: boolean;
-  raw: ProductoBackend;
-};
-
-export type ProductosUIResponse =
-  | ProductoUI[]
-  | {
-    page: number;
-    limit: number;
-    total: number;
-    pages: number;
-    data: ProductoUI[];
-  };
-
-export type ProductoFormValues = {
-  nombre: string;
-  descripcion: string;
-  idCategoria: number;
-  idIva: number;
-  estado?: boolean;
-};
-
-export type OpcionCatalogo = {
-  id: number;
-  nombre: string;
 };
 
 export const productoBackendToUI = (

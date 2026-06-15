@@ -480,6 +480,17 @@ export default function Productos({
     });
   };
 
+  const formatMoney = (value?: number | null) => {
+    if (value === null || value === undefined || Number.isNaN(value)) {
+      return "Sin P/U";
+    }
+
+    return `COP$${Number(value).toLocaleString("es-CO", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  };
+
   const getVencimientoColor = (fecha: string) => {
     if (!fecha) return "text-gray-700";
 
@@ -1139,8 +1150,11 @@ export default function Productos({
                                       <TableHead className="text-xs text-center">
                                         Fecha de Vencimiento
                                       </TableHead>
-                                      <TableHead className="text-xs">
+                                      <TableHead className="text-xs text-center">
                                         Bodega Asignada
+                                      </TableHead>
+                                      <TableHead className="text-xs text-center">
+                                        Precio unidad IVA incluido
                                       </TableHead>
                                       <TableHead className="text-xs">
                                         Nota
@@ -1152,7 +1166,7 @@ export default function Productos({
                                     {producto.lotes.length === 0 ? (
                                       <TableRow>
                                         <TableCell
-                                          colSpan={4}
+                                          colSpan={6}
                                           className="text-center py-4 text-gray-500 text-sm"
                                         >
                                           No hay lotes registrados
@@ -1191,7 +1205,7 @@ export default function Productos({
                                             </span>
                                           </TableCell>
 
-                                          <TableCell>
+                                          <TableCell className="text-center">
                                             <Badge
                                               variant="outline"
                                               className="text-xs"
@@ -1199,6 +1213,11 @@ export default function Productos({
                                               {lote.bodega}
                                             </Badge>
                                           </TableCell>
+
+                                          <TableCell className="text-center font-medium text-gray-700">
+                                            {formatMoney(lote.precioCompraUnitario)}
+                                          </TableCell>
+
                                           <TableCell>
                                             <Badge
                                               variant="outline"
@@ -1457,7 +1476,8 @@ export default function Productos({
                         <TableHead>N° Lote</TableHead>
                         <TableHead className="text-center">Disponible</TableHead>
                         <TableHead className="text-center">Vencimiento</TableHead>
-                        <TableHead>Bodega</TableHead>
+                        <TableHead className="text-center">Bodega</TableHead>
+                        <TableHead className="text-center">Precio unidad IVA incluido</TableHead>
                         <TableHead>Nota</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1466,7 +1486,7 @@ export default function Productos({
                       {modalLotes.length === 0 ? (
                         <TableRow>
                           <TableCell
-                            colSpan={5}
+                            colSpan={6}
                             className="py-6 text-center text-gray-500"
                           >
                             No hay lotes registrados
@@ -1491,10 +1511,14 @@ export default function Productos({
                               </span>
                             </TableCell>
 
-                            <TableCell>
+                            <TableCell className="text-center">
                               <Badge variant="outline" className="text-xs">
                                 {lote.bodega || "-"}
                               </Badge>
+                            </TableCell>
+
+                            <TableCell className="text-center font-semibold text-gray-800">
+                              {formatMoney(lote.precioCompraUnitario)}
                             </TableCell>
 
                             <TableCell className="max-w-xs text-gray-700">

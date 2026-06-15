@@ -99,6 +99,16 @@ export type FacturaApi = {
   pagos_abonos: PagoAbonoApi[];
   remision_venta: RemisionPendienteApi[];
   resumen_pago?: ResumenPagoFacturaApi;
+
+  id_bodega?: number | null;
+  remisiones_snapshot?: string | null;
+  bodega_snapshot?: string | null;
+  remisiones_snapshot_data?: RemisionSnapshotPagoApi[] | string | null;
+
+  bodega?: {
+    id_bodega: number;
+    nombre_bodega: string;
+  } | null;
 };
 
 export type UsuarioGestionApi = {
@@ -116,7 +126,7 @@ export type CreateFacturaPayload = {
   id_cliente: number;
   id_remisiones: number[];
   fecha_factura: string;
-  fecha_vencimiento?: string;
+  fecha_vencimiento: string;
   nota?: string;
 };
 
@@ -124,6 +134,35 @@ export type CreateAbonoPayload = {
   fecha_pago: string;
   valor: number;
   id_metodo: number;
+};
+
+export type RemisionSnapshotPagoApi = {
+  id_remision_venta: number;
+  codigo_remision_venta: string | null;
+  fecha_creacion: string | null;
+  fecha_vencimiento: string | null;
+  id_orden_venta: number | null;
+  codigo_orden_venta: string | null;
+  id_bodega: number | null;
+  nombre_bodega: string | null;
+  estado_remision: string | null;
+  subtotal: number;
+  total_iva: number;
+  total: number;
+};
+
+export type ClientePagoApi = {
+  id_cliente: number;
+  codigo_cliente?: string | null;
+  nombre_cliente: string;
+  num_documento: string;
+  estado?: boolean;
+  remisiones_pendientes_count?: number;
+
+  tipo_documento?: {
+    id_tipo_doc: number;
+    nombre_doc: string;
+  } | null;
 };
 
 function unwrapResponse<T>(response: any): T {
@@ -170,6 +209,19 @@ export const pagosAbonosService = {
     });
 
     return unwrapResponse<FacturaApi[]>(response);
+  },
+
+  async getClientesConRemisionesPendientes(idBodega?: number) {
+    const response = await api.get(
+      "/pagos-abonos/clientes-con-remisiones-pendientes",
+      {
+        params: {
+          id_bodega: idBodega && idBodega > 0 ? idBodega : undefined,
+        },
+      },
+    );
+
+    return unwrapResponse<ClientePagoApi[]>(response);
   },
 
   async getFactura(idFactura: number) {

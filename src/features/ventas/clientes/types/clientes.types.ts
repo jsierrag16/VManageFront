@@ -43,6 +43,12 @@ export type ClienteApi = {
       departamento?: string;
     };
   };
+  id_bodega: number;
+
+  bodega?: {
+    id_bodega: number;
+    nombre_bodega: string;
+  } | null;
 };
 
 export type ClienteUI = {
@@ -62,6 +68,13 @@ export type ClienteUI = {
   tipoCliente: string;
   idTipoCliente: number;
   estado: "Activo" | "Inactivo";
+  idBodega: number;
+  bodega: string;
+};
+
+export type BodegaOption = {
+  id: number;
+  nombre: string;
 };
 
 export type DepartamentoOption = {
@@ -96,4 +109,5 @@ export type ClienteFormPayload = {
   id_municipio: number;
   id_tipo_doc: number;
   estado?: boolean;
+  id_bodega: number;
 };

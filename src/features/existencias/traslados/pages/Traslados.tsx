@@ -227,13 +227,21 @@ export default function Traslados({
   const selectedBodegaId = bodegaSeleccionadaInfo?.id ?? null;
 
   const productosDisponibles = useMemo(() => {
-    const map = new Map<number, { id: number; nombre: string }>();
+    const map = new Map<
+      number,
+      {
+        id: number;
+        nombre: string;
+        iva: number;
+      }
+    >();
 
     existenciasDisponibles.forEach((existencia) => {
       if (existencia.cantidadDisponible > 0) {
         map.set(existencia.idProducto, {
           id: existencia.idProducto,
           nombre: existencia.nombreProducto,
+          iva: existencia.iva ?? 0,
         });
       }
     });
@@ -278,6 +286,61 @@ export default function Traslados({
       month: "2-digit",
       year: "numeric",
     });
+  };
+
+  const formatFechaOptional = (fecha?: string | null) => {
+    return fecha ? formatFecha(fecha) : "Sin fecha";
+  };
+
+  const formatIva = (iva?: number | null) => {
+    const value = Number(iva ?? 0);
+
+    if (!Number.isFinite(value)) return "IVA 0%";
+
+    return `IVA ${value}%`;
+  };
+
+  const formatMoney = (value?: number | null) => {
+    if (value === null || value === undefined || Number.isNaN(value)) {
+      return "Pendiente";
+    }
+
+    return `COP$${Number(value).toLocaleString("es-CO", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  };
+
+  const getGestionTraslado = (traslado: TrasladoUI) => {
+    if (traslado.estado === "Anulado") {
+      return {
+        label: "Anulado por",
+        usuario: traslado.anuladoPor,
+        fecha: formatFechaOptional(traslado.fechaAnulacion),
+      };
+    }
+
+    if (traslado.estado === "Recibido") {
+      return {
+        label: "Recibido por",
+        usuario: traslado.recibidoPor,
+        fecha: formatFechaOptional(traslado.fechaRecepcion),
+      };
+    }
+
+    if (traslado.estado === "Enviado") {
+      return {
+        label: "Enviado por",
+        usuario: traslado.enviadoPor,
+        fecha: formatFechaOptional(traslado.fechaEnvio),
+      };
+    }
+
+    return {
+      label: "Creado por",
+      usuario: traslado.responsable || "No registrado",
+      fecha: formatFechaOptional(traslado.fecha),
+    };
   };
 
   const calcularTotalItems = (items: TrasladoItemUI[]) =>
@@ -538,8 +601,8 @@ export default function Traslados({
     }
 
     if (isAnular) {
-      if (trasladoSeleccionado.estado !== "Pendiente") {
-        toast.error("Solo puedes anular traslados en estado Pendiente");
+      if (!["Pendiente", "Enviado"].includes(trasladoSeleccionado.estado)) {
+        toast.error("Solo puedes anular traslados en estado Pendiente o Enviado");
         closeToList();
         return;
       }
@@ -891,8 +954,8 @@ export default function Traslados({
       return;
     }
 
-    if (traslado.estado !== "Pendiente") {
-      toast.error("Solo puedes anular traslados en estado Pendiente");
+    if (!["Pendiente", "Enviado"].includes(traslado.estado)) {
+      toast.error("Solo puedes anular traslados en estado Pendiente o Enviado");
       return;
     }
 
@@ -962,6 +1025,8 @@ export default function Traslados({
       idProducto: existenciaSeleccionada.idProducto,
       productoNombre: existenciaSeleccionada.nombreProducto,
       loteNumero: existenciaSeleccionada.lote,
+      iva: existenciaSeleccionada.iva ?? 0,
+      precioCompraUnitario: existenciaSeleccionada.precioCompraUnitario,
       cantidad: Number(currentCantidad),
       idBodega: existenciaSeleccionada.idBodega,
       bodegaNombre: existenciaSeleccionada.nombreBodega,
@@ -1319,6 +1384,7 @@ export default function Traslados({
                 <TableHead>Bodega Origen</TableHead>
                 <TableHead>Bodega Destino</TableHead>
                 <TableHead className="text-center">Total Unidades</TableHead>
+                <TableHead>Gestión</TableHead>
                 <TableHead className="text-center">Estado</TableHead>
                 <TableHead className="text-center w-32">Acciones</TableHead>
               </TableRow>
@@ -1327,7 +1393,7 @@ export default function Traslados({
             <TableBody>
               {isLoadingTraslados ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={9} className="text-center py-8 text-gray-500">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Cargando traslados...
@@ -1347,6 +1413,7 @@ export default function Traslados({
                   const Icon = estadoBadge.icon;
                   const siguienteEstado = getSiguienteEstado(traslado.estado);
                   const totalUnidades = calcularTotalItems(traslado.items);
+                  const gestion = getGestionTraslado(traslado);
 
                   return (
                     <TableRow key={traslado.id} className="hover:bg-gray-50">
@@ -1376,6 +1443,17 @@ export default function Traslados({
 
                       <TableCell className="text-center font-medium">
                         {totalUnidades}
+                      </TableCell>
+
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium text-gray-800">
+                            {gestion.usuario}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {gestion.label} - {gestion.fecha}
+                          </span>
+                        </div>
                       </TableCell>
 
                       <TableCell className="text-center">
@@ -1418,7 +1496,7 @@ export default function Traslados({
                             </Button>
                           )}
 
-                          {canAnularTraslados && traslado.estado === "Pendiente" && (
+                          {canAnularTraslados && ["Pendiente", "Enviado"].includes(traslado.estado) && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -1510,7 +1588,7 @@ export default function Traslados({
           <DialogHeader className="space-y-2 pb-3">
             <DialogTitle>Detalles del Traslado</DialogTitle>
             <DialogDescription id="traslado-details-description">
-              Información completa del traslado de productos entre bodegas
+              Información completa del traslado de productos entre bodegas.
             </DialogDescription>
           </DialogHeader>
 
@@ -1520,101 +1598,155 @@ export default function Traslados({
             </div>
           ) : (
             <div className="space-y-6 py-2">
-              <div className="grid grid-cols-1 gap-x-10 gap-y-5 rounded-lg bg-gray-50 p-5 md:grid-cols-2">
-                <div>
-                  <p className="text-sm text-gray-600">Código</p>
-                  <p className="font-medium text-blue-600">
-                    {trasladoSeleccionado.codigo || "-"}
+              <div className="rounded-xl bg-gray-50 p-5">
+                <div className="mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Información general
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    Datos principales del traslado seleccionado.
                   </p>
                 </div>
 
-                <div>
-                  <p className="text-sm text-gray-600">Estado</p>
-                  <div className="mt-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        const siguienteEstado = getSiguienteEstado(
-                          trasladoSeleccionado.estado
-                        );
+                <div className="grid grid-cols-1 gap-x-10 gap-y-5 md:grid-cols-2">
+                  <div>
+                    <p className="text-sm text-gray-600">Código</p>
+                    <p className="font-medium text-blue-600">
+                      {trasladoSeleccionado.codigo || "-"}
+                    </p>
+                  </div>
 
-                        if (siguienteEstado) {
-                          handleEstadoClick(trasladoSeleccionado);
-                        }
-                      }}
-                      disabled={
-                        !getSiguienteEstado(trasladoSeleccionado.estado) ||
-                        !canChangeEstadoTraslados
-                      }
-                      className={`h-7 px-3 ${getEstadoBadge(trasladoSeleccionado.estado).class
-                        } ${!getSiguienteEstado(trasladoSeleccionado.estado) ||
+                  <div>
+                    <p className="text-sm text-gray-600">Estado</p>
+                    <div className="mt-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          const siguienteEstado = getSiguienteEstado(
+                            trasladoSeleccionado.estado
+                          );
+
+                          if (siguienteEstado) {
+                            handleEstadoClick(trasladoSeleccionado);
+                          }
+                        }}
+                        disabled={
+                          !getSiguienteEstado(trasladoSeleccionado.estado) ||
                           !canChangeEstadoTraslados
-                          ? "cursor-default opacity-100"
-                          : ""
-                        }`}
-                    >
-                      {(() => {
-                        const EstadoIcon = getEstadoBadge(
-                          trasladoSeleccionado.estado
-                        ).icon;
+                        }
+                        className={`h-7 px-3 ${getEstadoBadge(trasladoSeleccionado.estado).class
+                          } ${!getSiguienteEstado(trasladoSeleccionado.estado) ||
+                            !canChangeEstadoTraslados
+                            ? "cursor-default opacity-100"
+                            : ""
+                          }`}
+                      >
+                        {(() => {
+                          const EstadoIcon = getEstadoBadge(
+                            trasladoSeleccionado.estado
+                          ).icon;
 
-                        return <EstadoIcon size={14} className="mr-1" />;
-                      })()}
-                      {trasladoSeleccionado.estado}
-                    </Button>
+                          return <EstadoIcon size={14} className="mr-1" />;
+                        })()}
+                        {trasladoSeleccionado.estado}
+                      </Button>
+                    </div>
                   </div>
-                </div>
 
-                <div>
-                  <p className="text-sm text-gray-600">Fecha</p>
-                  <p className="font-medium">
-                    {formatFecha(trasladoSeleccionado.fecha)}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-600">Responsable</p>
-                  <p className="font-medium">
-                    {trasladoSeleccionado.responsable || "No registrado"}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-600">Bodega origen</p>
-                  <div className="mt-1 flex items-center gap-2">
-                    <Building2 size={16} className="text-blue-600" />
+                  <div>
+                    <p className="text-sm text-gray-600">Fecha</p>
                     <p className="font-medium">
-                      {trasladoSeleccionado.bodegaOrigen || "-"}
+                      {formatFecha(trasladoSeleccionado.fecha)}
                     </p>
                   </div>
-                </div>
 
-                <div>
-                  <p className="text-sm text-gray-600">Bodega destino</p>
-                  <div className="mt-1 flex items-center gap-2">
-                    <Building2 size={16} className="text-green-600" />
+                  <div>
+                    <p className="text-sm text-gray-600">Responsable</p>
                     <p className="font-medium">
-                      {trasladoSeleccionado.bodegaDestino || "-"}
+                      {trasladoSeleccionado.responsable || "No registrado"}
                     </p>
                   </div>
-                </div>
 
-                {trasladoSeleccionado.observaciones && (
-                  <div className="md:col-span-2">
-                    <p className="text-sm text-gray-600">Observaciones</p>
-                    <p className="font-medium whitespace-pre-wrap">
-                      {trasladoSeleccionado.observaciones}
-                    </p>
+                  <div>
+                    <p className="text-sm text-gray-600">Bodega origen</p>
+                    <div className="mt-1 flex items-center gap-2">
+                      <Building2 size={16} className="text-blue-600" />
+                      <p className="font-medium">
+                        {trasladoSeleccionado.bodegaOrigen || "-"}
+                      </p>
+                    </div>
                   </div>
-                )}
+
+                  <div>
+                    <p className="text-sm text-gray-600">Bodega destino</p>
+                    <div className="mt-1 flex items-center gap-2">
+                      <Building2 size={16} className="text-green-600" />
+                      <p className="font-medium">
+                        {trasladoSeleccionado.bodegaDestino || "-"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {trasladoSeleccionado.observaciones && (
+                    <div className="md:col-span-2">
+                      <p className="text-sm text-gray-600">Observaciones</p>
+                      <p className="font-medium whitespace-pre-wrap">
+                        {trasladoSeleccionado.observaciones}
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div>
-                <div className="mb-3 flex items-center justify-between">
+              <div className="rounded-xl border bg-white p-5">
+                <div className="mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Gestión del traslado
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    Usuarios que enviaron, recibieron o anularon el traslado.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <div className="rounded-lg bg-gray-50 p-4">
+                    <p className="text-sm text-gray-600">Enviado por</p>
+                    <p className="font-medium text-gray-900">
+                      {trasladoSeleccionado.enviadoPor}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {formatFechaOptional(trasladoSeleccionado.fechaEnvio)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-gray-50 p-4">
+                    <p className="text-sm text-gray-600">Recibido por</p>
+                    <p className="font-medium text-gray-900">
+                      {trasladoSeleccionado.recibidoPor}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {formatFechaOptional(trasladoSeleccionado.fechaRecepcion)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-gray-50 p-4">
+                    <p className="text-sm text-gray-600">Anulado por</p>
+                    <p className="font-medium text-gray-900">
+                      {trasladoSeleccionado.anuladoPor}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {formatFechaOptional(trasladoSeleccionado.fechaAnulacion)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border bg-white p-5">
+                <div className="mb-4 flex items-center justify-between">
                   <div>
-                    <h3 className="font-semibold text-gray-900">
-                      Productos del Traslado
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      Productos del traslado
                     </h3>
                     <p className="text-sm text-gray-500">
                       {trasladoSeleccionado.items.length} producto
@@ -1632,6 +1764,8 @@ export default function Traslados({
                         <TableHead>Producto</TableHead>
                         <TableHead>Lote</TableHead>
                         <TableHead className="text-center">Cantidad</TableHead>
+                        <TableHead className="text-center">IVA</TableHead>
+                        <TableHead className="text-center">Precio unidad IVA incluido</TableHead>
                       </TableRow>
                     </TableHeader>
 
@@ -1639,7 +1773,7 @@ export default function Traslados({
                       {trasladoSeleccionado.items.length === 0 ? (
                         <TableRow>
                           <TableCell
-                            colSpan={4}
+                            colSpan={6}
                             className="py-6 text-center text-gray-500"
                           >
                             No hay productos registrados en este traslado
@@ -1667,6 +1801,19 @@ export default function Traslados({
 
                             <TableCell className="text-center font-medium">
                               {item.cantidad}
+                            </TableCell>
+
+                            <TableCell className="text-center">
+                              <Badge
+                                variant="outline"
+                                className="border-blue-200 bg-blue-50 text-blue-700"
+                              >
+                                {formatIva(item.iva ?? 0)}
+                              </Badge>
+                            </TableCell>
+
+                            <TableCell className="text-center font-semibold text-gray-800">
+                              {formatMoney(item.precioCompraUnitario)}
                             </TableCell>
                           </TableRow>
                         ))
@@ -1717,11 +1864,14 @@ export default function Traslados({
           aria-describedby="traslado-create-description"
         >
           <DialogHeader className="space-y-2 pb-3">
-            <DialogTitle>{isEditar ? "Editar Traslado" : "Nuevo Traslado"}</DialogTitle>
+            <DialogTitle>
+              {isEditar ? "Editar Traslado" : "Nuevo Traslado"}
+            </DialogTitle>
+
             <DialogDescription id="traslado-create-description">
               {isEditar
-                ? "Modifica la información del traslado antes de enviarlo"
-                : "Completa la información para trasladar productos entre bodegas"}
+                ? "Modifica la información del traslado antes de enviarlo."
+                : "Completa la información para trasladar productos entre bodegas."}
             </DialogDescription>
           </DialogHeader>
 
@@ -1746,13 +1896,13 @@ export default function Traslados({
                 </div>
               )}
 
-              <div className="rounded-lg bg-gray-50 p-5">
+              <div className="rounded-xl bg-gray-50 p-5">
                 <div className="mb-4">
-                  <h3 className="font-semibold text-gray-900">
+                  <h3 className="text-lg font-semibold text-gray-900">
                     Información general
                   </h3>
                   <p className="text-sm text-gray-500">
-                    Selecciona las bodegas involucradas en el traslado
+                    Selecciona las bodegas involucradas en el traslado.
                   </p>
                 </div>
 
@@ -1760,9 +1910,7 @@ export default function Traslados({
                   <div className="space-y-2">
                     <Label htmlFor="traslado-origen">Bodega Origen *</Label>
                     <Select
-                      value={
-                        formBodegaOrigenId === "" ? "" : String(formBodegaOrigenId)
-                      }
+                      value={formBodegaOrigenId === "" ? "" : String(formBodegaOrigenId)}
                       onValueChange={handleBodegaOrigenChange}
                       disabled={trasladoItems.length > 0 || isLoadingCatalogos}
                     >
@@ -1780,18 +1928,14 @@ export default function Traslados({
                     </Select>
 
                     {errors.bodegaOrigen && touched.bodegaOrigen && (
-                      <p className="text-sm text-red-500">
-                        {errors.bodegaOrigen}
-                      </p>
+                      <p className="text-sm text-red-500">{errors.bodegaOrigen}</p>
                     )}
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="traslado-destino">Bodega Destino *</Label>
                     <Select
-                      value={
-                        formBodegaDestinoId === "" ? "" : String(formBodegaDestinoId)
-                      }
+                      value={formBodegaDestinoId === "" ? "" : String(formBodegaDestinoId)}
                       onValueChange={handleBodegaDestinoChange}
                       disabled={trasladoItems.length > 0 || isLoadingCatalogos}
                     >
@@ -1811,21 +1955,19 @@ export default function Traslados({
                     </Select>
 
                     {errors.bodegaDestino && touched.bodegaDestino && (
-                      <p className="text-sm text-red-500">
-                        {errors.bodegaDestino}
-                      </p>
+                      <p className="text-sm text-red-500">{errors.bodegaDestino}</p>
                     )}
                   </div>
                 </div>
               </div>
 
-              <div>
-                <div className="mb-3">
-                  <h3 className="font-semibold text-gray-900">
+              <div className="rounded-xl border bg-white p-5">
+                <div className="mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">
                     Productos del traslado
                   </h3>
                   <p className="text-sm text-gray-500">
-                    Selecciona producto, lote y cantidad a trasladar
+                    Selecciona producto, lote y cantidad a trasladar.
                   </p>
                 </div>
 
@@ -1834,11 +1976,9 @@ export default function Traslados({
                     <div className="space-y-2">
                       <Label htmlFor="current-producto">Producto *</Label>
                       <Select
-                        value={
-                          currentProductoId === "" ? "" : String(currentProductoId)
-                        }
+                        value={currentProductoId === "" ? "" : String(currentProductoId)}
                         onValueChange={handleCurrentProductoChange}
-                        disabled={isLoadingExistencias}
+                        disabled={isLoadingExistencias || !formBodegaOrigenId}
                       >
                         <SelectTrigger id="current-producto">
                           <SelectValue placeholder="Selecciona un producto" />
@@ -1852,7 +1992,13 @@ export default function Traslados({
                           ) : (
                             productosDisponibles.map((producto) => (
                               <SelectItem key={producto.id} value={String(producto.id)}>
-                                {producto.nombre}
+                                <div className="flex w-full items-center justify-between gap-3">
+                                  <span>{producto.nombre}</span>
+
+                                  <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+                                    {formatIva(producto.iva)}
+                                  </span>
+                                </div>
                               </SelectItem>
                             ))
                           )}
@@ -1870,9 +2016,7 @@ export default function Traslados({
                       <Label htmlFor="current-lote">Lote *</Label>
                       <Select
                         value={
-                          currentExistenciaId === ""
-                            ? ""
-                            : String(currentExistenciaId)
+                          currentExistenciaId === "" ? "" : String(currentExistenciaId)
                         }
                         onValueChange={handleCurrentLoteChange}
                         disabled={!currentProductoId}
@@ -1892,8 +2036,16 @@ export default function Traslados({
                                 key={existencia.idExistencia}
                                 value={String(existencia.idExistencia)}
                               >
-                                {existencia.lote} - Disp:{" "}
-                                {existencia.cantidadDisponible}
+                                <div className="flex w-full items-center justify-between gap-3">
+                                  <span>
+                                    {existencia.lote} - Disp:{" "}
+                                    {existencia.cantidadDisponible}
+                                  </span>
+
+                                  <span className="text-xs font-medium text-gray-500">
+                                    {formatMoney(existencia.precioCompraUnitario)}
+                                  </span>
+                                </div>
                               </SelectItem>
                             ))
                           )}
@@ -1901,9 +2053,7 @@ export default function Traslados({
                       </Select>
 
                       {errors.currentLote && touched.currentLote && (
-                        <p className="text-sm text-red-500">
-                          {errors.currentLote}
-                        </p>
+                        <p className="text-sm text-red-500">{errors.currentLote}</p>
                       )}
                     </div>
 
@@ -1925,7 +2075,9 @@ export default function Traslados({
                       />
 
                       {currentExistenciaId && !errors.currentCantidad && (
-                        <p className="text-xs text-gray-500">Máx: {cantidadMaxima}</p>
+                        <p className="text-xs text-gray-500">
+                          Máx: {cantidadMaxima}
+                        </p>
                       )}
 
                       {errors.currentCantidad && touched.currentCantidad && (
@@ -1956,6 +2108,8 @@ export default function Traslados({
                           <TableHead>Producto</TableHead>
                           <TableHead>Lote</TableHead>
                           <TableHead className="text-center">Cantidad</TableHead>
+                          <TableHead className="text-center">IVA</TableHead>
+                          <TableHead className="text-center">Precio unidad IVA incluido</TableHead>
                           <TableHead className="w-20 text-center">Acción</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1982,6 +2136,19 @@ export default function Traslados({
 
                             <TableCell className="text-center font-medium">
                               {item.cantidad}
+                            </TableCell>
+
+                            <TableCell className="text-center">
+                              <Badge
+                                variant="outline"
+                                className="border-blue-200 bg-blue-50 text-blue-700"
+                              >
+                                {formatIva(item.iva ?? 0)}
+                              </Badge>
+                            </TableCell>
+
+                            <TableCell className="text-center font-semibold text-gray-800">
+                              {formatMoney(item.precioCompraUnitario)}
                             </TableCell>
 
                             <TableCell className="text-center">
@@ -2018,37 +2185,37 @@ export default function Traslados({
                 )}
               </div>
 
-              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-full bg-blue-100 p-2">
-                    <Package size={16} className="text-blue-600" />
-                  </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-full bg-blue-100 p-2">
+                      <Package size={16} className="text-blue-600" />
+                    </div>
 
-                  <div>
-                    <p className="text-xs text-blue-900">Responsable</p>
-                    <p className="font-medium text-blue-700">
-                      {usuario?.nombre || "Usuario"}
-                    </p>
+                    <div>
+                      <p className="text-xs text-blue-900">Responsable</p>
+                      <p className="font-medium text-blue-700">
+                        {usuario?.nombre || "Usuario"}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="traslado-observaciones">Observaciones</Label>
-                <Textarea
-                  id="traslado-observaciones"
-                  value={formObservaciones}
-                  onChange={(e) => handleObservacionesChange(e.target.value)}
-                  placeholder="Escribe cualquier observación sobre el traslado (opcional)"
-                  rows={3}
-                  onBlur={handleObservacionesBlur}
-                />
+                <div className="space-y-2">
+                  <Label htmlFor="traslado-observaciones">Observaciones</Label>
+                  <Textarea
+                    id="traslado-observaciones"
+                    value={formObservaciones}
+                    onChange={(e) => handleObservacionesChange(e.target.value)}
+                    placeholder="Escribe cualquier observación sobre el traslado (opcional)"
+                    rows={3}
+                    onBlur={handleObservacionesBlur}
+                  />
 
-                {errors.observaciones && touched.observaciones && (
-                  <p className="text-sm text-red-500">
-                    {errors.observaciones}
-                  </p>
-                )}
+                  {errors.observaciones && touched.observaciones && (
+                    <p className="text-sm text-red-500">{errors.observaciones}</p>
+                  )}
+                </div>
               </div>
             </div>
           )}

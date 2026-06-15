@@ -108,8 +108,20 @@ export default function Cotizaciones() {
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
   const [clientes, setClientes] = useState<ClienteCotizacion[]>([]);
   const [productosCatalogo, setProductosCatalogo] = useState<ProductoCotizacion[]>([]);
-  const [precioMinimoPorProducto, setPrecioMinimoPorProducto] = useState<
-    Record<string, number>
+  const [costosReferenciaPorProducto, setCostosReferenciaPorProducto] = useState<
+    Record<
+      string,
+      {
+        costoReferencia: number | null;
+        loteReferencia: string | null;
+        cantidadDisponible: number;
+        nombreBodegaReferencia: string | null;
+        origenReferencia:
+        | "BODEGA_CLIENTE"
+        | "OTRA_BODEGA"
+        | "SIN_EXISTENCIAS_CON_COSTO";
+      }
+    >
   >({});
 
   const [isPdfOptionsModalOpen, setIsPdfOptionsModalOpen] = useState(false);
@@ -190,13 +202,20 @@ export default function Cotizaciones() {
     return productosCatalogo.filter((p) => p.estado);
   }, [productosCatalogo]);
 
-  const getPrecioMinimoProducto = (productoId: string) => {
-    return Number(precioMinimoPorProducto[productoId] ?? 0);
+  const getCostoReferenciaProducto = (productoId: string) => {
+    return Number(
+      costosReferenciaPorProducto[productoId]?.costoReferencia ?? 0
+    );
   };
 
-  const precioMinimoProductoSeleccionado = selectedProductoId
-    ? getPrecioMinimoProducto(selectedProductoId)
+  const costoReferenciaProductoSeleccionado = selectedProductoId
+    ? getCostoReferenciaProducto(selectedProductoId)
     : 0;
+
+  const precioProductoMenorCostoRef =
+    costoReferenciaProductoSeleccionado > 0 &&
+    Number(precioProducto || 0) > 0 &&
+    Number(precioProducto || 0) < costoReferenciaProductoSeleccionado;
 
   const estadoIds = useMemo(() => {
     const map = { ...ESTADO_COTIZACION_FALLBACK };
@@ -235,7 +254,13 @@ export default function Cotizaciones() {
           : getProductosVista("all");
 
       const [clientesResult, productosResult] = await Promise.allSettled([
-        clientesService.getAll({ incluirInactivos: true }),
+        clientesService.getAll({
+          incluirInactivos: true,
+          id_bodega:
+            selectedBodegaId && selectedBodegaId > 0
+              ? selectedBodegaId
+              : undefined,
+        }),
         promesaProductos,
       ]);
 
@@ -253,28 +278,17 @@ export default function Cotizaciones() {
             departamento: cliente.departamento,
             pais: "Colombia",
             estado: cliente.estado,
-            bodega: "",
+            bodega: cliente.bodega,
+            idBodega: cliente.idBodega,
             tipoCliente: cliente.tipoCliente,
             fechaRegistro: "",
           }))
         );
       } else {
-        console.error(
-          "Error cargando clientes para cotizaciones:",
-          clientesResult.reason
-        );
+        console.error("Error cargando clientes:", clientesResult.reason);
       }
 
       if (productosResult.status === "fulfilled") {
-        setPrecioMinimoPorProducto(
-          Object.fromEntries(
-            (productosResult.value ?? []).map((producto) => [
-              String(producto.id_producto),
-              Number(producto.precio_minimo_venta ?? 0),
-            ])
-          )
-        );
-
         setProductosCatalogo(
           productosResult.value.map((producto) => ({
             id: String(producto.id_producto),
@@ -287,18 +301,17 @@ export default function Cotizaciones() {
             estado: Boolean(producto.estado),
             lotes: (producto.lotes ?? []).map((lote) => ({
               id: String(lote.id_existencia),
-              numeroLote: lote.lote,
-              cantidadDisponible: Number(lote.cantidad),
+              numeroLote: lote.lote || "Sin lote",
+              cantidadDisponible: Number(
+                lote.cantidad_disponible ?? lote.cantidad ?? 0
+              ),
               fechaVencimiento: lote.fecha_vencimiento ?? "",
-              bodega: lote.nombre_bodega,
+              bodega: lote.nombre_bodega ?? "",
             })),
           }))
         );
       } else {
-        console.error(
-          "Error cargando productos para cotizaciones:",
-          productosResult.reason
-        );
+        console.error("Error cargando productos:", productosResult.reason);
       }
     };
 
@@ -603,17 +616,6 @@ export default function Cotizaciones() {
   useEffect(() => {
     if (!isCrear) return;
 
-    const bodegaInicial =
-      selectedBodega !== "Todas las bodegas"
-        ? bodegasDisponibles.find((bodega) => bodega.id === selectedBodegaId)
-          ?.nombre ?? ""
-        : "";
-
-    const idBodegaInicial =
-      selectedBodega !== "Todas las bodegas" && selectedBodegaId
-        ? String(selectedBodegaId)
-        : "";
-
     const fechaActual = getFechaActual();
 
     setFormData({
@@ -627,8 +629,8 @@ export default function Cotizaciones() {
       subtotal: 0,
       impuestos: 0,
       observaciones: "",
-      bodega: bodegaInicial,
-      idBodega: idBodegaInicial,
+      bodega: "",
+      idBodega: "",
     });
 
     setProductosOrden([]);
@@ -707,9 +709,43 @@ export default function Cotizaciones() {
       return;
     }
 
-    const precioMinimo = getPrecioMinimoProducto(selectedProductoId);
-    setPrecioProducto(precioMinimo > 0 ? String(precioMinimo) : "");
-  }, [selectedProductoId, precioMinimoPorProducto]);
+    if (!formData.idCliente) {
+      setPrecioProducto("");
+      return;
+    }
+
+    const cargarCostoReferencia = async () => {
+      try {
+        const respuesta = await cotizacionesService.getCostoReferencia(
+          Number(formData.idCliente),
+          Number(selectedProductoId)
+        );
+
+        setCostosReferenciaPorProducto((prev) => ({
+          ...prev,
+          [selectedProductoId]: {
+            costoReferencia: respuesta.costo_referencia,
+            loteReferencia: respuesta.lote_referencia,
+            cantidadDisponible: respuesta.cantidad_disponible,
+            nombreBodegaReferencia: respuesta.nombre_bodega_referencia,
+            origenReferencia: respuesta.origen_referencia,
+          },
+        }));
+
+        if (respuesta.costo_referencia && respuesta.costo_referencia > 0) {
+          setPrecioProducto(String(respuesta.costo_referencia));
+        } else {
+          setPrecioProducto("");
+        }
+      } catch (error) {
+        console.error("Error consultando costo referencia:", error);
+        toast.error("No se pudo consultar el costo de referencia");
+        setPrecioProducto("");
+      }
+    };
+
+    void cargarCostoReferencia();
+  }, [selectedProductoId, formData.idCliente]);
 
   const handleAgregarProducto = () => {
     if (!selectedProductoId) {
@@ -731,13 +767,13 @@ export default function Cotizaciones() {
       return;
     }
 
-    const precioMinimo = getPrecioMinimoProducto(selectedProductoId);
+    const costoReferencia = getCostoReferenciaProducto(selectedProductoId);
+    const referencia = costosReferenciaPorProducto[selectedProductoId];
 
-    if (precioMinimo > 0 && precio < precioMinimo) {
-      toast.error(
-        `El precio no puede ser menor a ${precioMinimo.toLocaleString("es-CO")}`
+    if (costoReferencia > 0 && precio < costoReferencia) {
+      toast.warning(
+        `El precio está por debajo del costo ref. (${formatMoney(costoReferencia)})`
       );
-      return;
     }
 
     const producto = productosActivos.find((p) => p.id === selectedProductoId);
@@ -761,6 +797,9 @@ export default function Cotizaciones() {
       cantidad,
       precio,
       subtotal,
+      costoReferencia: costoReferencia || null,
+      loteReferencia: referencia?.loteReferencia ?? null,
+      cantidadDisponibleReferencia: referencia?.cantidadDisponible ?? 0,
     };
 
     setProductosOrden([...productosOrden, nuevoProducto]);
@@ -930,7 +969,7 @@ export default function Cotizaciones() {
       !formData.idCliente ||
       !formData.fecha ||
       !formData.fechaVencimiento ||
-      !formData.idBodega
+      !clienteSeleccionadoForm?.idBodega
     ) {
       toast.error("Por favor completa todos los campos obligatorios");
       return;
@@ -946,24 +985,11 @@ export default function Cotizaciones() {
       return;
     }
 
-    for (const item of productosOrden) {
-      const precioMinimo = getPrecioMinimoProducto(String(item.producto.id));
-      const precioActual = Number(item.precio ?? 0);
-
-      if (precioMinimo > 0 && precioActual < precioMinimo) {
-        toast.error(
-          `El producto "${item.producto.nombre}" no puede tener un precio menor a ${precioMinimo.toLocaleString("es-CO")}`
-        );
-        return;
-      }
-    }
-
     try {
       const creada = await cotizacionesService.create({
         fecha: formData.fecha,
         fecha_vencimiento: formData.fechaVencimiento,
         id_cliente: Number(formData.idCliente),
-        id_bodega: Number(formData.idBodega),
         id_usuario_creador: currentUserId,
         id_estado_cotizacion: estadoIds.Pendiente,
         observaciones: formData.observaciones.trim() || undefined,
@@ -995,7 +1021,7 @@ export default function Cotizaciones() {
       return;
     }
 
-    if (!formData.idCliente || !formData.fecha || !formData.fechaVencimiento || !formData.idBodega) {
+    if (!formData.idCliente || !formData.fecha || !formData.fechaVencimiento || !clienteSeleccionadoForm?.idBodega) {
       toast.error("Por favor completa todos los campos obligatorios");
       return;
     }
@@ -1005,24 +1031,11 @@ export default function Cotizaciones() {
       return;
     }
 
-    for (const item of productosOrden) {
-      const precioMinimo = getPrecioMinimoProducto(String(item.producto.id));
-      const precioActual = Number(item.precio ?? 0);
-
-      if (precioMinimo > 0 && precioActual < precioMinimo) {
-        toast.error(
-          `El producto "${item.producto.nombre}" no puede tener un precio menor a ${precioMinimo.toLocaleString("es-CO")}`
-        );
-        return;
-      }
-    }
-
     try {
       const actualizada = await cotizacionesService.update(cotizacionSeleccionada.id, {
         fecha: formData.fecha,
         fecha_vencimiento: formData.fechaVencimiento,
         id_cliente: Number(formData.idCliente),
-        id_bodega: Number(formData.idBodega),
         id_estado_cotizacion: estadoIds[formData.estado],
         observaciones: formData.observaciones.trim() || undefined,
         detalle: productosOrden.map((item) => ({
@@ -1600,33 +1613,6 @@ export default function Cotizaciones() {
     );
   };
 
-  const handleActualizarPrecioProducto = (productoId: string, value: string) => {
-    const precio = Number(value);
-
-    if (Number.isNaN(precio) || precio < 0) return;
-
-    const precioMinimo = getPrecioMinimoProducto(productoId);
-
-    if (precioMinimo > 0 && precio < precioMinimo) {
-      toast.error(
-        `El precio no puede ser menor a ${precioMinimo.toLocaleString("es-CO")}`
-      );
-      return;
-    }
-
-    setProductosOrden((prev) =>
-      prev.map((item) => {
-        if (item.producto.id !== productoId) return item;
-
-        return {
-          ...item,
-          precio,
-          subtotal: Number(item.cantidad || 0) * precio,
-        };
-      })
-    );
-  };
-
   const fieldClass =
     "h-11 rounded-lg border-gray-300 bg-white shadow-none focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/20";
 
@@ -1971,7 +1957,17 @@ export default function Cotizaciones() {
                         ...formData,
                         idCliente: value,
                         cliente: clienteSeleccionado?.nombre ?? "",
+                        bodega: clienteSeleccionado?.bodega ?? "",
+                        idBodega: clienteSeleccionado?.idBodega
+                          ? String(clienteSeleccionado.idBodega)
+                          : "",
                       });
+
+                      setProductosOrden([]);
+                      setSelectedProductoId("");
+                      setCantidadProducto("0");
+                      setPrecioProducto("");
+                      setCostosReferenciaPorProducto({});
                     }}
                   >
                     <SelectTrigger id="cliente" className={fieldClass}>
@@ -2036,33 +2032,14 @@ export default function Cotizaciones() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="bodega">Bodega *</Label>
-                  <Select
-                    value={formData.idBodega}
-                    onValueChange={(value: string) => {
-                      const bodegaSeleccionada = bodegasDisponibles.find(
-                        (bodega) => String(bodega.id) === value
-                      );
-
-                      setFormData({
-                        ...formData,
-                        idBodega: value,
-                        bodega: bodegaSeleccionada?.nombre ?? "",
-                      });
-                    }}
-                  >
-                    <SelectTrigger id="bodega" className={fieldClass}>
-                      <SelectValue placeholder="Selecciona una bodega" />
-                    </SelectTrigger>
-
-                    <SelectContent>
-                      {bodegasDisponibles.map((bodega) => (
-                        <SelectItem key={bodega.id} value={String(bodega.id)}>
-                          {bodega.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="bodega">Bodega del cliente</Label>
+                  <Input
+                    id="bodega"
+                    value={formData.bodega || "Selecciona un cliente"}
+                    readOnly
+                    disabled
+                    className={readonlyFieldClass}
+                  />
                 </div>
               </div>
             </div>
@@ -2142,21 +2119,44 @@ export default function Cotizaciones() {
                       type="number"
                       value={precioProducto}
                       onChange={(e) => setPrecioProducto(e.target.value)}
-                      min={
-                        precioMinimoProductoSeleccionado > 0
-                          ? precioMinimoProductoSeleccionado
-                          : 0
-                      }
+                      min={0}
                       step="0"
                       placeholder="0.00"
-                      className={numberFieldClass}
+                      className={`${numberFieldClass} ${precioProductoMenorCostoRef ? "border-red-500 focus-visible:border-red-500" : ""
+                        }`}
                     />
 
-                    {precioMinimoProductoSeleccionado > 0 && (
-                      <p className="text-xs text-amber-600">
-                        Mínimo permitido: {formatMoney(precioMinimoProductoSeleccionado)}
-                      </p>
+                    {costoReferenciaProductoSeleccionado > 0 && (
+                      <div className="space-y-1">
+                        <p
+                          className={`text-xs ${precioProductoMenorCostoRef ? "text-red-600" : "text-amber-600"
+                            }`}
+                        >
+                          {costosReferenciaPorProducto[selectedProductoId]?.origenReferencia ===
+                            "OTRA_BODEGA"
+                            ? "Costo ref. global:"
+                            : "Costo ref.:"}{" "}
+                          {formatMoney(costoReferenciaProductoSeleccionado)}
+                        </p>
+
+                        {costosReferenciaPorProducto[selectedProductoId]?.origenReferencia ===
+                          "OTRA_BODEGA" && (
+                            <p className="text-xs text-gray-500">
+                              Disponible en:{" "}
+                              {costosReferenciaPorProducto[selectedProductoId]
+                                ?.nombreBodegaReferencia ?? "otra bodega"}
+                            </p>
+                          )}
+                      </div>
                     )}
+
+                    {selectedProductoId &&
+                      formData.idCliente &&
+                      costoReferenciaProductoSeleccionado === 0 && (
+                        <p className="text-xs text-gray-500">
+                          Sin costo ref. disponible para este producto
+                        </p>
+                      )}
                   </div>
 
                   <div className="flex items-end">
@@ -2408,33 +2408,14 @@ export default function Cotizaciones() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="bodegaEdit">Bodega *</Label>
-                    <Select
-                      value={formData.idBodega}
-                      onValueChange={(value: string) => {
-                        const bodegaSeleccionada = bodegasDisponibles.find(
-                          (bodega) => String(bodega.id) === value
-                        );
-
-                        setFormData({
-                          ...formData,
-                          idBodega: value,
-                          bodega: bodegaSeleccionada?.nombre ?? "",
-                        });
-                      }}
-                    >
-                      <SelectTrigger id="bodegaEdit" className={fieldClass}>
-                        <SelectValue placeholder="Selecciona una bodega" />
-                      </SelectTrigger>
-
-                      <SelectContent>
-                        {bodegasDisponibles.map((bodega) => (
-                          <SelectItem key={bodega.id} value={String(bodega.id)}>
-                            {bodega.nombre}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label htmlFor="bodegaEdit">Bodega del cliente</Label>
+                    <Input
+                      id="bodegaEdit"
+                      value={formData.bodega || "Sin bodega"}
+                      readOnly
+                      disabled
+                      className={readonlyFieldClass}
+                    />
                   </div>
 
                   <div className="space-y-2">
@@ -2521,22 +2502,46 @@ export default function Cotizaciones() {
                         type="number"
                         value={precioProducto}
                         onChange={(e) => setPrecioProducto(e.target.value)}
-                        min={
-                          precioMinimoProductoSeleccionado > 0
-                            ? precioMinimoProductoSeleccionado
-                            : 0
-                        }
+                        min={0}
                         step="0"
                         placeholder="0.00"
-                        className={numberFieldClass}
+                        className={`${numberFieldClass} ${precioProductoMenorCostoRef
+                          ? "border-red-500 focus-visible:border-red-500"
+                          : ""
+                          }`}
                       />
 
-                      {precioMinimoProductoSeleccionado > 0 && (
-                        <p className="text-xs text-amber-600">
-                          Mínimo permitido:{" "}
-                          {formatMoney(precioMinimoProductoSeleccionado)}
-                        </p>
+                      {costoReferenciaProductoSeleccionado > 0 && (
+                        <div className="space-y-1">
+                          <p
+                            className={`text-xs ${precioProductoMenorCostoRef ? "text-red-600" : "text-amber-600"
+                              }`}
+                          >
+                            {costosReferenciaPorProducto[selectedProductoId]?.origenReferencia ===
+                              "OTRA_BODEGA"
+                              ? "Costo ref. global:"
+                              : "Costo ref.:"}{" "}
+                            {formatMoney(costoReferenciaProductoSeleccionado)}
+                          </p>
+
+                          {costosReferenciaPorProducto[selectedProductoId]?.origenReferencia ===
+                            "OTRA_BODEGA" && (
+                              <p className="text-xs text-gray-500">
+                                Disponible en:{" "}
+                                {costosReferenciaPorProducto[selectedProductoId]
+                                  ?.nombreBodegaReferencia ?? "otra bodega"}
+                              </p>
+                            )}
+                        </div>
                       )}
+
+                      {selectedProductoId &&
+                        formData.idCliente &&
+                        costoReferenciaProductoSeleccionado === 0 && (
+                          <p className="text-xs text-gray-500">
+                            Sin costo ref. disponible para este producto
+                          </p>
+                        )}
                     </div>
 
                     <div className="flex items-end">
@@ -2591,15 +2596,12 @@ export default function Cotizaciones() {
                             <TableCell className="text-right">
                               <Input
                                 type="number"
-                                min={getPrecioMinimoProducto(item.producto.id)}
-                                value={item.precio}
-                                onChange={(e) =>
-                                  handleActualizarPrecioProducto(
-                                    item.producto.id,
-                                    e.target.value
-                                  )
-                                }
-                                className="ml-auto h-9 w-36 text-right"
+                                min={0}
+                                className={`ml-auto h-9 w-36 text-right ${item.costoReferencia &&
+                                  Number(item.precio) < Number(item.costoReferencia)
+                                  ? "border-red-500"
+                                  : ""
+                                  }`}
                               />
                             </TableCell>
 

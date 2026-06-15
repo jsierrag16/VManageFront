@@ -4,6 +4,7 @@ export type ClienteCotizacion = {
   email: string;
   tipoDocumento: string;
   numeroDocumento: string;
+  idBodega: number;
   telefono: string;
   direccion: string;
   ciudad: string;
@@ -39,4 +40,7 @@ export type ProductoOrdenCotizacion = {
   precio: number;
   subtotal: number;
   idIva?: number;
+  costoReferencia?: number | null;
+  loteReferencia?: string | null;
+  cantidadDisponibleReferencia?: number;
 };

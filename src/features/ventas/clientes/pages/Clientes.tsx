@@ -44,6 +44,7 @@ import {
   mapFormToClientePayload,
   mapTiposCliente,
   mapTiposDocumento,
+  mapBodegas,
 } from "../services/clientes.mapper";
 import type {
   ClienteUI,
@@ -51,6 +52,7 @@ import type {
   TipoDocumentoOption,
   MunicipioOption,
   DepartamentoOption,
+  BodegaOption,
 } from "../types/clientes.types";
 import {
   useNavigate,
@@ -85,8 +87,10 @@ export default function Clientes() {
   const [tiposCliente, setTiposCliente] = useState<TipoClienteOption[]>([]);
   const [municipios, setMunicipios] = useState<MunicipioOption[]>([]);
   const [departamentos, setDepartamentos] = useState<DepartamentoOption[]>([]);
+  const [bodegas, setBodegas] = useState<BodegaOption[]>([]);
   const [formDepartamentoId, setFormDepartamentoId] = useState("");
   const [isLoadingMunicipios, setIsLoadingMunicipios] = useState(false);
+  const { selectedBodegaId } = useOutletContext<AppOutletContext>();
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
@@ -107,6 +111,7 @@ export default function Clientes() {
   const [formDireccion, setFormDireccion] = useState("");
   const [formMunicipioId, setFormMunicipioId] = useState("");
   const [formTipoClienteId, setFormTipoClienteId] = useState("");
+  const [formBodegaId, setFormBodegaId] = useState("");
 
   // -------------------------
   // Cliente seleccionado por URL
@@ -138,6 +143,7 @@ export default function Clientes() {
     direccion: "",
     municipio: "",
     tipoCliente: "",
+    bodega: "",
   });
 
   const [touched, setTouched] = useState({
@@ -149,10 +155,16 @@ export default function Clientes() {
     direccion: false,
     municipio: false,
     tipoCliente: false,
+    bodega: false,
   });
 
   const validateTipoDoc = (value: string) => {
     if (!value) return "El tipo de documento es requerido";
+    return "";
+  };
+
+  const validateBodega = (value: string) => {
+    if (!value) return "La bodega es requerida";
     return "";
   };
 
@@ -219,6 +231,15 @@ export default function Clientes() {
     setFormTipoDocId(value);
     if (touched.tipoDoc) {
       setErrors((prev) => ({ ...prev, tipoDoc: validateTipoDoc(value) }));
+    }
+  };
+
+  const handleBodegaChange = (value: string) => {
+    setFormBodegaId(value);
+    setTouched((prev) => ({ ...prev, bodega: true }));
+
+    if (touched.bodega) {
+      setErrors((prev) => ({ ...prev, bodega: validateBodega(value) }));
     }
   };
 
@@ -315,23 +336,31 @@ export default function Clientes() {
   // -------------------------
   // Carga de datos
   // -------------------------
+  const getSelectedBodegaParam = useCallback(() => {
+    const id = Number(selectedBodegaId);
+
+    return Number.isFinite(id) && id > 0 ? id : undefined;
+  }, [selectedBodegaId]);
+
   const loadClientes = useCallback(async () => {
     try {
       setLoading(true);
 
       const data = await clientesService.getAll({
-        q: searchTerm || undefined,
+        q: searchTerm,
         incluirInactivos: true,
+        id_bodega: getSelectedBodegaParam(),
       });
 
       setClientes(data.map(mapClienteApiToUi));
     } catch (error) {
-      console.error(error);
+      console.error("Error cargando clientes:", error);
       toast.error("No se pudieron cargar los clientes");
+      setClientes([]);
     } finally {
       setLoading(false);
     }
-  }, [searchTerm]);
+  }, [searchTerm, getSelectedBodegaParam]);
 
   const loadMeta = useCallback(async () => {
     try {
@@ -345,6 +374,7 @@ export default function Clientes() {
 
         setTiposDocumento(mapTiposDocumento(meta.tiposDocumento || []));
         setTiposCliente(mapTiposCliente(meta.tiposCliente || []));
+        setBodegas(mapBodegas(meta.bodegas || []));
       } else {
         console.error(metaResult.reason);
         toast.error("No se pudieron cargar los catálogos de clientes");
@@ -364,8 +394,11 @@ export default function Clientes() {
 
   useEffect(() => {
     loadMeta();
+  }, [loadMeta]);
+
+  useEffect(() => {
     loadClientes();
-  }, [loadMeta, loadClientes]);
+  }, [loadClientes]);
 
   useEffect(() => {
     if (!formDepartamentoId) {
@@ -426,7 +459,7 @@ export default function Clientes() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, estadoFilter]);
+  }, [searchTerm, estadoFilter, selectedBodegaId]);
 
   // -------------------------
   // Reset crear
@@ -444,6 +477,7 @@ export default function Clientes() {
     setFormDepartamentoId("");
     setMunicipios([]);
     setFormTipoClienteId("");
+    setFormBodegaId("");
 
     setErrors({
       tipoDoc: "",
@@ -453,6 +487,7 @@ export default function Clientes() {
       telefono: "",
       direccion: "",
       municipio: "",
+      bodega: "",
       tipoCliente: "",
     });
 
@@ -464,6 +499,7 @@ export default function Clientes() {
       telefono: false,
       direccion: false,
       municipio: false,
+      bodega: false,
       tipoCliente: false,
     });
   }, [isCrear]);
@@ -484,6 +520,7 @@ export default function Clientes() {
     setFormMunicipioId(String(clienteSeleccionado.idMunicipio));
     setFormDepartamentoId(String(clienteSeleccionado.idDepartamento || ""));
     setFormTipoClienteId(String(clienteSeleccionado.idTipoCliente));
+    setFormBodegaId(String(clienteSeleccionado.idBodega || ""));
 
     setErrors({
       tipoDoc: "",
@@ -493,6 +530,7 @@ export default function Clientes() {
       telefono: "",
       direccion: "",
       municipio: "",
+      bodega: "",
       tipoCliente: "",
     });
 
@@ -505,6 +543,7 @@ export default function Clientes() {
       direccion: false,
       municipio: false,
       tipoCliente: false,
+      bodega: false,
     });
   }, [isEditar, clienteSeleccionado]);
 
@@ -545,6 +584,7 @@ export default function Clientes() {
       direccion: validateDireccion(formDireccion),
       municipio: validateMunicipio(formMunicipioId),
       tipoCliente: validateTipoCliente(formTipoClienteId),
+      bodega: validateBodega(formBodegaId),
     };
 
     setErrors(nextErrors);
@@ -557,6 +597,7 @@ export default function Clientes() {
       direccion: true,
       municipio: true,
       tipoCliente: true,
+      bodega: true,
     });
 
     const hasErrors = Object.values(nextErrors).some(Boolean);
@@ -591,6 +632,7 @@ export default function Clientes() {
         idMunicipio: Number(formMunicipioId),
         idTipoDocumento: Number(formTipoDocId),
         estado: true,
+        idBodega: Number(formBodegaId),
       });
 
       await clientesService.create(payload);
@@ -621,6 +663,7 @@ export default function Clientes() {
         idMunicipio: Number(formMunicipioId),
         idTipoDocumento: Number(formTipoDocId),
         estado: clienteSeleccionado.estado === "Activo",
+        idBodega: Number(formBodegaId),
       });
 
       await clientesService.update(clienteSeleccionado.id, payload);
@@ -829,6 +872,39 @@ export default function Clientes() {
           )}
         </div>
 
+        <div>
+          <Label htmlFor={`${prefix}-bodega`}>Bodega principal *</Label>
+          <Select
+            value={formBodegaId}
+            onValueChange={handleBodegaChange}
+          >
+            <SelectTrigger
+              id={`${prefix}-bodega`}
+              className={errors.bodega && touched.bodega ? "border-red-500" : ""}
+            >
+              <SelectValue placeholder="Selecciona la bodega principal" />
+            </SelectTrigger>
+
+            <SelectContent>
+              {bodegas.length === 0 ? (
+                <div className="px-3 py-2 text-sm text-gray-500">
+                  No hay bodegas disponibles
+                </div>
+              ) : (
+                bodegas.map((bodega) => (
+                  <SelectItem key={bodega.id} value={String(bodega.id)}>
+                    {bodega.nombre}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+
+          {errors.bodega && touched.bodega && (
+            <p className="mt-1 text-sm text-red-500">{errors.bodega}</p>
+          )}
+        </div>
+
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <Label htmlFor={`${prefix}-departamento`}>Departamento *</Label>
@@ -1004,6 +1080,7 @@ export default function Clientes() {
                 <TableHead>Email</TableHead>
                 <TableHead>Teléfono</TableHead>
                 <TableHead>Tipo Cliente</TableHead>
+                <TableHead>Bodega</TableHead>
                 <TableHead className="text-center">Estado</TableHead>
                 <TableHead className="text-center w-32">Acciones</TableHead>
               </TableRow>
@@ -1012,7 +1089,7 @@ export default function Clientes() {
               {loading ? (
                 <TableRow>
                   <TableCell
-                    colSpan={9}
+                    colSpan={10}
                     className="text-center py-8 text-gray-500"
                   >
                     Cargando clientes...
@@ -1062,6 +1139,14 @@ export default function Clientes() {
                         className="bg-purple-50 text-purple-700 border-purple-200"
                       >
                         {cliente.tipoCliente}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className="bg-blue-50 text-blue-700 border-blue-200"
+                      >
+                        {cliente.bodega || "Sin bodega"}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-center">
@@ -1231,6 +1316,13 @@ export default function Clientes() {
                       {clienteSeleccionado.tipoCliente || "-"}
                     </Badge>
                   </div>
+                </div>
+
+                <div>
+                  <p className="text-sm text-gray-600">Bodega principal</p>
+                  <p className="font-medium">
+                    {clienteSeleccionado.bodega || "Sin bodega"}
+                  </p>
                 </div>
 
                 <div>
