@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
   useLocation,
   useNavigate,
@@ -6,7 +6,9 @@ import {
   useParams,
 } from "react-router-dom";
 import {
+  Ban,
   CheckCircle,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   DollarSign,
@@ -16,6 +18,7 @@ import {
   TrendingUp,
   Building2,
 } from "lucide-react";
+import { useAuth } from "@/shared/context/AuthContext";
 import { Badge } from "@/shared/components/ui/badge";
 import { toast } from "sonner";
 
@@ -49,10 +52,11 @@ import {
 } from "@/shared/components/ui/select";
 
 import type { AppOutletContext } from "@/layouts/MainLayout";
-import { clientesService } from "@/features/ventas/clientes/services/clientes.service";
-import type { ClienteApi } from "@/features/ventas/clientes/types/clientes.types";
 import {
   pagosAbonosService,
+  type ClientePagoApi,
+  type RemisionSnapshotPagoApi,
+  type PagoAbonoApi,
   type FacturaApi,
   type MetodoPagoApi,
   type RemisionPendienteApi,
@@ -61,7 +65,13 @@ import {
 const LIST_PATH = "/app/pagos-abonos";
 
 function today() {
-  return new Date().toISOString().split("T")[0];
+  const date = new Date();
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
 function normalizeText(value?: string | null) {
@@ -79,10 +89,11 @@ function onlyDate(value?: string | null) {
 
 function formatMoney(value?: number | string | null) {
   const numberValue = Number(value ?? 0);
-  return numberValue.toLocaleString("es-CO", {
+
+  return `COP$${numberValue.toLocaleString("es-CO", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  });
+  })}`;
 }
 
 function extractErrorMessage(error: any) {
@@ -105,8 +116,27 @@ function extractErrorMessage(error: any) {
   return "Ocurrió un error en la operación";
 }
 
-function getFacturaBodegaIds(factura: FacturaApi) {
-  const ids = (factura.remision_venta ?? [])
+function getRemisionesSnapshotData(
+  factura: FacturaApi,
+): RemisionSnapshotPagoApi[] {
+  const data = factura.remisiones_snapshot_data;
+
+  if (Array.isArray(data)) return data;
+
+  if (typeof data === "string") {
+    try {
+      const parsed = JSON.parse(data);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
+}
+
+function getPagoBodegaIds(factura: FacturaApi) {
+  const idsRemisionesVivas = (factura.remision_venta ?? [])
     .map(
       (remision) =>
         remision?.orden_venta?.bodega?.id_bodega ??
@@ -115,23 +145,60 @@ function getFacturaBodegaIds(factura: FacturaApi) {
     .filter((id): id is number => Number.isFinite(Number(id)))
     .map(Number);
 
-  return Array.from(new Set(ids));
+  const idsSnapshot = getRemisionesSnapshotData(factura)
+    .map((remision) => remision.id_bodega)
+    .filter((id): id is number => Number.isFinite(Number(id)))
+    .map(Number);
+
+  const idBodegaDirecta = Number(factura.id_bodega ?? 0);
+
+  return Array.from(
+    new Set([
+      ...idsRemisionesVivas,
+      ...idsSnapshot,
+      ...(idBodegaDirecta > 0 ? [idBodegaDirecta] : []),
+    ]),
+  );
 }
 
-function getFacturaBodegaNames(factura: FacturaApi) {
-  const names = (factura.remision_venta ?? [])
-    .map((remision) => remision?.orden_venta?.bodega?.nombre_bodega)
-    .filter(Boolean) as string[];
+function getRemisionesDetallePago(factura: FacturaApi) {
+  const remisionesVivas = factura.remision_venta ?? [];
 
-  return Array.from(new Set(names));
-}
+  if (remisionesVivas.length > 0) {
+    return remisionesVivas.map((remision) => ({
+      id: remision.id_remision_venta,
+      codigoRemision:
+        remision.codigo_remision_venta ??
+        `RV-${String(remision.id_remision_venta).padStart(4, "0")}`,
+      codigoOrden:
+        remision.orden_venta?.codigo_orden_venta ??
+        (remision.orden_venta?.id_orden_venta
+          ? `OV-${String(remision.orden_venta.id_orden_venta).padStart(4, "0")}`
+          : "-"),
+      fecha: remision.fecha_creacion,
+      fechaVencimiento: remision.fecha_vencimiento,
+      bodega: remision.orden_venta?.bodega?.nombre_bodega ?? "-",
+      estado: remision.estado_remision_venta?.nombre_estado ?? "-",
+      total: remision.resumen?.total ?? 0,
+    }));
+  }
 
-function getFacturaBodegaLabel(factura: FacturaApi) {
-  const names = getFacturaBodegaNames(factura);
-
-  if (names.length === 0) return "Sin bodega";
-  if (names.length === 1) return names[0];
-  return "Múltiples bodegas";
+  return getRemisionesSnapshotData(factura).map((remision) => ({
+    id: remision.id_remision_venta,
+    codigoRemision:
+      remision.codigo_remision_venta ??
+      `RV-${String(remision.id_remision_venta).padStart(4, "0")}`,
+    codigoOrden:
+      remision.codigo_orden_venta ??
+      (remision.id_orden_venta
+        ? `OV-${String(remision.id_orden_venta).padStart(4, "0")}`
+        : "-"),
+    fecha: remision.fecha_creacion,
+    fechaVencimiento: remision.fecha_vencimiento,
+    bodega: remision.nombre_bodega ?? "-",
+    estado: remision.estado_remision ?? "-",
+    total: remision.total ?? 0,
+  }));
 }
 
 function facturaMatchesBodega(
@@ -142,7 +209,7 @@ function facturaMatchesBodega(
     return true;
   }
 
-  return getFacturaBodegaIds(factura).includes(Number(selectedBodegaId));
+  return getPagoBodegaIds(factura).includes(Number(selectedBodegaId));
 }
 
 function getEstadoFacturaLabel(factura: FacturaApi) {
@@ -183,6 +250,70 @@ function getFacturaSaldo(factura: FacturaApi) {
   return Number(factura.resumen_pago?.saldo_pendiente ?? 0);
 }
 
+function getPagoRemisiones(factura: FacturaApi) {
+  const remisionesVivas = factura.remision_venta
+    ?.map((remision) => remision.codigo_remision_venta)
+    .filter(Boolean)
+    .join(", ");
+
+  if (remisionesVivas) return remisionesVivas;
+
+  const remisionesSnapshot = getRemisionesSnapshotData(factura)
+    .map((remision) => remision.codigo_remision_venta)
+    .filter(Boolean)
+    .join(", ");
+
+  return remisionesSnapshot || factura.remisiones_snapshot || "-";
+}
+
+function getPagoBodegasLabel(factura: FacturaApi) {
+  const bodegasVivas = (factura.remision_venta ?? [])
+    .map((remision) => remision.orden_venta?.bodega?.nombre_bodega)
+    .filter(Boolean);
+
+  const bodegasSnapshot = getRemisionesSnapshotData(factura)
+    .map((remision) => remision.nombre_bodega)
+    .filter(Boolean);
+
+  const bodegas = Array.from(
+    new Set([
+      ...bodegasVivas,
+      ...bodegasSnapshot,
+      factura.bodega?.nombre_bodega,
+      factura.bodega_snapshot,
+    ].filter(Boolean)),
+  );
+
+  return bodegas.length > 0 ? bodegas.join(", ") : "Sin bodega";
+}
+
+function getUsuarioNombre(
+  usuario?: { nombre?: string | null; apellido?: string | null } | null,
+) {
+  const nombre = `${usuario?.nombre ?? ""} ${usuario?.apellido ?? ""}`.trim();
+  return nombre || "—";
+}
+
+function isFacturaAnulada(factura?: FacturaApi | null) {
+  return normalizeText(getEstadoFacturaLabel(factura as FacturaApi)).includes(
+    "anulad",
+  );
+}
+
+function hasAbonosActivos(factura?: FacturaApi | null) {
+  return (factura?.pagos_abonos ?? []).some((abono) => abono.estado);
+}
+
+function formatFechaVisual(fecha?: string | null) {
+  if (!fecha) return "Sin fecha";
+
+  const [year, month, day] = fecha.split("-");
+
+  if (!year || !month || !day) return fecha;
+
+  return `${Number(day)}/${Number(month)}/${year}`;
+}
+
 export default function PagosAbonos() {
   const { selectedBodegaId, selectedBodegaNombre } =
     useOutletContext<AppOutletContext>();
@@ -190,6 +321,9 @@ export default function PagosAbonos() {
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams<{ id: string }>();
+
+  const { tienePermiso } = useAuth();
+  const canAnularPagos = tienePermiso("ventas", "pagos", "anular");
 
   const isCrear = location.pathname.endsWith("/crear");
   const isVer = location.pathname.endsWith("/ver");
@@ -202,13 +336,16 @@ export default function PagosAbonos() {
   const [loadingRemisiones, setLoadingRemisiones] = useState(false);
   const [savingFactura, setSavingFactura] = useState(false);
   const [savingAbono, setSavingAbono] = useState(false);
+  const [savingAnulacion, setSavingAnulacion] = useState(false);
+  const [abonoAAnular, setAbonoAAnular] = useState<PagoAbonoApi | null>(null);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [expandedPagos, setExpandedPagos] = useState<Record<number, boolean>>({});
   const itemsPerPage = 10;
 
   const [facturas, setFacturas] = useState<FacturaApi[]>([]);
-  const [clientes, setClientes] = useState<ClienteApi[]>([]);
+  const [clientes, setClientes] = useState<ClientePagoApi[]>([]);
   const [metodosPago, setMetodosPago] = useState<MetodoPagoApi[]>([]);
   const [remisionesPendientes, setRemisionesPendientes] = useState<
     RemisionPendienteApi[]
@@ -234,16 +371,14 @@ export default function PagosAbonos() {
     try {
       const [facturasRes, clientesRes, catalogosRes] = await Promise.all([
         pagosAbonosService.getFacturas(selectedBodegaId ?? undefined),
-        clientesService.getAll({ incluirInactivos: false }),
+        pagosAbonosService.getClientesConRemisionesPendientes(
+          selectedBodegaId ?? undefined,
+        ),
         pagosAbonosService.getCatalogos(),
       ]);
 
       setFacturas(Array.isArray(facturasRes) ? facturasRes : []);
-      setClientes(
-        Array.isArray(clientesRes)
-          ? clientesRes.filter((cliente) => cliente.estado)
-          : [],
-      );
+      setClientes(Array.isArray(clientesRes) ? clientesRes : []);
       setMetodosPago(Array.isArray(catalogosRes?.metodos_pago) ? catalogosRes.metodos_pago : []);
 
       setAbonoForm((prev) => ({
@@ -263,15 +398,6 @@ export default function PagosAbonos() {
     void loadInitialData();
   }, [loadInitialData]);
 
-  useEffect(() => {
-    if (!isAnular) return;
-
-    toast.info(
-      "La anulación de facturas todavía no está implementada en backend. Ya te dejé conectado crear, listar y abonar.",
-    );
-    closeToList();
-  }, [isAnular]);
-
   const facturaSeleccionada = useMemo(() => {
     const id = Number(params.id);
     if (!Number.isFinite(id)) return null;
@@ -279,10 +405,11 @@ export default function PagosAbonos() {
   }, [facturas, params.id]);
 
   useEffect(() => {
-    if (!isVer && !isAbonar) return;
+    if (!isVer && !isAbonar && !isAnular) return;
     if (!params.id) return;
 
     const id = Number(params.id);
+
     if (!Number.isFinite(id)) {
       closeToList();
       return;
@@ -291,7 +418,15 @@ export default function PagosAbonos() {
     if (!loading && facturas.length > 0 && !facturaSeleccionada) {
       closeToList();
     }
-  }, [isVer, isAbonar, params.id, facturaSeleccionada, loading, facturas.length]);
+  }, [
+    isVer,
+    isAbonar,
+    isAnular,
+    params.id,
+    facturaSeleccionada,
+    loading,
+    facturas.length,
+  ]);
 
   const facturasFiltradas = useMemo(() => {
     return facturas.filter((factura) => {
@@ -301,14 +436,14 @@ export default function PagosAbonos() {
 
       const q = normalizeText(searchTerm);
 
-      const remisionesText = (factura.remision_venta ?? [])
-        .map((remision) => remision.codigo_remision_venta ?? "")
-        .join(" ");
+      const remisionesText = getPagoRemisiones(factura);
+      const bodegasText = getPagoBodegasLabel(factura);
 
       return (
         normalizeText(factura.codigo_factura).includes(q) ||
         normalizeText(factura.cliente?.nombre_cliente).includes(q) ||
         normalizeText(remisionesText).includes(q) ||
+        normalizeText(bodegasText).includes(q) ||
         normalizeText(getEstadoFacturaLabel(factura)).includes(q)
       );
     });
@@ -389,6 +524,39 @@ export default function PagosAbonos() {
     navigate(`${LIST_PATH}/${factura.id_factura}/abonar`);
   };
 
+  const handleOpenAnularFactura = (factura: FacturaApi) => {
+    navigate(`${LIST_PATH}/${factura.id_factura}/anular`);
+  };
+
+  const handleOpenAnularAbono = (abono: PagoAbonoApi) => {
+    setAbonoAAnular(abono);
+  };
+
+  const handleConfirmarAnularAbono = async () => {
+    if (!abonoAAnular) return;
+
+    if (!canAnularPagos) {
+      toast.error("No tienes permiso para anular abonos");
+      return;
+    }
+
+    setSavingAnulacion(true);
+
+    try {
+      await pagosAbonosService.anularAbono(abonoAAnular.id_pago);
+
+      toast.success("Abono anulado correctamente");
+
+      setAbonoAAnular(null);
+
+      await loadInitialData();
+    } catch (error) {
+      toast.error(extractErrorMessage(error));
+    } finally {
+      setSavingAnulacion(false);
+    }
+  };
+
   const handleClienteChange = async (value: string) => {
     setCreateForm((prev) => ({
       ...prev,
@@ -442,6 +610,11 @@ export default function PagosAbonos() {
       return;
     }
 
+    if (!createForm.fechaVencimiento) {
+      toast.error("La fecha de vencimiento es obligatoria");
+      return;
+    }
+
     setSavingFactura(true);
 
     try {
@@ -449,7 +622,7 @@ export default function PagosAbonos() {
         id_cliente: Number(createForm.idCliente),
         id_remisiones: createForm.idRemisiones,
         fecha_factura: createForm.fechaFactura,
-        fecha_vencimiento: createForm.fechaVencimiento || undefined,
+        fecha_vencimiento: createForm.fechaVencimiento,
         nota: createForm.nota.trim() || undefined,
       });
 
@@ -504,6 +677,61 @@ export default function PagosAbonos() {
     }
   };
 
+  const handleAnularPago = async () => {
+    if (!facturaSeleccionada) return;
+
+    if (!canAnularPagos) {
+      toast.error("No tienes permiso para anular facturas");
+      return;
+    }
+
+    if (hasAbonosActivos(facturaSeleccionada)) {
+      toast.error(
+        "No puedes anular una factura con abonos activos. Primero anula los abonos registrados.",
+      );
+      return;
+    }
+
+    setSavingAnulacion(true);
+
+    try {
+      await pagosAbonosService.anularFactura(facturaSeleccionada.id_factura);
+      toast.success("Factura anulada correctamente");
+      closeToList();
+      await loadInitialData();
+    } catch (error) {
+      toast.error(extractErrorMessage(error));
+    } finally {
+      setSavingAnulacion(false);
+    }
+  };
+
+  const togglePagoDetalle = (idFactura: number) => {
+    setExpandedPagos((prev) => ({
+      ...prev,
+      [idFactura]: !prev[idFactura],
+    }));
+  };
+
+  const clienteSeleccionado = useMemo(
+    () =>
+      clientes.find(
+        (cliente) => String(cliente.id_cliente) === String(createForm.idCliente),
+      ) ?? null,
+    [clientes, createForm.idCliente],
+  );
+
+  function getDocumentoCliente(cliente: ClientePagoApi | null) {
+    if (!cliente) return "Selecciona un cliente";
+
+    const tipoDocumento =
+      cliente.tipo_documento?.nombre_doc ?? "Documento";
+
+    return cliente.num_documento
+      ? `${tipoDocumento}: ${cliente.num_documento}`
+      : "Sin documento";
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -528,7 +756,7 @@ export default function PagosAbonos() {
             <div>
               <p className="text-yellow-100 text-sm">Total facturado</p>
               <p className="text-3xl mt-2 font-semibold text-white">
-                ${formatMoney(stats.totalFacturado)}
+                {formatMoney(stats.totalFacturado)}
               </p>
             </div>
             <TrendingUp className="text-yellow-200" size={40} />
@@ -540,7 +768,7 @@ export default function PagosAbonos() {
             <div>
               <p className="text-green-100 text-sm">Total abonado</p>
               <p className="text-3xl mt-2 font-semibold text-white">
-                ${formatMoney(stats.totalAbonado)}
+                {formatMoney(stats.totalAbonado)}
               </p>
             </div>
             <CheckCircle className="text-green-200" size={40} />
@@ -552,7 +780,7 @@ export default function PagosAbonos() {
             <div>
               <p className="text-blue-100 text-sm">Saldo pendiente</p>
               <p className="text-3xl mt-2 font-semibold text-white">
-                ${formatMoney(stats.saldoPendiente)}
+                {formatMoney(stats.saldoPendiente)}
               </p>
             </div>
 
@@ -570,7 +798,7 @@ export default function PagosAbonos() {
             <Input
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar por factura, cliente, remisión o estado..."
+              placeholder="Buscar por pago, cliente, remisión o estado..."
               className="pl-10 w-full"
             />
           </div>
@@ -590,88 +818,218 @@ export default function PagosAbonos() {
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50">
-                <TableHead className="w-16">#</TableHead>
-                <TableHead>Factura</TableHead>
+                <TableHead>#</TableHead>
+                <TableHead>Pago</TableHead>
                 <TableHead>Cliente</TableHead>
-                <TableHead>Remisiones</TableHead>
-                <TableHead>Bodega</TableHead>
-                <TableHead>Fecha</TableHead>
-                <TableHead>Total</TableHead>
-                <TableHead>Saldo</TableHead>
+                <TableHead>Documento / NIT</TableHead>
+                <TableHead className="text-center">Registro / Fecha</TableHead>
+                <TableHead className="text-center">Vencimiento</TableHead>
                 <TableHead className="text-center">Estado</TableHead>
                 <TableHead className="text-center">Acciones</TableHead>
+                <TableHead className="w-12 text-center"></TableHead>
               </TableRow>
             </TableHeader>
 
             <TableBody>
               {!loading && currentFacturas.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="py-10 text-center text-gray-500">
+                  <TableCell colSpan={9} className="py-10 text-center text-gray-500">
                     No se encontraron pagos y abonos
                   </TableCell>
                 </TableRow>
               ) : (
-                currentFacturas.map((factura, index) => (
-                  <TableRow key={factura.id_factura} className="hover:bg-gray-50">
-                    <TableCell>{startIndex + index + 1}</TableCell>
-                    <TableCell className="font-medium">
-                      {factura.codigo_factura}
-                    </TableCell>
-                    <TableCell>
-                      {factura.cliente?.nombre_cliente ?? "Sin cliente"}
-                    </TableCell>
-                    <TableCell>
-                      {(factura.remision_venta ?? [])
-                        .map((remision) => remision.codigo_remision_venta)
-                        .filter(Boolean)
-                        .join(", ") || "-"}
-                    </TableCell>
-                    <TableCell>{getFacturaBodegaLabel(factura)}</TableCell>
-                    <TableCell>{onlyDate(factura.fecha_factura)}</TableCell>
-                    <TableCell>${formatMoney(getFacturaTotal(factura))}</TableCell>
-                    <TableCell
-                      className={
-                        getFacturaSaldo(factura) > 0 ? "text-red-600 font-medium" : ""
-                      }
-                    >
-                      ${formatMoney(getFacturaSaldo(factura))}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <span
-                        className={`inline-flex items-center rounded-md px-3 h-7 text-sm border ${getEstadoFacturaBadge(
-                          getEstadoFacturaLabel(factura),
-                        )}`}
-                      >
-                        {getEstadoFacturaLabel(factura)}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleOpenView(factura)}
-                          className="hover:bg-blue-50"
-                          title="Ver detalle"
-                        >
-                          <Eye size={16} className="text-blue-600" />
-                        </Button>
+                currentFacturas.map((factura, index) => {
+                  const expanded = Boolean(expandedPagos[factura.id_factura]);
 
-                        {getFacturaSaldo(factura) > 0 && (
+                  return (
+                    <Fragment key={factura.id_factura}>
+                      <TableRow className="hover:bg-gray-50">
+                        <TableCell>{startIndex + index + 1}</TableCell>
+
+                        <TableCell className="font-medium">
+                          {factura.codigo_factura}
+                        </TableCell>
+
+                        <TableCell>
+                          {factura.cliente?.nombre_cliente ?? "Sin cliente"}
+                        </TableCell>
+
+                        <TableCell>
+                          {factura.cliente?.num_documento
+                            ? `NIT: ${factura.cliente.num_documento}`
+                            : "-"}
+                        </TableCell>
+
+                        <TableCell className="text-center">
+                          <span>
+                            {getUsuarioNombre(factura.usuario_creador)} - {onlyDate(factura.fecha_factura)}
+                          </span>
+                        </TableCell>
+
+                        <TableCell className="text-center">{onlyDate(factura.fecha_vencimiento)}</TableCell>
+
+                        <TableCell className="text-center">
+                          <span
+                            className={`inline-flex items-center rounded-md px-3 h-7 text-sm border ${getEstadoFacturaBadge(
+                              getEstadoFacturaLabel(factura),
+                            )}`}
+                          >
+                            {getEstadoFacturaLabel(factura)}
+                          </span>
+                        </TableCell>
+
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleOpenView(factura)}
+                              className="hover:bg-blue-50"
+                              title="Ver pago"
+                            >
+                              <Eye size={16} className="text-blue-600" />
+                            </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleOpenAbono(factura)}
+                              disabled={getFacturaSaldo(factura) <= 0 || isFacturaAnulada(factura)}
+                              className="hover:bg-green-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                              title={
+                                getFacturaSaldo(factura) <= 0
+                                  ? "Pago completado"
+                                  : isFacturaAnulada(factura)
+                                    ? "Pago anulado"
+                                    : "Registrar abono"
+                              }
+                            >
+                              <DollarSign
+                                size={16}
+                                className={
+                                  getFacturaSaldo(factura) <= 0 || isFacturaAnulada(factura)
+                                    ? "text-gray-400"
+                                    : "text-green-600"
+                                }
+                              />
+                            </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleOpenAnularFactura(factura)}
+                              disabled={
+                                !canAnularPagos ||
+                                isFacturaAnulada(factura) ||
+                                hasAbonosActivos(factura)
+                              }
+                              className="hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                              title={
+                                !canAnularPagos
+                                  ? "No tienes permiso para anular"
+                                  : isFacturaAnulada(factura)
+                                    ? "Pago ya anulado"
+                                    : hasAbonosActivos(factura)
+                                      ? "Primero debes anular los abonos"
+                                      : "Anular pago"
+                              }
+                            >
+                              <Ban
+                                size={16}
+                                className={
+                                  !canAnularPagos ||
+                                    isFacturaAnulada(factura) ||
+                                    hasAbonosActivos(factura)
+                                    ? "text-gray-400"
+                                    : "text-red-600"
+                                }
+                              />
+                            </Button>
+                          </div>
+                        </TableCell>
+
+                        <TableCell className="text-center">
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleOpenAbono(factura)}
-                            className="hover:bg-green-50"
-                            title="Agregar abono"
+                            onClick={() => togglePagoDetalle(factura.id_factura)}
+                            className="hover:bg-gray-100"
+                            title={expanded ? "Contraer detalle" : "Ver detalle financiero"}
                           >
-                            <DollarSign size={16} className="text-green-600" />
+                            {expanded ? (
+                              <ChevronDown size={18} className="text-gray-600" />
+                            ) : (
+                              <ChevronRight size={18} className="text-gray-600" />
+                            )}
                           </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
+                        </TableCell>
+                      </TableRow>
+
+                      {expanded && (
+                        <TableRow className="bg-gray-50/70">
+                          <TableCell colSpan={8} className="p-4">
+                            <div className="space-y-4">
+                              <div className="rounded-lg border bg-white p-4">
+                                <div className="flex items-center justify-between mb-3">
+                                  <p className="font-semibold text-gray-900">Remisiones del pago</p>
+                                  <span className="text-xs text-gray-500">
+                                    {getRemisionesDetallePago(factura).length} remisión(es)
+                                  </span>
+                                </div>
+
+                                <div className="rounded-lg border overflow-hidden">
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow className="bg-gray-50">
+                                        <TableHead>Remisión</TableHead>
+                                        <TableHead className="text-right">Valor</TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+
+                                    <TableBody>
+                                      {getRemisionesDetallePago(factura).map((remision) => (
+                                        <TableRow key={remision.id}>
+                                          <TableCell className="font-medium">
+                                            {remision.codigoRemision}
+                                          </TableCell>
+
+                                          <TableCell className="text-right font-semibold">
+                                            {formatMoney(remision.total)}
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                    </TableBody>
+                                  </Table>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="rounded-lg border bg-white p-4">
+                                  <p className="text-sm text-gray-500">Total del pago</p>
+                                  <p className="text-xl font-semibold">
+                                    {formatMoney(getFacturaTotal(factura))}
+                                  </p>
+                                </div>
+
+                                <div className="rounded-lg border bg-white p-4">
+                                  <p className="text-sm text-gray-500">Saldo pendiente</p>
+                                  <p
+                                    className={`text-xl font-semibold ${getFacturaSaldo(factura) > 0
+                                      ? "text-red-600"
+                                      : "text-green-600"
+                                      }`}
+                                  >
+                                    {formatMoney(getFacturaSaldo(factura))}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </Fragment>
+                  );
+                })
               )}
             </TableBody>
           </Table>
@@ -742,85 +1100,113 @@ export default function PagosAbonos() {
         }}
       >
         <DialogContent
-          className="max-w-4xl max-h-[90vh] overflow-y-auto"
+          className="max-w-5xl max-h-[90vh] overflow-y-auto"
           onInteractOutside={(e) => e.preventDefault()}
           aria-describedby="crear-pago-description"
         >
           <DialogHeader>
             <DialogTitle>Crear pago</DialogTitle>
             <DialogDescription id="crear-pago-description">
-              Selecciona un cliente y luego una o varias remisiones de venta
-              aprobadas y pendientes por agregar al pago.
+              Selecciona un cliente y una o varias remisiones entregadas pendientes por agregar al pago.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-5 py-2">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Cliente *</Label>
-                <Select
-                  value={createForm.idCliente || undefined}
-                  onValueChange={handleClienteChange}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona un cliente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clientes.map((cliente) => (
-                      <SelectItem
-                        key={cliente.id_cliente}
-                        value={String(cliente.id_cliente)}
-                      >
-                        {cliente.nombre_cliente} - {cliente.num_documento}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+          <div className="space-y-6 py-2">
+            <div className="rounded-xl bg-gray-50 p-5">
+              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Información general
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    Selecciona el cliente, revisa el documento y define la fecha de vencimiento.
+                  </p>
+                </div>
+
+                <div className="min-w-37.5 rounded-xl border border-blue-100 bg-blue-50 px-4 py-2 text-center">
+                  <p className="text-xs font-medium text-blue-700">Fecha del Pago</p>
+                  <p className="text-base font-bold text-blue-900">
+                    {formatFechaVisual(createForm.fechaFactura)}
+                  </p>
+                </div>
               </div>
 
-              <div className="space-y-2">
-                <Label>Fecha factura *</Label>
-                <Input
-                  type="date"
-                  value={createForm.fechaFactura}
-                  onChange={(e) =>
-                    setCreateForm((prev) => ({
-                      ...prev,
-                      fechaFactura: e.target.value,
-                    }))
-                  }
-                />
-              </div>
+              <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Cliente *</Label>
+                  <Select
+                    value={createForm.idCliente || undefined}
+                    onValueChange={handleClienteChange}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona un cliente" />
+                    </SelectTrigger>
 
-              <div className="space-y-2">
-                <Label>Fecha vencimiento</Label>
-                <Input
-                  type="date"
-                  value={createForm.fechaVencimiento}
-                  onChange={(e) =>
-                    setCreateForm((prev) => ({
-                      ...prev,
-                      fechaVencimiento: e.target.value,
-                    }))
-                  }
-                />
-              </div>
+                    <SelectContent>
+                      {clientes.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-gray-500">
+                          No hay clientes disponibles
+                        </div>
+                      ) : (
+                        clientes.map((cliente) => (
+                          <SelectItem
+                            key={cliente.id_cliente}
+                            value={String(cliente.id_cliente)}
+                          >
+                            {cliente.nombre_cliente}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div className="rounded-lg border bg-gray-50 p-4 text-sm">
-                <p className="text-gray-500">Bodega actual</p>
-                <p className="font-semibold mt-1">
-                  {selectedBodegaNombre || "Todas las bodegas"}
-                </p>
+                <div className="space-y-2">
+                  <Label>Documento / NIT</Label>
+                  <div className="flex h-10 items-center rounded-md border bg-white px-3 text-sm font-medium text-gray-700">
+                    {getDocumentoCliente(clienteSeleccionado)}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Fecha vencimiento *</Label>
+                  <Input
+                    type="date"
+                    value={createForm.fechaVencimiento}
+                    min={createForm.fechaFactura}
+                    onChange={(e) =>
+                      setCreateForm((prev) => ({
+                        ...prev,
+                        fechaVencimiento: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Bodega del filtro actual</Label>
+                  <div className="flex h-10 items-center rounded-md border bg-white px-3 text-sm font-medium text-gray-700">
+                    {selectedBodegaNombre || "Todas las bodegas"}
+                  </div>
+                </div>
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label>Remisiones disponibles *</Label>
+              <div className="flex items-center justify-between gap-3">
+                <Label>Remisiones disponibles *</Label>
 
-              <div className="rounded-lg border max-h-72 overflow-y-auto">
+                {createForm.idCliente && (
+                  <span className="text-xs text-gray-500">
+                    {remisionesPendientes.length} remisión(es) disponible(s)
+                  </span>
+                )}
+              </div>
+
+              <div className="rounded-lg border max-h-72 overflow-y-auto bg-white">
                 {!createForm.idCliente ? (
                   <div className="p-4 text-sm text-gray-500">
-                    Selecciona primero un cliente.
+                    Selecciona primero un cliente para consultar sus remisiones pendientes.
                   </div>
                 ) : loadingRemisiones ? (
                   <div className="p-4 text-sm text-gray-500">
@@ -828,8 +1214,7 @@ export default function PagosAbonos() {
                   </div>
                 ) : remisionesPendientes.length === 0 ? (
                   <div className="p-4 text-sm text-gray-500">
-                    Este cliente no tiene remisiones aprobadas pendientes por
-                    agregar.
+                    Este cliente no tiene remisiones entregadas pendientes por agregar al pago.
                   </div>
                 ) : (
                   <div className="divide-y">
@@ -853,31 +1238,45 @@ export default function PagosAbonos() {
                             />
 
                             <div className="space-y-1">
-                              <p className="font-medium text-sm">
+                              <p className="font-semibold text-sm">
                                 {remision.codigo_remision_venta ??
                                   `RV-${remision.id_remision_venta}`}
                               </p>
-                              <p className="text-xs text-gray-500">
-                                Orden:{" "}
-                                {remision.orden_venta?.codigo_orden_venta ?? "-"}
-                              </p>
-                              <p className="text-xs text-gray-500">
-                                Fecha: {onlyDate(remision.fecha_creacion)}
-                              </p>
-                              <p className="text-xs text-gray-500">
-                                Estado:{" "}
-                                {remision.estado_remision_venta?.nombre_estado ??
-                                  "-"}
-                              </p>
-                              <p className="text-xs text-gray-500">
-                                Bodega:{" "}
-                                {remision.orden_venta?.bodega?.nombre_bodega ?? "-"}
-                              </p>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-xs text-gray-500">
+                                <p>
+                                  Orden:{" "}
+                                  <span className="font-medium text-gray-700">
+                                    {remision.orden_venta?.codigo_orden_venta ?? "-"}
+                                  </span>
+                                </p>
+
+                                <p>
+                                  Fecha:{" "}
+                                  <span className="font-medium text-gray-700">
+                                    {onlyDate(remision.fecha_creacion)}
+                                  </span>
+                                </p>
+
+                                <p>
+                                  Bodega:{" "}
+                                  <span className="font-medium text-gray-700">
+                                    {remision.orden_venta?.bodega?.nombre_bodega ?? "-"}
+                                  </span>
+                                </p>
+
+                                <p>
+                                  Estado:{" "}
+                                  <span className="font-medium text-gray-700">
+                                    {remision.estado_remision_venta?.nombre_estado ?? "-"}
+                                  </span>
+                                </p>
+                              </div>
                             </div>
                           </div>
 
                           <div className="text-sm font-semibold text-green-700 whitespace-nowrap">
-                            ${formatMoney(remision.resumen?.total ?? 0)}
+                            {formatMoney(remision.resumen?.total ?? 0)}
                           </div>
                         </label>
                       );
@@ -887,42 +1286,48 @@ export default function PagosAbonos() {
               </div>
             </div>
 
-            <div className="rounded-lg border bg-gray-50 p-4 space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Remisiones seleccionadas</span>
-                <span className="font-medium">{createForm.idRemisiones.length}</span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Nota</Label>
+                <Textarea
+                  value={createForm.nota}
+                  onChange={(e) =>
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      nota: e.target.value,
+                    }))
+                  }
+                  placeholder="Observaciones del pago..."
+                  className="min-h-26.25"
+                />
               </div>
 
-              <div className="flex justify-between text-base border-t pt-2">
-                <span className="font-medium text-gray-700">Total a cobrar</span>
-                <span className="font-bold text-green-700">
-                  ${formatMoney(totalSeleccionado)}
-                </span>
-              </div>
-            </div>
+              <div className="rounded-lg border bg-gray-50 p-4 space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Remisiones seleccionadas</span>
+                  <span className="font-semibold">
+                    {createForm.idRemisiones.length}
+                  </span>
+                </div>
 
-            <div className="space-y-2">
-              <Label>Nota</Label>
-              <Textarea
-                value={createForm.nota}
-                onChange={(e) =>
-                  setCreateForm((prev) => ({
-                    ...prev,
-                    nota: e.target.value,
-                  }))
-                }
-                placeholder="Observaciones del pago..."
-              />
+                <div className="flex justify-between text-base border-t pt-3">
+                  <span className="font-medium text-gray-700">Total del pago</span>
+                  <span className="font-bold text-green-700">
+                    {formatMoney(totalSeleccionado)}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-0">
             <Button
               variant="outline"
               onClick={() => {
                 resetCreateForm();
                 closeToList();
               }}
+              disabled={savingFactura}
             >
               Cancelar
             </Button>
@@ -930,7 +1335,12 @@ export default function PagosAbonos() {
             <Button
               onClick={handleCreateFactura}
               className="bg-blue-600 hover:bg-blue-700"
-              disabled={savingFactura}
+              disabled={
+                savingFactura ||
+                !createForm.idCliente ||
+                createForm.idRemisiones.length === 0 ||
+                !createForm.fechaVencimiento
+              }
             >
               {savingFactura ? "Guardando..." : "Crear pago"}
             </Button>
@@ -954,7 +1364,7 @@ export default function PagosAbonos() {
               Detalle de pago - {facturaSeleccionada?.codigo_factura ?? ""}
             </DialogTitle>
             <DialogDescription id="ver-pago-description" className="sr-only">
-              Detalle completo de la factura y de sus abonos.
+              Detalle completo del pago y de sus abonos.
             </DialogDescription>
           </DialogHeader>
 
@@ -982,7 +1392,7 @@ export default function PagosAbonos() {
                 </div>
 
                 <div>
-                  <p className="text-sm text-gray-600">Fecha factura</p>
+                  <p className="text-sm text-gray-600">Fecha pago</p>
                   <p className="font-semibold">
                     {onlyDate(facturaSeleccionada.fecha_factura)}
                   </p>
@@ -994,48 +1404,34 @@ export default function PagosAbonos() {
                     {onlyDate(facturaSeleccionada.fecha_vencimiento)}
                   </p>
                 </div>
-
-                <div>
-                  <p className="text-sm text-gray-600">Bodega</p>
-                  <p className="font-semibold">
-                    {getFacturaBodegaLabel(facturaSeleccionada)}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-600">Código</p>
-                  <p className="font-semibold">
-                    {facturaSeleccionada.codigo_factura}
-                  </p>
-                </div>
               </div>
 
               <div className="border rounded-lg p-4 space-y-2">
                 <div className="flex justify-between text-lg">
-                  <span className="text-gray-600">Total factura</span>
+                  <span className="text-gray-600">Total pago</span>
                   <span className="font-bold">
-                    ${formatMoney(getFacturaTotal(facturaSeleccionada))}
+                    {formatMoney(getFacturaTotal(facturaSeleccionada))}
                   </span>
                 </div>
 
                 <div className="flex justify-between text-lg">
                   <span className="text-gray-600">Total abonado</span>
                   <span className="font-semibold text-green-600">
-                    ${formatMoney(getFacturaAbonado(facturaSeleccionada))}
+                    {formatMoney(getFacturaAbonado(facturaSeleccionada))}
                   </span>
                 </div>
 
                 <div className="flex justify-between text-lg border-t pt-2">
                   <span className="text-gray-600">Saldo pendiente</span>
                   <span className="font-bold text-red-600">
-                    ${formatMoney(getFacturaSaldo(facturaSeleccionada))}
+                    {formatMoney(getFacturaSaldo(facturaSeleccionada))}
                   </span>
                 </div>
               </div>
 
               <div className="space-y-3">
                 <h3 className="font-semibold text-gray-900">
-                  Remisiones asociadas
+                  Remisiones del pago
                 </h3>
 
                 <div className="border rounded-lg overflow-hidden">
@@ -1044,34 +1440,38 @@ export default function PagosAbonos() {
                       <TableRow className="bg-gray-50">
                         <TableHead>Remisión</TableHead>
                         <TableHead>Orden</TableHead>
-                        <TableHead>Fecha</TableHead>
+                        <TableHead>Fecha remisión</TableHead>
                         <TableHead>Bodega</TableHead>
-                        <TableHead>Estado</TableHead>
                         <TableHead className="text-right">Total</TableHead>
                       </TableRow>
                     </TableHeader>
+
                     <TableBody>
-                      {(facturaSeleccionada.remision_venta ?? []).map((remision) => (
-                        <TableRow key={remision.id_remision_venta}>
-                          <TableCell className="font-medium">
-                            {remision.codigo_remision_venta ??
-                              `RV-${remision.id_remision_venta}`}
-                          </TableCell>
-                          <TableCell>
-                            {remision.orden_venta?.codigo_orden_venta ?? "-"}
-                          </TableCell>
-                          <TableCell>{onlyDate(remision.fecha_creacion)}</TableCell>
-                          <TableCell>
-                            {remision.orden_venta?.bodega?.nombre_bodega ?? "-"}
-                          </TableCell>
-                          <TableCell>
-                            {remision.estado_remision_venta?.nombre_estado ?? "-"}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            ${formatMoney(remision.resumen?.total ?? 0)}
+                      {getRemisionesDetallePago(facturaSeleccionada).length > 0 ? (
+                        getRemisionesDetallePago(facturaSeleccionada).map((remision) => (
+                          <TableRow key={remision.id}>
+                            <TableCell className="font-medium">
+                              {remision.codigoRemision}
+                            </TableCell>
+
+                            <TableCell>{remision.codigoOrden}</TableCell>
+
+                            <TableCell>{onlyDate(remision.fecha)}</TableCell>
+
+                            <TableCell>{remision.bodega}</TableCell>
+
+                            <TableCell className="text-right">
+                              {formatMoney(remision.total)}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={5} className="py-6 text-center text-gray-500">
+                            No hay remisiones asociadas a este pago
                           </TableCell>
                         </TableRow>
-                      ))}
+                      )}
                     </TableBody>
                   </Table>
                 </div>
@@ -1086,39 +1486,94 @@ export default function PagosAbonos() {
                       <TableRow className="bg-gray-50">
                         <TableHead>Fecha</TableHead>
                         <TableHead>Método</TableHead>
-                        <TableHead>Estado</TableHead>
+                        <TableHead className="text-center">Registró</TableHead>
+                        <TableHead className="text-center">Anuló</TableHead>
+                        <TableHead className="text-center">Estado</TableHead>
                         <TableHead className="text-right">Valor</TableHead>
+                        <TableHead className="text-center">Acción</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {(facturaSeleccionada.pagos_abonos ?? []).length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={4} className="text-center py-6 text-gray-500">
+                          <TableCell colSpan={7} className="text-center py-6 text-gray-500">
                             No hay abonos registrados
                           </TableCell>
                         </TableRow>
                       ) : (
-                        facturaSeleccionada.pagos_abonos.map((abono) => (
-                          <TableRow key={abono.id_pago}>
-                            <TableCell>{onlyDate(abono.fecha_pago)}</TableCell>
-                            <TableCell>
-                              {abono.metodo_pago?.nombre_metodo ?? "-"}
-                            </TableCell>
-                            <TableCell>
-                              <span
-                                className={`inline-flex items-center rounded-md px-3 h-7 text-sm border ${abono.estado
-                                  ? "bg-green-100 text-green-800 border-green-200"
-                                  : "bg-red-100 text-red-800 border-red-200"
-                                  }`}
-                              >
-                                {abono.estado ? "Activo" : "Anulado"}
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-right font-medium">
-                              ${formatMoney(abono.valor)}
-                            </TableCell>
-                          </TableRow>
-                        ))
+                        facturaSeleccionada.pagos_abonos.map((abono) => {
+                          const estaAnulado = !abono.estado;
+
+                          return (
+                            <TableRow key={abono.id_pago}>
+                              <TableCell>{onlyDate(abono.fecha_pago)}</TableCell>
+
+                              <TableCell>
+                                {abono.metodo_pago?.nombre_metodo ?? "-"}
+                              </TableCell>
+
+                              <TableCell className="text-center">
+                                <div className="flex flex-col">
+                                  <span className="text-sm font-medium text-gray-800">
+                                    {getUsuarioNombre(abono.usuario_registro)}
+                                  </span>
+                                  <span className="text-xs text-gray-500">
+                                    {onlyDate(abono.fecha_pago)}
+                                  </span>
+                                </div>
+                              </TableCell>
+
+                              <TableCell className="text-center">
+                                {estaAnulado ? (
+                                  <div className="flex flex-col">
+                                    <span className="text-sm font-medium text-red-700">
+                                      {getUsuarioNombre(abono.usuario_anulo)}
+                                    </span>
+                                    <span className="text-xs text-gray-500">
+                                      {abono.fecha_anulacion
+                                        ? onlyDate(abono.fecha_anulacion)
+                                        : "Sin fecha de anulación"}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-400">—</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <span
+                                  className={`inline-flex items-center rounded-md px-3 h-7 text-sm border ${estaAnulado
+                                    ? "bg-red-100 text-red-800 border-red-200"
+                                    : "bg-green-100 text-green-800 border-green-200"
+                                    }`}
+                                >
+                                  {estaAnulado ? "Anulado" : "Abonado"}
+                                </span>
+                              </TableCell>
+
+
+                              <TableCell className="text-right font-semibold">
+                                {formatMoney(abono.valor)}
+                              </TableCell>
+
+                              <TableCell className="text-center">
+                                {canAnularPagos && abono.estado ? (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleOpenAnularAbono(abono)}
+                                    disabled={savingAnulacion}
+                                    className="hover:bg-red-50"
+                                    title="Anular abono"
+                                  >
+                                    <Ban size={16} className="text-red-600" />
+                                  </Button>
+                                ) : (
+                                  <span className="text-gray-400">—</span>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
                       )}
                     </TableBody>
                   </Table>
@@ -1161,7 +1616,7 @@ export default function PagosAbonos() {
               Registrar abono - {facturaSeleccionada?.codigo_factura ?? ""}
             </DialogTitle>
             <DialogDescription id="abonar-pago-description">
-              Registra un abono sobre la factura seleccionada.
+              Registra un abono sobre el pago seleccionado.
             </DialogDescription>
           </DialogHeader>
 
@@ -1176,16 +1631,16 @@ export default function PagosAbonos() {
                 </div>
 
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Total factura</span>
+                  <span className="text-sm text-gray-600">Total pago</span>
                   <span className="font-medium">
-                    ${formatMoney(getFacturaTotal(facturaSeleccionada))}
+                    {formatMoney(getFacturaTotal(facturaSeleccionada))}
                   </span>
                 </div>
 
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600">Saldo pendiente</span>
                   <span className="font-bold text-red-600">
-                    ${formatMoney(getFacturaSaldo(facturaSeleccionada))}
+                    {formatMoney(getFacturaSaldo(facturaSeleccionada))}
                   </span>
                 </div>
               </div>
@@ -1267,6 +1722,173 @@ export default function PagosAbonos() {
               disabled={savingAbono}
             >
               {savingAbono ? "Guardando..." : "Registrar abono"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isAnular}
+        onOpenChange={(open) => {
+          if (!open) closeToList();
+        }}
+      >
+        <DialogContent
+          className="max-w-lg"
+          onInteractOutside={(e) => e.preventDefault()}
+          aria-describedby="anular-factura-description"
+        >
+          <DialogHeader>
+            <DialogTitle>Anular pago</DialogTitle>
+            <DialogDescription id="anular-factura-description">
+              Esta acción anulará el pago interno y liberará las remisiones asociadas.
+            </DialogDescription>
+          </DialogHeader>
+
+          {facturaSeleccionada ? (
+            <div className="space-y-4 py-2">
+              <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                Vas a anular el pago{" "}
+                <strong>{facturaSeleccionada.codigo_factura}</strong>.
+              </div>
+
+              <div className="space-y-2 rounded-lg bg-gray-50 p-4 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Cliente</span>
+                  <span className="font-medium">
+                    {facturaSeleccionada.cliente?.nombre_cliente ?? "-"}
+                  </span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Total</span>
+                  <span className="font-medium">
+                    {formatMoney(getFacturaTotal(facturaSeleccionada))}
+                  </span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Abonado activo</span>
+                  <span className="font-medium">
+                    {formatMoney(getFacturaAbonado(facturaSeleccionada))}
+                  </span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Estado</span>
+                  <Badge
+                    variant="outline"
+                    className={getEstadoFacturaBadge(
+                      getEstadoFacturaLabel(facturaSeleccionada),
+                    )}
+                  >
+                    {getEstadoFacturaLabel(facturaSeleccionada)}
+                  </Badge>
+                </div>
+              </div>
+
+              {hasAbonosActivos(facturaSeleccionada) && (
+                <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
+                  Este pago tiene abonos activos. Primero debes anular los abonos
+                  para poder anular el pago.
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="py-8 text-center text-gray-500">
+              No se encontró el pago
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={closeToList}
+              disabled={savingAnulacion}
+            >
+              Cancelar
+            </Button>
+
+            <Button
+              onClick={handleAnularPago}
+              disabled={
+                savingAnulacion ||
+                !facturaSeleccionada ||
+                hasAbonosActivos(facturaSeleccionada) ||
+                isFacturaAnulada(facturaSeleccionada)
+              }
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {savingAnulacion ? "Anulando..." : "Anular factura"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!abonoAAnular}
+        onOpenChange={(open) => {
+          if (!open) setAbonoAAnular(null);
+        }}
+      >
+        <DialogContent
+          className="max-w-md"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>Anular abono</DialogTitle>
+            <DialogDescription>
+              Esta acción marcará el abono como anulado y recalculará el saldo del pago.
+            </DialogDescription>
+          </DialogHeader>
+
+          {abonoAAnular && (
+            <div className="space-y-4 py-2">
+              <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                Vas a anular este abono. Esta acción no eliminará el registro, solo lo
+                dejará marcado como anulado.
+              </div>
+
+              <div className="space-y-2 rounded-lg bg-gray-50 p-4 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Fecha</span>
+                  <span className="font-medium">
+                    {onlyDate(abonoAAnular.fecha_pago)}
+                  </span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Método</span>
+                  <span className="font-medium">
+                    {abonoAAnular.metodo_pago?.nombre_metodo ?? "-"}
+                  </span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Valor</span>
+                  <span className="font-medium">
+                    {formatMoney(abonoAAnular.valor)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setAbonoAAnular(null)}
+              disabled={savingAnulacion}
+            >
+              Cancelar
+            </Button>
+
+            <Button
+              onClick={handleConfirmarAnularAbono}
+              disabled={savingAnulacion || !abonoAAnular}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {savingAnulacion ? "Anulando..." : "Anular abono"}
             </Button>
           </DialogFooter>
         </DialogContent>

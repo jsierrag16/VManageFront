@@ -13,6 +13,25 @@ const toNumber = (value: number | string | null | undefined): number => {
     return Number.isNaN(parsed) ? 0 : parsed;
 };
 
+const toNullableNumber = (
+    value: number | string | null | undefined
+): number | null => {
+    if (value === null || value === undefined || value === "") return null;
+
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? null : parsed;
+};
+
+const getNombreUsuario = (
+    usuario?: { nombre?: string | null; apellido?: string | null } | null
+) => {
+    if (!usuario) return "No registrado";
+
+    const nombre = `${usuario.nombre ?? ""} ${usuario.apellido ?? ""}`.trim();
+
+    return nombre || "No registrado";
+};
+
 export type OpcionCatalogo = {
     id: number;
     nombre: string;
@@ -35,6 +54,7 @@ export type ExistenciaDisponibleUI = {
     idIva: number | null;
     iva: number;
     raw: ExistenciaDisponibleBackend;
+    precioCompraUnitario: number | null;
 };
 
 export type TrasladoItemUI = {
@@ -45,8 +65,10 @@ export type TrasladoItemUI = {
     loteNumero: string;
     cantidad: number;
     idBodega: number;
+    iva: number;
     bodegaNombre: string;
     fechaVencimiento: string;
+    precioCompraUnitario: number | null;
 };
 
 export type TrasladoUI = {
@@ -58,6 +80,12 @@ export type TrasladoUI = {
     idBodegaDestino: number;
     bodegaDestino: string;
     observaciones: string;
+    fechaEnvio: string | null;
+    enviadoPor: string;
+    fechaRecepcion: string | null;
+    recibidoPor: string;
+    fechaAnulacion: string | null;
+    anuladoPor: string;
     idEstado: number;
     estado: EstadoTrasladoUI;
     idResponsable: number | null;
@@ -108,6 +136,7 @@ export const existenciaDisponibleBackendToUI = (
                 toNumber(existencia.cantidad) -
                 toNumber(existencia.cantidad_reservada),
             ),
+    precioCompraUnitario: toNullableNumber(existencia.precio_compra_unitario),
     fechaVencimiento: existencia.fecha_vencimiento ?? "",
     idCategoria: existencia.producto.categoria_producto?.id_categoria_producto ?? null,
     categoria: existencia.producto.categoria_producto?.nombre_categoria ?? "",
@@ -132,9 +161,13 @@ export const trasladoBackendToUI = (
                 productoNombre: item.existencias.producto.nombre_producto,
                 loteNumero: item.existencias.lote,
                 cantidad: toNumber(item.cantidad),
+                iva: toNumber(item.existencias.producto.iva?.porcentaje),
                 idBodega: item.existencias.id_bodega,
                 bodegaNombre: item.existencias.bodega.nombre_bodega,
                 fechaVencimiento: item.existencias.fecha_vencimiento ?? "",
+                precioCompraUnitario:
+                    toNullableNumber(item.precio_compra_unitario) ??
+                    toNullableNumber(item.existencias.precio_compra_unitario),
             }))
             : [];
 
@@ -155,6 +188,12 @@ export const trasladoBackendToUI = (
             : "Sin responsable",
         items,
         raw: traslado,
+        fechaEnvio: traslado.fecha_envio ?? null,
+        enviadoPor: getNombreUsuario(traslado.usuario_envio),
+        fechaRecepcion: traslado.fecha_recepcion ?? null,
+        recibidoPor: getNombreUsuario(traslado.usuario_recibio),
+        fechaAnulacion: traslado.fecha_anulacion ?? null,
+        anuladoPor: getNombreUsuario(traslado.usuario_anulo),
     };
 };
 

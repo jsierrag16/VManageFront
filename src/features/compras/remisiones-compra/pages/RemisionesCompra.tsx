@@ -2670,7 +2670,7 @@ export default function RemisionesCompra() {
                   />
 
                   <p className="mt-2 text-xs text-blue-700">
-                    Opcional. Se guardará en el detalle y luego en existencias.
+                    Opcional.
                   </p>
                 </div>
 

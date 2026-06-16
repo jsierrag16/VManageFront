@@ -19,7 +19,6 @@ export type CreateCotizacionPayload = {
   fecha: string;
   fecha_vencimiento: string;
   id_cliente: number;
-  id_bodega: number;
   id_usuario_creador: number;
   id_estado_cotizacion: number;
   observaciones?: string;
@@ -30,7 +29,6 @@ export type UpdateCotizacionPayload = {
   fecha: string;
   fecha_vencimiento: string;
   id_cliente: number;
-  id_bodega: number;
   id_estado_cotizacion: number;
   observaciones?: string;
   detalle: DetalleCotizacionPayload[];
@@ -68,7 +66,7 @@ type DetalleCotizacionApi = {
   id_producto: number;
   cantidad: number | string;
   precio_unitario: number | string;
-  id_iva: number;
+  id_iva?: number | null;
   iva_porcentaje?: number | string | null;
   producto?: ProductoApi | null;
   iva?: IvaApi | null;
@@ -97,6 +95,20 @@ type CotizacionApi = {
     nombre_estado: string;
   } | null;
   detalle_cotizacion?: DetalleCotizacionApi[];
+  fecha_aprobacion?: string | null;
+  id_usuario_aprobo?: number | null;
+  fecha_anulacion?: string | null;
+  id_usuario_anulo?: number | null;
+  usuario_aprobo?: {
+    id_usuario: number;
+    nombre: string;
+    apellido?: string | null;
+  } | null;
+  usuario_anulo?: {
+    id_usuario: number;
+    nombre: string;
+    apellido?: string | null;
+  } | null;
 };
 
 type CotizacionesListResponse =
@@ -116,6 +128,29 @@ export type CotizacionProductoUI = {
   idIva?: number;
 };
 
+export type CostoReferenciaCotizacionApi = {
+  id_cliente: number;
+  id_producto: number;
+  nombre_producto: string;
+
+  id_bodega_cliente: number;
+  nombre_bodega_cliente: string;
+
+  id_bodega_referencia: number | null;
+  nombre_bodega_referencia: string | null;
+
+  costo_referencia: number | null;
+  lote_referencia: string | null;
+  cantidad_disponible: number;
+
+  origen_referencia:
+  | "BODEGA_CLIENTE"
+  | "OTRA_BODEGA"
+  | "SIN_EXISTENCIAS_CON_COSTO";
+
+  criterio: string;
+};
+
 export type CotizacionUI = {
   id: number;
   numeroCotizacion: string;
@@ -123,6 +158,10 @@ export type CotizacionUI = {
   idCliente: number;
   fecha: string;
   fechaVencimiento: string;
+  usuarioAprobo: string;
+  fechaAprobacion: string;
+  usuarioAnulo: string;
+  fechaAnulacion: string;
   estado: EstadoCotizacionUI;
   estadoId: number;
   items: number;
@@ -204,6 +243,16 @@ function mapProductoApiToUi(
   };
 }
 
+function getNombreUsuarioGestion(
+  usuario?: {
+    nombre?: string | null;
+    apellido?: string | null;
+  } | null
+) {
+  const nombre = `${usuario?.nombre ?? ""} ${usuario?.apellido ?? ""}`.trim();
+  return nombre;
+}
+
 export function mapCotizacionApiToUi(item: CotizacionApi): CotizacionUI {
   const productos: CotizacionProductoUI[] = (item.detalle_cotizacion ?? []).map(
     (detalle) => {
@@ -222,7 +271,7 @@ export function mapCotizacionApiToUi(item: CotizacionApi): CotizacionUI {
         cantidad,
         precio,
         subtotal,
-        idIva: detalle.id_iva,
+        idIva: detalle.id_iva ?? undefined,
       };
     }
   );
@@ -242,7 +291,7 @@ export function mapCotizacionApiToUi(item: CotizacionApi): CotizacionUI {
     id: item.id_cotizacion,
     numeroCotizacion:
       item.codigo_cotizacion ||
-      `COT-${String(item.id_cotizacion).padStart(4, "0")}`,
+      `CT-${String(item.id_cotizacion).padStart(4, "0")}`,
     cliente: item.cliente?.nombre_cliente ?? "Cliente",
     idCliente: item.id_cliente,
     fecha: normalizeDate(item.fecha),
@@ -260,6 +309,11 @@ export function mapCotizacionApiToUi(item: CotizacionApi): CotizacionUI {
     bodega: item.bodega?.nombre_bodega ?? "",
     idBodega: item.id_bodega,
     productos,
+
+    usuarioAprobo: getNombreUsuarioGestion(item.usuario_aprobo),
+    fechaAprobacion: normalizeDate(item.fecha_aprobacion),
+    usuarioAnulo: getNombreUsuarioGestion(item.usuario_anulo),
+    fechaAnulacion: normalizeDate(item.fecha_anulacion),
   };
 }
 
@@ -301,5 +355,18 @@ export const cotizacionesService = {
       payload
     );
     return mapCotizacionApiToUi(response.data);
+  },
+  async getCostoReferencia(idCliente: number, idProducto: number) {
+    const response = await api.get<CostoReferenciaCotizacionApi>(
+      "/cotizaciones/costo-referencia",
+      {
+        params: {
+          id_cliente: idCliente,
+          id_producto: idProducto,
+        },
+      }
+    );
+
+    return response.data;
   },
 };

@@ -283,6 +283,7 @@ export default function Compras() {
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const MAX_CANTIDAD_COMPRA = 10000;
 
   const [storedBodega, setStoredBodega] = useState<{
     id?: number;
@@ -418,7 +419,7 @@ export default function Compras() {
 
     const numero = parseInt(limpio, 10);
 
-    if (numero > 1000) return;
+    if (numero > MAX_CANTIDAD_COMPRA) return;
 
     setCantidadProductoInput(String(numero));
   };
@@ -1278,8 +1279,10 @@ export default function Compras() {
       return;
     }
 
-    if (cantidadNormalizada > 1000) {
-      toast.error("La cantidad máxima permitida es 1000");
+    if (cantidadNormalizada > MAX_CANTIDAD_COMPRA) {
+      toast.error(
+        `La cantidad máxima permitida es ${MAX_CANTIDAD_COMPRA.toLocaleString("es-CO")}`
+      );
       return;
     }
 
@@ -1921,12 +1924,6 @@ export default function Compras() {
         >
           <DialogHeader className="space-y-2 pb-3">
             <DialogTitle>Nueva Orden de Compra</DialogTitle>
-            <DialogDescription
-              id="create-order-description"
-              className="text-sm text-gray-500"
-            >
-              Completa la información para crear una nueva orden de compra
-            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-6 py-2">
@@ -1937,7 +1934,7 @@ export default function Compras() {
                     Información general
                   </h3>
                   <p className="text-sm text-gray-500">
-                    Define la bodega a la cual será asignada esta orden de compra
+                    Selecciona el proveedor, la bodega y las condiciones de la orden
                   </p>
                 </div>
 
@@ -1949,53 +1946,6 @@ export default function Compras() {
                     {formatFechaVista(formData.fecha || getFechaActual())}
                   </p>
                 </div>
-              </div>
-
-              <div className="max-w-xl space-y-2">
-                <Label htmlFor="bodega">Bodega *</Label>
-                <Select
-                  value={formData.bodegaId}
-                  onValueChange={(value: string) => {
-                    const bodegaSeleccionada = bodegasActivas.find(
-                      (bodega) => String(bodega.id) === value
-                    );
-
-                    setFormData({
-                      ...formData,
-                      bodegaId: value,
-                      bodega: bodegaSeleccionada?.nombre || "",
-                    });
-                  }}
-                >
-                  <SelectTrigger id="bodega" className={fieldClass}>
-                    <SelectValue placeholder="Selecciona una bodega" />
-                  </SelectTrigger>
-
-                  <SelectContent>
-                    {bodegasActivas.length === 0 ? (
-                      <div className="px-3 py-2 text-sm text-gray-500">
-                        No hay bodegas disponibles
-                      </div>
-                    ) : (
-                      bodegasActivas.map((bodega) => (
-                        <SelectItem key={bodega.id} value={String(bodega.id)}>
-                          {bodega.nombre}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="rounded-lg bg-gray-50 p-5">
-              <div className="mb-4">
-                <h3 className="font-semibold text-gray-900">
-                  Proveedor y condiciones
-                </h3>
-                <p className="text-sm text-gray-500">
-                  Selecciona el proveedor y el término de pago
-                </p>
               </div>
 
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
@@ -2038,7 +1988,7 @@ export default function Compras() {
                 </div>
               </div>
 
-              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div className="space-y-2">
                   <Label htmlFor="proveedorDocumento">Documento / NIT</Label>
                   <Input
@@ -2048,6 +1998,42 @@ export default function Compras() {
                     className={readonlyFieldClass}
                     placeholder="Se completa al seleccionar proveedor"
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="bodega">Bodega *</Label>
+                  <Select
+                    value={formData.bodegaId}
+                    onValueChange={(value: string) => {
+                      const bodegaSeleccionada = bodegasActivas.find(
+                        (bodega) => String(bodega.id) === value
+                      );
+
+                      setFormData({
+                        ...formData,
+                        bodegaId: value,
+                        bodega: bodegaSeleccionada?.nombre || "",
+                      });
+                    }}
+                  >
+                    <SelectTrigger id="bodega" className={fieldClass}>
+                      <SelectValue placeholder="Selecciona una bodega" />
+                    </SelectTrigger>
+
+                    <SelectContent>
+                      {bodegasActivas.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-gray-500">
+                          No hay bodegas disponibles
+                        </div>
+                      ) : (
+                        bodegasActivas.map((bodega) => (
+                          <SelectItem key={bodega.id} value={String(bodega.id)}>
+                            {bodega.nombre}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="space-y-2">
@@ -2133,7 +2119,7 @@ export default function Compras() {
                       placeholder="Ej: 50"
                       className={numberFieldClass}
                     />
-                    <p className="text-xs text-gray-500">Máximo 1000 unidades.</p>
+                    <p className="text-xs text-gray-500">Máximo {MAX_CANTIDAD_COMPRA.toLocaleString("es-CO")} unidades.</p>
                   </div>
 
                   <div className="space-y-2">
@@ -2351,7 +2337,7 @@ export default function Compras() {
                       Información general
                     </h3>
                     <p className="text-sm text-gray-500">
-                      Define la bodega a la cual será asignada esta orden de compra
+                      Datos principales de la orden de compra seleccionada
                     </p>
                   </div>
 
@@ -2387,54 +2373,7 @@ export default function Compras() {
                   </div>
                 </div>
 
-                <div className="max-w-xl space-y-2">
-                  <Label htmlFor="edit-bodega">Bodega *</Label>
-                  <Select
-                    value={formData.bodegaId}
-                    onValueChange={(value: string) => {
-                      const bodegaSeleccionada = bodegasActivas.find(
-                        (bodega) => String(bodega.id) === value
-                      );
-
-                      setFormData({
-                        ...formData,
-                        bodegaId: value,
-                        bodega: bodegaSeleccionada?.nombre || "",
-                      });
-                    }}
-                  >
-                    <SelectTrigger id="edit-bodega" className={fieldClass}>
-                      <SelectValue placeholder="Selecciona una bodega" />
-                    </SelectTrigger>
-
-                    <SelectContent>
-                      {bodegasActivas.length === 0 ? (
-                        <div className="px-3 py-2 text-sm text-gray-500">
-                          No hay bodegas disponibles
-                        </div>
-                      ) : (
-                        bodegasActivas.map((bodega) => (
-                          <SelectItem key={bodega.id} value={String(bodega.id)}>
-                            {bodega.nombre}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="rounded-lg bg-gray-50 p-5">
-                <div className="mb-4">
-                  <h3 className="font-semibold text-gray-900">
-                    Proveedor y condiciones
-                  </h3>
-                  <p className="text-sm text-gray-500">
-                    Selecciona el proveedor y el término de pago
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                   <div className="space-y-2">
                     <Label htmlFor="edit-proveedor">Proveedor *</Label>
                     <Select
@@ -2470,6 +2409,42 @@ export default function Compras() {
                       className={readonlyFieldClass}
                       placeholder="Se completa al seleccionar proveedor"
                     />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-bodega">Bodega *</Label>
+                    <Select
+                      value={formData.bodegaId}
+                      onValueChange={(value: string) => {
+                        const bodegaSeleccionada = bodegasActivas.find(
+                          (bodega) => String(bodega.id) === value
+                        );
+
+                        setFormData({
+                          ...formData,
+                          bodegaId: value,
+                          bodega: bodegaSeleccionada?.nombre || "",
+                        });
+                      }}
+                    >
+                      <SelectTrigger id="edit-bodega" className={fieldClass}>
+                        <SelectValue placeholder="Selecciona una bodega" />
+                      </SelectTrigger>
+
+                      <SelectContent>
+                        {bodegasActivas.length === 0 ? (
+                          <div className="px-3 py-2 text-sm text-gray-500">
+                            No hay bodegas disponibles
+                          </div>
+                        ) : (
+                          bodegasActivas.map((bodega) => (
+                            <SelectItem key={bodega.id} value={String(bodega.id)}>
+                              {bodega.nombre}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="space-y-2">
@@ -2556,7 +2531,7 @@ export default function Compras() {
                         className={numberFieldClass}
                       />
                       <p className="text-xs text-gray-500">
-                        Máximo 1000 unidades.
+                        Máximo {MAX_CANTIDAD_COMPRA.toLocaleString("es-CO")} unidades.
                       </p>
                     </div>
 

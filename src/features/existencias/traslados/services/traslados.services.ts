@@ -8,6 +8,7 @@ export type ExistenciaDisponibleBackend = {
     cantidad: number | string;
     cantidad_reservada?: number | string | null;
     cantidad_disponible?: number | string | null;
+    precio_compra_unitario?: number | string | null;
     fecha_vencimiento?: string | null;
     lote: string;
     producto: {
@@ -30,6 +31,13 @@ export type ExistenciaDisponibleBackend = {
     };
 };
 
+export type UsuarioGestionBackend = {
+    id_usuario: number;
+    nombre: string;
+    apellido: string;
+    email?: string | null;
+};
+
 export type TrasladoBackend = {
     id_traslado: number;
     codigo_traslado?: string | null;
@@ -39,6 +47,16 @@ export type TrasladoBackend = {
     nota?: string | null;
     id_estado_traslado: number;
     id_responsable?: number | null;
+    fecha_envio?: string | null;
+    id_usuario_envio?: number | null;
+    fecha_recepcion?: string | null;
+    id_usuario_recibio?: number | null;
+    fecha_anulacion?: string | null;
+    id_usuario_anulo?: number | null;
+
+    usuario_envio?: UsuarioGestionBackend | null;
+    usuario_recibio?: UsuarioGestionBackend | null;
+    usuario_anulo?: UsuarioGestionBackend | null;
     estado_traslado: {
         id_estado_traslado: number;
         nombre_estado: string;
@@ -51,12 +69,7 @@ export type TrasladoBackend = {
         id_bodega: number;
         nombre_bodega: string;
     };
-    usuario?: {
-        id_usuario: number;
-        nombre: string;
-        apellido: string;
-        email: string;
-    } | null;
+    usuario?: UsuarioGestionBackend | null;
 };
 
 export type TrasladoDetailBackend = TrasladoBackend & {
@@ -64,6 +77,7 @@ export type TrasladoDetailBackend = TrasladoBackend & {
         id_detalle: number;
         id_existencia: number;
         cantidad: number | string;
+        precio_compra_unitario?: number | string | null;
         existencias: {
             id_existencia: number;
             id_producto: number;
@@ -71,9 +85,17 @@ export type TrasladoDetailBackend = TrasladoBackend & {
             cantidad: number | string;
             lote: string;
             fecha_vencimiento?: string | null;
+            cantidad_reservada?: number | string | null;
+            precio_compra_unitario?: number | string | null;
+            codigo_barras?: string | null;
+            nota?: string | null;
             producto: {
                 id_producto: number;
                 nombre_producto: string;
+                iva?: {
+                    id_iva: number;
+                    porcentaje: number | string;
+                } | null;
             };
             bodega: {
                 id_bodega: number;

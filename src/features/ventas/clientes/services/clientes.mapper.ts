@@ -6,6 +6,7 @@ import type {
   TipoDocumentoOption,
   MunicipioOption,
   DepartamentoOption,
+  BodegaOption,
 } from "../types/clientes.types";
 
 const safe = (value?: string | null) => value ?? "";
@@ -61,6 +62,8 @@ export function mapClienteApiToUi(cliente: ClienteApi): ClienteUI {
     tipoCliente: getTipoClienteNombre(cliente.tipo_cliente),
     idTipoCliente: cliente.id_tipo_cliente,
     estado: cliente.estado ? "Activo" : "Inactivo",
+    idBodega: cliente.id_bodega,
+    bodega: cliente.bodega?.nombre_bodega ?? "",
   };
 }
 
@@ -72,6 +75,7 @@ export function mapFormToClientePayload(input: {
   numeroDocumento: string;
   idTipoCliente: number;
   idMunicipio: number;
+  idBodega: number;
   idTipoDocumento: number;
   estado?: boolean;
 }): ClienteFormPayload {
@@ -85,6 +89,7 @@ export function mapFormToClientePayload(input: {
     id_municipio: input.idMunicipio,
     id_tipo_doc: input.idTipoDocumento,
     estado: input.estado ?? true,
+    id_bodega: input.idBodega,
   };
 }
 
@@ -96,6 +101,13 @@ export function mapDepartamentos(raw: any[]): DepartamentoOption[] {
       item.nombre ??
       item.departamento ??
       "Sin nombre",
+  }));
+}
+
+export function mapBodegas(raw: any[]): BodegaOption[] {
+  return raw.map((item) => ({
+    id: item.id_bodega,
+    nombre: item.nombre_bodega ?? item.nombre ?? "Sin nombre",
   }));
 }
 

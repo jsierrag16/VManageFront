@@ -162,6 +162,9 @@ export type ProductoVistaBackend = {
         id_existencia: number;
         lote: string;
         cantidad: number;
+        cantidad_reservada?: number | string;
+        cantidad_disponible?: number | string;
+        precio_compra_unitario?: number | string | null;
         fecha_vencimiento: string | null;
         id_bodega: number;
         nombre_bodega: string;

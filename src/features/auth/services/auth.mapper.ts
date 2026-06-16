@@ -1,6 +1,5 @@
 import { createEmptyPermisos } from "@/features/configuracion/roles/types/roles.types";
 import type { UsuarioSistema } from "@/features/auth/types/auth.types";
-import type { PermisoBackend } from "@/features/configuracion/roles/services/permisos.service";
 
 const permisoPathMap: Record<string, string[]> = {
   "dashboard.acceder": ["dashboard", "acceder"],
@@ -9,6 +8,7 @@ const permisoPathMap: Record<string, string[]> = {
   "existencias.productos.crear": ["existencias", "productos", "crear"],
   "existencias.productos.editar": ["existencias", "productos", "editar"],
   "existencias.productos.cambiar_estado": ["existencias", "productos", "cambiarEstado"],
+  "existencias.productos.crear_iva": ["existencias", "productos", "crearIva"],
 
   "existencias.traslados.ver": ["existencias", "traslados", "ver"],
   "existencias.traslados.crear": ["existencias", "traslados", "crear"],
@@ -96,11 +96,33 @@ function setDeepValue(obj: any, path: string[], value: boolean) {
   current[path[path.length - 1]] = value;
 }
 
-function permisosBackendToFrontend(permisosBackend: PermisoBackend[]) {
+function normalizePermisoName(value: unknown): string {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function getNombrePermiso(permiso: any): string {
+  if (typeof permiso === "string") {
+    return permiso;
+  }
+
+  if (permiso?.nombre_permiso) {
+    return permiso.nombre_permiso;
+  }
+
+  if (permiso?.permisos?.nombre_permiso) {
+    return permiso.permisos.nombre_permiso;
+  }
+
+  return "";
+}
+
+function permisosBackendToFrontend(permisosBackend: any[]) {
   const permisos = createEmptyPermisos();
 
   permisosBackend.forEach((permiso) => {
-    const path = permisoPathMap[permiso.nombre_permiso];
+    const nombrePermiso = normalizePermisoName(getNombrePermiso(permiso));
+    const path = permisoPathMap[nombrePermiso];
+
     if (path) {
       setDeepValue(permisos, path, true);
     }
@@ -110,12 +132,10 @@ function permisosBackendToFrontend(permisosBackend: PermisoBackend[]) {
 }
 
 export function authUserToUsuarioSistema(user: any): UsuarioSistema {
-  const permisosFuente: PermisoBackend[] = Array.isArray(user?.permisos)
+  const permisosFuente: any[] = Array.isArray(user?.permisos)
     ? user.permisos
     : Array.isArray(user?.roles?.roles_permisos)
       ? user.roles.roles_permisos
-        .map((rp: any) => rp?.permisos)
-        .filter(Boolean)
       : [];
 
   const bodegasFuente = Array.isArray(user?.bodegas)

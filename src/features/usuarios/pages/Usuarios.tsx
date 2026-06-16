@@ -374,6 +374,13 @@ export default function Usuarios() {
   // =========================================================
   const validateTipoDocField = (value: number | "") => {
     if (!value) return "Debes seleccionar un tipo de documento";
+
+    const tipoDocumentoSeleccionado = getTipoDocumentoSeleccionado(value);
+
+    if (tipoDocumentoSeleccionado === "nit" || tipoDocumentoSeleccionado.includes("nit")) {
+      return "No se permite registrar usuarios con NIT";
+    }
+
     return "";
   };
 
@@ -484,6 +491,59 @@ export default function Usuarios() {
     return normalizarTipoDocumento(nombreTipoDocumento);
   };
 
+  const tiposDocumentoPermitidos = tiposDocumento.filter((item) => {
+    const tipoNormalizado = normalizarTipoDocumento(item.nombre);
+    return tipoNormalizado !== "nit" && !tipoNormalizado.includes("nit");
+  });
+
+  const esTarjetaIdentidadTipo = (tipoDocumento: string) => {
+    return (
+      tipoDocumento === "ti" ||
+      tipoDocumento.includes("tarjeta de identidad")
+    );
+  };
+
+  const esDocumentoMayorEdadTipo = (tipoDocumento: string) => {
+    return (
+      tipoDocumento === "cc" ||
+      tipoDocumento === "ce" ||
+      tipoDocumento === "pasaporte" ||
+      tipoDocumento.includes("cedula de ciudadania") ||
+      tipoDocumento.includes("cedula extranjeria")
+    );
+  };
+
+  const getEdadMinimaPorTipoDocumento = (
+    tipoDocId: number | "" = formTipoDocId
+  ) => {
+    const tipoDocumentoSeleccionado = getTipoDocumentoSeleccionado(tipoDocId);
+
+    if (esDocumentoMayorEdadTipo(tipoDocumentoSeleccionado)) {
+      return 18;
+    }
+
+    return 16;
+  };
+
+  const getFechaMaximaNacimientoInput = (
+    tipoDocId: number | "" = formTipoDocId
+  ) => {
+    const hoy = new Date();
+    const edadMinima = getEdadMinimaPorTipoDocumento(tipoDocId);
+
+    const fechaMaxima = new Date(
+      hoy.getFullYear() - edadMinima,
+      hoy.getMonth(),
+      hoy.getDate()
+    );
+
+    const year = fechaMaxima.getFullYear();
+    const month = String(fechaMaxima.getMonth() + 1).padStart(2, "0");
+    const day = String(fechaMaxima.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  };
+
   const validateFechaNacimientoField = (
     value: string,
     tipoDocId: number | "" = formTipoDocId
@@ -535,22 +595,28 @@ export default function Usuarios() {
 
     const tipoDocumentoSeleccionado = getTipoDocumentoSeleccionado(tipoDocId);
 
-    const esTarjetaIdentidad =
-      tipoDocumentoSeleccionado === "ti" ||
-      tipoDocumentoSeleccionado.includes("tarjeta de identidad");
-
-    const esDocumentoMayorEdad =
-      tipoDocumentoSeleccionado === "cc" ||
-      tipoDocumentoSeleccionado === "ce" ||
-      tipoDocumentoSeleccionado === "pasaporte" ||
-      tipoDocumentoSeleccionado.includes("cedula de ciudadania") ||
-      tipoDocumentoSeleccionado.includes("cedula extranjeria");
-
-    if (esTarjetaIdentidad && edad >= 18) {
-      return "Para Tarjeta de Identidad, el usuario debe ser menor de 18 años";
+    if (
+      tipoDocumentoSeleccionado === "nit" ||
+      tipoDocumentoSeleccionado.includes("nit")
+    ) {
+      return "No se permite registrar usuarios con NIT";
     }
 
-    if (esDocumentoMayorEdad && edad < 18) {
+    if (edad < 16) {
+      return "No se pueden registrar usuarios menores de 16 años";
+    }
+
+    if (esTarjetaIdentidadTipo(tipoDocumentoSeleccionado)) {
+      if (edad < 16) {
+        return "Para Tarjeta de Identidad, el usuario debe tener mínimo 16 años";
+      }
+
+      if (edad >= 18) {
+        return "Para Tarjeta de Identidad, el usuario debe ser menor de 18 años";
+      }
+    }
+
+    if (esDocumentoMayorEdadTipo(tipoDocumentoSeleccionado) && edad < 18) {
       return "Para este tipo de documento, el usuario debe ser mayor de edad";
     }
 
@@ -1895,7 +1961,7 @@ export default function Usuarios() {
                       <SelectValue placeholder="Selecciona un tipo de documento" />
                     </SelectTrigger>
                     <SelectContent>
-                      {tiposDocumento.map((item) => (
+                      {tiposDocumentoPermitidos.map((item) => (
                         <SelectItem key={item.id} value={String(item.id)}>
                           {item.nombre}
                         </SelectItem>
@@ -1969,7 +2035,7 @@ export default function Usuarios() {
                     value={formFechaNacimiento}
                     onChange={(e) => handleFechaNacimientoChange(e.target.value)}
                     onBlur={handleFechaNacimientoBlur}
-                    max={getFechaHoyInput()}
+                    max={getFechaMaximaNacimientoInput()}
                     min={getFechaMinimaNacimientoInput()}
                     disabled={isCreatingUsuario || isLoadingCatalogos}
                     className={
@@ -2182,7 +2248,7 @@ export default function Usuarios() {
                     <SelectValue placeholder="Selecciona un tipo de documento" />
                   </SelectTrigger>
                   <SelectContent>
-                    {tiposDocumento.map((item) => (
+                    {tiposDocumentoPermitidos.map((item) => (
                       <SelectItem key={item.id} value={String(item.id)}>
                         {item.nombre}
                       </SelectItem>
@@ -2253,7 +2319,7 @@ export default function Usuarios() {
                   value={formFechaNacimiento}
                   onChange={(e) => handleFechaNacimientoChange(e.target.value)}
                   onBlur={handleFechaNacimientoBlur}
-                  max={getFechaHoyInput()}
+                  max={getFechaMaximaNacimientoInput()}
                   min={getFechaMinimaNacimientoInput()}
                   className={
                     errors.fechaNacimiento && touched.fechaNacimiento ? "border-red-500" : ""

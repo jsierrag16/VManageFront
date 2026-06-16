@@ -7,11 +7,19 @@ import type {
 } from "../types/clientes.types";
 
 export const clientesService = {
-  async getAll(params?: { q?: string; incluirInactivos?: boolean }) {
+  async getAll(params?: {
+    q?: string;
+    incluirInactivos?: boolean;
+    id_bodega?: number;
+  }) {
     const response = await api.get<ClienteApi[]>("/clientes", {
       params: {
         q: params?.q || undefined,
         incluirInactivos: params?.incluirInactivos ?? true,
+        id_bodega:
+          params?.id_bodega && params.id_bodega > 0
+            ? params.id_bodega
+            : undefined,
       },
     });
 

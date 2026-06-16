@@ -1,3 +1,15 @@
+export type CostoReferenciaOrdenResponse = {
+  costo_referencia: number | null;
+  lote_referencia: string | null;
+  cantidad_disponible: number;
+  id_bodega_referencia: number | null;
+  nombre_bodega_referencia: string | null;
+  origen_referencia:
+  | 'BODEGA_CLIENTE'
+  | 'OTRA_BODEGA'
+  | 'SIN_EXISTENCIAS_CON_COSTO';
+};
+
 export type CatalogoCliente = {
   id_cliente: number;
   nombre_cliente?: string;
@@ -7,6 +19,13 @@ export type CatalogoCliente = {
   telefono?: string;
   direccion?: string;
   estado?: boolean | string;
+
+  id_bodega?: number | null;
+  bodega?: {
+    id_bodega?: number;
+    nombre_bodega?: string;
+    nombre?: string;
+  } | null;
 };
 
 export type CatalogoProducto = {
@@ -39,6 +58,12 @@ export type CatalogoEstadoOrdenVenta = {
   nombre?: string;
 };
 
+export type UsuarioGestionOrdenVenta = {
+  id_usuario: number;
+  nombre?: string | null;
+  apellido?: string | null;
+};
+
 export type DetalleCotizacionApi = {
   id_detalle_cotizacion?: number;
   id_producto: number;
@@ -61,6 +86,13 @@ export type CatalogoCotizacion = {
   detalle_cotizacion?: DetalleCotizacionApi[];
   orden_venta?: {
     id_orden_venta: number;
+  } | null;
+  fecha_creacion?: string | null;
+  fecha_vencimiento?: string | null;
+  estado_cotizacion?: {
+    id_estado_cotizacion?: number;
+    nombre_estado?: string;
+    nombre?: string;
   } | null;
 };
 
@@ -86,6 +118,13 @@ export type OrdenVentaApi = {
   id_usuario?: number;
   id_cotizacion?: number | null;
   cliente?: CatalogoCliente;
+  fecha_aprobacion?: string | null;
+  id_usuario_aprobo?: number | null;
+  usuario_aprobo?: UsuarioGestionOrdenVenta | null;
+
+  fecha_anulacion?: string | null;
+  id_usuario_anulo?: number | null;
+  usuario_anulo?: UsuarioGestionOrdenVenta | null;
   bodega?: {
     id_bodega?: number;
     nombre_bodega?: string;

@@ -212,7 +212,8 @@ export default function Roles() {
 
     setFormNombre(rolSeleccionado.nombre);
     setFormDescripcion(rolSeleccionado.descripcion);
-    setFormPermisos(rolSeleccionado.permisos);
+
+    setFormPermisos(JSON.parse(JSON.stringify(rolSeleccionado.permisos)));
 
     setErrors({
       nombre: "",
@@ -223,7 +224,7 @@ export default function Roles() {
       nombre: false,
       descripcion: false,
     });
-  }, [isEditar, rolSeleccionado]);
+  }, [isEditar, rolSeleccionado?.id]);
 
   useEffect(() => {
     if (!isCrear) return;
@@ -328,101 +329,43 @@ export default function Roles() {
     return true;
   };
 
-  const isModuleFullyChecked = (module: string): boolean => {
-    if (module === "dashboard") {
-      return formPermisos.dashboard.acceder;
-    }
+  const getBooleanValues = (value: unknown): boolean[] => {
+    if (typeof value === "boolean") return [value];
 
-    if (module === "existencias") {
-      return (
-        formPermisos.existencias.productos.ver &&
-        formPermisos.existencias.productos.crear &&
-        formPermisos.existencias.productos.editar &&
-        formPermisos.existencias.productos.cambiarEstado &&
-        formPermisos.existencias.traslados.ver &&
-        formPermisos.existencias.traslados.crear &&
-        formPermisos.existencias.traslados.editar &&
-        formPermisos.existencias.traslados.cambiarEstado &&
-        formPermisos.existencias.traslados.anular &&
-        formPermisos.existencias.bodegas.ver &&
-        formPermisos.existencias.bodegas.crear &&
-        formPermisos.existencias.bodegas.editar &&
-        formPermisos.existencias.bodegas.cambiarEstado &&
-        formPermisos.existencias.bodegas.eliminar
-      );
-    }
+    if (!value || typeof value !== "object") return [];
 
-    if (module === "compras") {
-      return (
-        formPermisos.compras.proveedores.ver &&
-        formPermisos.compras.proveedores.crear &&
-        formPermisos.compras.proveedores.editar &&
-        formPermisos.compras.proveedores.cambiarEstado &&
-        formPermisos.compras.proveedores.eliminar &&
-        formPermisos.compras.ordenesCompra.ver &&
-        formPermisos.compras.ordenesCompra.crear &&
-        formPermisos.compras.ordenesCompra.descargar &&
-        formPermisos.compras.ordenesCompra.editar &&
-        formPermisos.compras.ordenesCompra.cambiarEstado &&
-        formPermisos.compras.ordenesCompra.anular &&
-        formPermisos.compras.remisionesCompra.ver &&
-        formPermisos.compras.remisionesCompra.crear &&
-        formPermisos.compras.remisionesCompra.descargar &&
-        formPermisos.compras.remisionesCompra.editar &&
-        formPermisos.compras.remisionesCompra.cambiarEstado &&
-        formPermisos.compras.remisionesCompra.anular
-      );
-    }
+    return Object.values(value).flatMap(getBooleanValues);
+  };
 
-    if (module === "ventas") {
-      return (
-        formPermisos.ventas.clientes.ver &&
-        formPermisos.ventas.clientes.crear &&
-        formPermisos.ventas.clientes.editar &&
-        formPermisos.ventas.clientes.cambiarEstado &&
-        formPermisos.ventas.clientes.eliminar &&
-        formPermisos.ventas.cotizaciones.ver &&
-        formPermisos.ventas.cotizaciones.crear &&
-        formPermisos.ventas.cotizaciones.descargar &&
-        formPermisos.ventas.cotizaciones.editar &&
-        formPermisos.ventas.cotizaciones.cambiarEstado &&
-        formPermisos.ventas.cotizaciones.anular &&
-        formPermisos.ventas.ordenesVenta.ver &&
-        formPermisos.ventas.ordenesVenta.crear &&
-        formPermisos.ventas.ordenesVenta.descargar &&
-        formPermisos.ventas.ordenesVenta.editar &&
-        formPermisos.ventas.ordenesVenta.cambiarEstado &&
-        formPermisos.ventas.ordenesVenta.anular &&
-        formPermisos.ventas.remisionesVenta.ver &&
-        formPermisos.ventas.remisionesVenta.crear &&
-        formPermisos.ventas.remisionesVenta.descargar &&
-        formPermisos.ventas.remisionesVenta.editar &&
-        formPermisos.ventas.remisionesVenta.cambiarEstado &&
-        formPermisos.ventas.remisionesVenta.anular &&
-        formPermisos.ventas.pagos.ver &&
-        formPermisos.ventas.pagos.crear &&
-        formPermisos.ventas.pagos.agregarAbonos &&
-        formPermisos.ventas.pagos.anular
-      );
-    }
+  const setAllBooleanValues = (value: unknown, checked: boolean): unknown => {
+    if (typeof value === "boolean") return checked;
 
-    if (module === "administracion") {
-      return (
-        formPermisos.administracion.roles.ver &&
-        formPermisos.administracion.roles.crear &&
-        formPermisos.administracion.roles.editar &&
-        formPermisos.administracion.roles.cambiarEstado &&
-        formPermisos.administracion.roles.eliminar &&
-        formPermisos.administracion.usuarios.ver &&
-        formPermisos.administracion.usuarios.crear &&
-        formPermisos.administracion.usuarios.editar &&
-        formPermisos.administracion.usuarios.eliminar &&
-        formPermisos.administracion.usuarios.cambiarEstado &&
-        formPermisos.administracion.usuarios.restablecerContrasena
-      );
-    }
+    if (!value || typeof value !== "object") return value;
 
-    return false;
+    return Object.fromEntries(
+      Object.entries(value).map(([key, childValue]) => [
+        key,
+        setAllBooleanValues(childValue, checked),
+      ])
+    );
+  };
+
+  const isModuleFullyChecked = (module: keyof typeof formPermisos): boolean => {
+    const values = getBooleanValues(formPermisos[module]);
+
+    return values.length > 0 && values.every(Boolean);
+  };
+
+  const toggleModulePermissions = (module: keyof typeof formPermisos) => {
+    setFormPermisos((prev) => {
+      const values = getBooleanValues(prev[module]);
+      const allChecked = values.length > 0 && values.every(Boolean);
+
+      return {
+        ...prev,
+        [module]: setAllBooleanValues(prev[module], !allChecked),
+      };
+    });
   };
 
   // =========================================================
@@ -483,107 +426,6 @@ export default function Roles() {
     }
 
     current[path[path.length - 1]] = value;
-    setFormPermisos(newPermisos);
-  };
-
-  const toggleModulePermissions = (module: string) => {
-    const newPermisos = JSON.parse(JSON.stringify(formPermisos));
-    const allChecked = isModuleFullyChecked(module);
-
-    if (module === "dashboard") {
-      newPermisos.dashboard.acceder = !allChecked;
-    }
-
-    if (module === "existencias") {
-      newPermisos.existencias.productos.ver = !allChecked;
-      newPermisos.existencias.productos.crear = !allChecked;
-      newPermisos.existencias.productos.editar = !allChecked;
-      newPermisos.existencias.productos.cambiarEstado = !allChecked;
-
-      newPermisos.existencias.traslados.ver = !allChecked;
-      newPermisos.existencias.traslados.crear = !allChecked;
-      newPermisos.existencias.traslados.editar = !allChecked;
-      newPermisos.existencias.traslados.cambiarEstado = !allChecked;
-      newPermisos.existencias.traslados.anular = !allChecked;
-
-      newPermisos.existencias.bodegas.ver = !allChecked;
-      newPermisos.existencias.bodegas.crear = !allChecked;
-      newPermisos.existencias.bodegas.editar = !allChecked;
-      newPermisos.existencias.bodegas.cambiarEstado = !allChecked;
-      newPermisos.existencias.bodegas.eliminar = !allChecked;
-    }
-
-    if (module === "compras") {
-      newPermisos.compras.proveedores.ver = !allChecked;
-      newPermisos.compras.proveedores.crear = !allChecked;
-      newPermisos.compras.proveedores.editar = !allChecked;
-      newPermisos.compras.proveedores.cambiarEstado = !allChecked;
-      newPermisos.compras.proveedores.eliminar = !allChecked;
-
-      newPermisos.compras.ordenesCompra.ver = !allChecked;
-      newPermisos.compras.ordenesCompra.crear = !allChecked;
-      newPermisos.compras.ordenesCompra.descargar = !allChecked;
-      newPermisos.compras.ordenesCompra.editar = !allChecked;
-      newPermisos.compras.ordenesCompra.cambiarEstado = !allChecked;
-      newPermisos.compras.ordenesCompra.anular = !allChecked;
-
-      newPermisos.compras.remisionesCompra.ver = !allChecked;
-      newPermisos.compras.remisionesCompra.crear = !allChecked;
-      newPermisos.compras.remisionesCompra.descargar = !allChecked;
-      newPermisos.compras.remisionesCompra.editar = !allChecked;
-      newPermisos.compras.remisionesCompra.cambiarEstado = !allChecked;
-      newPermisos.compras.remisionesCompra.anular = !allChecked;
-    }
-
-    if (module === "ventas") {
-      newPermisos.ventas.clientes.ver = !allChecked;
-      newPermisos.ventas.clientes.crear = !allChecked;
-      newPermisos.ventas.clientes.editar = !allChecked;
-      newPermisos.ventas.clientes.cambiarEstado = !allChecked;
-      newPermisos.ventas.clientes.eliminar = !allChecked;
-
-      newPermisos.ventas.cotizaciones.ver = !allChecked;
-      newPermisos.ventas.cotizaciones.crear = !allChecked;
-      newPermisos.ventas.cotizaciones.descargar = !allChecked;
-      newPermisos.ventas.cotizaciones.editar = !allChecked;
-      newPermisos.ventas.cotizaciones.cambiarEstado = !allChecked;
-      newPermisos.ventas.cotizaciones.anular = !allChecked;
-
-      newPermisos.ventas.ordenesVenta.ver = !allChecked;
-      newPermisos.ventas.ordenesVenta.crear = !allChecked;
-      newPermisos.ventas.ordenesVenta.descargar = !allChecked;
-      newPermisos.ventas.ordenesVenta.editar = !allChecked;
-      newPermisos.ventas.ordenesVenta.cambiarEstado = !allChecked;
-      newPermisos.ventas.ordenesVenta.anular = !allChecked;
-
-      newPermisos.ventas.remisionesVenta.ver = !allChecked;
-      newPermisos.ventas.remisionesVenta.crear = !allChecked;
-      newPermisos.ventas.remisionesVenta.descargar = !allChecked;
-      newPermisos.ventas.remisionesVenta.editar = !allChecked;
-      newPermisos.ventas.remisionesVenta.cambiarEstado = !allChecked;
-      newPermisos.ventas.remisionesVenta.anular = !allChecked;
-
-      newPermisos.ventas.pagos.ver = !allChecked;
-      newPermisos.ventas.pagos.crear = !allChecked;
-      newPermisos.ventas.pagos.agregarAbonos = !allChecked;
-      newPermisos.ventas.pagos.anular = !allChecked;
-    }
-
-    if (module === "administracion") {
-      newPermisos.administracion.roles.ver = !allChecked;
-      newPermisos.administracion.roles.crear = !allChecked;
-      newPermisos.administracion.roles.editar = !allChecked;
-      newPermisos.administracion.roles.cambiarEstado = !allChecked;
-      newPermisos.administracion.roles.eliminar = !allChecked;
-
-      newPermisos.administracion.usuarios.ver = !allChecked;
-      newPermisos.administracion.usuarios.crear = !allChecked;
-      newPermisos.administracion.usuarios.editar = !allChecked;
-      newPermisos.administracion.usuarios.eliminar = !allChecked;
-      newPermisos.administracion.usuarios.cambiarEstado = !allChecked;
-      newPermisos.administracion.usuarios.restablecerContrasena = !allChecked;
-    }
-
     setFormPermisos(newPermisos);
   };
 
@@ -698,24 +540,20 @@ export default function Roles() {
   };
 
   const confirmEdit = async () => {
-    if (!puedeEditar) {
-      toast.error("No tienes permiso para editar roles");
+    if (isUpdatingRol) return;
+    if (!rolSeleccionado) return;
+
+    if (!validateForm()) return;
+
+    const ids_permisos = permisosFrontendToIds(formPermisos, catalogoPermisos);
+
+    if (ids_permisos.length === 0) {
+      toast.error("Debes asignar al menos un permiso al rol");
       return;
     }
 
-    if (isUpdatingRol) return;
-    if (!rolSeleccionado) return;
-    if (!validateForm()) return;
-
     try {
       setIsUpdatingRol(true);
-
-      const ids_permisos = permisosFrontendToIds(formPermisos, catalogoPermisos);
-
-      if (ids_permisos.length === 0) {
-        toast.error("Debes asignar al menos un permiso al rol");
-        return;
-      }
 
       await updateRol(rolSeleccionado.id, {
         nombre_rol: formNombre.trim(),
@@ -725,15 +563,16 @@ export default function Roles() {
       });
 
       await cargarDatos();
+
       toast.success("Rol actualizado exitosamente");
       closeToList();
     } catch (error: any) {
       console.error("Error actualizando rol:", error);
-
-      const message =
-        error?.response?.data?.message || "No se pudo actualizar el rol";
-
-      toast.error(Array.isArray(message) ? message.join(", ") : message);
+      toast.error(
+        error?.response?.data?.message ||
+        error?.message ||
+        "No se pudo actualizar el rol"
+      );
     } finally {
       setIsUpdatingRol(false);
     }
@@ -1116,7 +955,7 @@ export default function Roles() {
                   <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
                     <h5 className="font-semibold text-sm mb-2">Dashboard</h5>
                     <div className="text-sm text-gray-700 space-y-1">
-                      <p>• Acceder: {rolSeleccionado.permisos.dashboard.acceder ? "✓" : "✗"}</p>
+                      <p>• Ver Resumen: {rolSeleccionado.permisos.dashboard.acceder ? "✓" : "✗"}</p>
                     </div>
                   </div>
 
@@ -1127,6 +966,7 @@ export default function Roles() {
                       <p className="font-medium">Productos:</p>
                       <p className="pl-2">• Ver: {rolSeleccionado.permisos.existencias.productos.ver ? "✓" : "✗"}</p>
                       <p className="pl-2">• Crear: {rolSeleccionado.permisos.existencias.productos.crear ? "✓" : "✗"}</p>
+                      <p className="pl-2">• Crear IVA: {rolSeleccionado.permisos.existencias.productos.crearIva ? "✓" : "✗"}</p>
                       <p className="pl-2">• Editar: {rolSeleccionado.permisos.existencias.productos.editar ? "✓" : "✗"}</p>
                       <p className="pl-2">• Cambiar Estado: {rolSeleccionado.permisos.existencias.productos.cambiarEstado ? "✓" : "✗"}</p>
 
@@ -1261,7 +1101,8 @@ export default function Roles() {
         <DialogContent
           className="max-w-6xl max-h-[90vh] overflow-y-auto"
           aria-describedby="rol-create-description"
-          onInteractOutside={(e) => e.preventDefault()} // ✅ no cerrar por fuera
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
         >
           <DialogHeader>
             <DialogTitle>Crear Nuevo Rol</DialogTitle>
@@ -1281,7 +1122,9 @@ export default function Roles() {
                 className={errors.nombre ? "border-red-500" : ""}
                 onBlur={handleNombreBlur}
               />
-              {errors.nombre && <p className="text-red-500 text-sm mt-1">{errors.nombre}</p>}
+              {errors.nombre && (
+                <p className="text-red-500 text-sm mt-1">{errors.nombre}</p>
+              )}
             </div>
 
             <div>
@@ -1301,7 +1144,9 @@ export default function Roles() {
             </div>
 
             <div className="pt-4 border-t">
-              <Label className="text-base mb-4 block">Configuración de Permisos</Label>
+              <Label className="text-base mb-4 block">
+                Configuración de Permisos
+              </Label>
 
               <PermisosForm
                 formPermisos={formPermisos}
@@ -1313,12 +1158,15 @@ export default function Roles() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={closeToList}>
+            <Button variant="outline" onClick={closeToList} disabled={isCreatingRol}>
               Cancelar
             </Button>
-            <Button onClick={confirmCreate}
+
+            <Button
+              onClick={confirmCreate}
               disabled={isCreatingRol}
-              className="bg-blue-600 hover:bg-blue-700">
+              className="bg-blue-600 hover:bg-blue-700"
+            >
               {isCreatingRol ? "Creando..." : "Crear Rol"}
             </Button>
           </DialogFooter>
@@ -1335,7 +1183,8 @@ export default function Roles() {
         <DialogContent
           className="max-w-6xl max-h-[90vh] overflow-y-auto"
           aria-describedby="rol-edit-description"
-          onInteractOutside={(e) => e.preventDefault()} // ✅ no cerrar por fuera
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
         >
           <DialogHeader>
             <DialogTitle>Editar Rol</DialogTitle>
@@ -1355,7 +1204,9 @@ export default function Roles() {
                 className={errors.nombre ? "border-red-500" : ""}
                 onBlur={handleNombreBlur}
               />
-              {errors.nombre && <p className="text-red-500 text-sm mt-1">{errors.nombre}</p>}
+              {errors.nombre && (
+                <p className="text-red-500 text-sm mt-1">{errors.nombre}</p>
+              )}
             </div>
 
             <div>
@@ -1375,7 +1226,9 @@ export default function Roles() {
             </div>
 
             <div className="pt-4 border-t">
-              <Label className="text-base mb-4 block">Configuración de Permisos</Label>
+              <Label className="text-base mb-4 block">
+                Configuración de Permisos
+              </Label>
 
               <PermisosForm
                 formPermisos={formPermisos}
@@ -1390,8 +1243,13 @@ export default function Roles() {
             <Button variant="outline" onClick={closeToList}>
               Cancelar
             </Button>
-            <Button onClick={confirmEdit} className="bg-blue-600 hover:bg-blue-700">
-              Guardar Cambios
+
+            <Button
+              onClick={confirmEdit}
+              disabled={isUpdatingRol}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {isUpdatingRol ? "Guardando..." : "Guardar Cambios"}
             </Button>
           </DialogFooter>
         </DialogContent>

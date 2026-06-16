@@ -18,59 +18,16 @@ export type ProductoVistaUI = {
   lotes: {
     id: number;
     numeroLote: string;
+    cantidadTotal: number;
+    cantidadReservada: number;
     cantidadDisponible: number;
+    precioCompraUnitario: number | null;
     fechaVencimiento: string;
     bodega: string;
     idBodega: number;
     nota: string;
   }[];
   raw: ProductoVistaBackend;
-};
-
-const toNumber = (value: string | number | null | undefined): number => {
-  if (value === null || value === undefined || value === "") return 0;
-
-  const parsed = Number(value);
-  return Number.isNaN(parsed) ? 0 : parsed;
-};
-
-const toText = (value: unknown, fallback = ""): string => {
-  if (value === null || value === undefined) return fallback;
-
-  const text = String(value).trim();
-  return text || fallback;
-};
-
-export const productoVistaBackendToUI = (
-  producto: ProductoVistaBackend
-): ProductoVistaUI => {
-  return {
-    id: producto.id_producto,
-    nombre: producto.nombre_producto,
-    categoria: producto.categoria_producto?.nombre_categoria ?? "",
-    descripcion: producto.descripcion ?? "",
-    iva: toNumber(producto.iva?.porcentaje),
-    stockTotal: Number(producto.stock_total ?? 0),
-    estado: Boolean(producto.estado),
-
-    lotes: producto.lotes.map((lote) => ({
-      id: Number(lote.id_existencia ?? 0),
-      numeroLote: toText(lote.lote, "Sin lote"),
-      cantidadDisponible: Number(lote.cantidad ?? 0),
-      fechaVencimiento: lote.fecha_vencimiento ?? "",
-      bodega: toText(lote.nombre_bodega, "Sin bodega"),
-      idBodega: Number(lote.id_bodega ?? 0),
-      nota: toText(lote.nota, "Sin nota"),
-    })),
-
-    raw: producto,
-  };
-};
-
-export const productosVistaBackendToUI = (
-  productos: ProductoVistaBackend[]
-): ProductoVistaUI[] => {
-  return productos.map(productoVistaBackendToUI);
 };
 
 export type ProductoUI = {
@@ -106,6 +63,75 @@ export type ProductoFormValues = {
 export type OpcionCatalogo = {
   id: number;
   nombre: string;
+};
+
+const toNumber = (value: string | number | null | undefined): number => {
+  if (value === null || value === undefined || value === "") return 0;
+
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+const toNullableNumber = (
+  value: string | number | null | undefined
+): number | null => {
+  if (value === null || value === undefined || value === "") return null;
+
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
+const toText = (value: unknown, fallback = ""): string => {
+  if (value === null || value === undefined) return fallback;
+
+  const text = String(value).trim();
+  return text || fallback;
+};
+
+export const productoVistaBackendToUI = (
+  producto: ProductoVistaBackend
+): ProductoVistaUI => {
+  return {
+    id: producto.id_producto,
+    nombre: producto.nombre_producto,
+    categoria: producto.categoria_producto?.nombre_categoria ?? "",
+    descripcion: producto.descripcion ?? "",
+    iva: toNumber(producto.iva?.porcentaje),
+    stockTotal: Number(producto.stock_total ?? 0),
+    estado: Boolean(producto.estado),
+
+    lotes: producto.lotes.map((lote) => {
+      const cantidadTotal = toNumber(lote.cantidad);
+      const cantidadReservada = toNumber(lote.cantidad_reservada);
+      const cantidadDisponible = toNumber(
+        lote.cantidad_disponible ??
+          Math.max(cantidadTotal - cantidadReservada, 0)
+      );
+
+      return {
+        id: Number(lote.id_existencia ?? 0),
+        numeroLote: toText(lote.lote, "Sin lote"),
+        cantidadTotal,
+        cantidadReservada,
+        cantidadDisponible,
+        precioCompraUnitario: toNullableNumber(
+          lote.precio_compra_unitario
+        ),
+        fechaVencimiento: lote.fecha_vencimiento ?? "",
+        bodega: toText(lote.nombre_bodega, "Sin bodega"),
+        idBodega: Number(lote.id_bodega ?? 0),
+        nota: toText(lote.nota, "Sin nota"),
+      };
+    }),
+
+    raw: producto,
+  };
+};
+
+export const productosVistaBackendToUI = (
+  productos: ProductoVistaBackend[]
+): ProductoVistaUI[] => {
+  return productos.map(productoVistaBackendToUI);
 };
 
 export const productoBackendToUI = (

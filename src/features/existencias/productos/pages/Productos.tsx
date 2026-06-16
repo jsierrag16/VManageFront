@@ -138,12 +138,9 @@ export default function Productos({
   // =========================================================
   const canCreateProductos = tienePermiso("existencias", "productos", "crear");
   const canEditProductos = tienePermiso("existencias", "productos", "editar");
-  const canChangeEstadoProductos = tienePermiso(
-    "existencias",
-    "productos",
-    "cambiarEstado"
-  );
+  const canChangeEstadoProductos = tienePermiso("existencias", "productos", "cambiarEstado");
   const canCreateTraslados = tienePermiso("existencias", "traslados", "crear");
+  const canCreateIva = tienePermiso("existencias", "productos", "crearIva");
 
   // =========================================================
   // Estados de errores y touched
@@ -375,6 +372,8 @@ export default function Productos({
 
   useEffect(() => {
     setCurrentPage(1);
+    setLotesPages({});
+    setModalLotesPage(1);
   }, [searchTerm, selectedBodega]);
 
   useEffect(() => {
@@ -481,6 +480,17 @@ export default function Productos({
     });
   };
 
+  const formatMoney = (value?: number | null) => {
+    if (value === null || value === undefined || Number.isNaN(value)) {
+      return "Sin P/U";
+    }
+
+    return `COP$${Number(value).toLocaleString("es-CO", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  };
+
   const getVencimientoColor = (fecha: string) => {
     if (!fecha) return "text-gray-700";
 
@@ -527,6 +537,11 @@ export default function Productos({
   };
 
   const handleCrearIva = async () => {
+    if (!canCreateIva) {
+      toast.error("No tienes permiso para crear IVA");
+      return;
+    }
+
     const porcentaje = Number(nuevoIvaPorcentaje.replace(",", "."));
 
     if (!nuevoIvaPorcentaje.trim() || Number.isNaN(porcentaje)) {
@@ -948,7 +963,7 @@ export default function Productos({
                 <TableHead>Descripción</TableHead>
                 <TableHead>Categoría</TableHead>
                 <TableHead className="text-center">IVA</TableHead>
-                <TableHead className="text-center">Stock</TableHead>
+                <TableHead className="text-center">Disponible</TableHead>
                 <TableHead className="text-center">Estado</TableHead>
                 <TableHead className="text-center w-32">Acciones</TableHead>
               </TableRow>
@@ -975,9 +990,13 @@ export default function Productos({
                 </TableRow>
               ) : (
                 currentProductos.map((producto, index) => {
-                  const lotesPage = lotesPages[String(producto.id)] || 1;
-                  const totalLotesPages = Math.ceil(
-                    producto.lotes.length / lotesPerPage
+                  const totalLotesPages = Math.max(
+                    1,
+                    Math.ceil(producto.lotes.length / lotesPerPage)
+                  );
+                  const lotesPage = Math.min(
+                    lotesPages[String(producto.id)] || 1,
+                    totalLotesPages
                   );
                   const lotesStartIndex = (lotesPage - 1) * lotesPerPage;
                   const lotesEndIndex = lotesStartIndex + lotesPerPage;
@@ -1126,13 +1145,16 @@ export default function Productos({
                                         N° Lote
                                       </TableHead>
                                       <TableHead className="text-xs text-center">
-                                        Cantidad por Lote
+                                        Disponible
                                       </TableHead>
                                       <TableHead className="text-xs text-center">
                                         Fecha de Vencimiento
                                       </TableHead>
-                                      <TableHead className="text-xs">
+                                      <TableHead className="text-xs text-center">
                                         Bodega Asignada
+                                      </TableHead>
+                                      <TableHead className="text-xs text-center">
+                                        Precio unidad IVA incluido
                                       </TableHead>
                                       <TableHead className="text-xs">
                                         Nota
@@ -1144,7 +1166,7 @@ export default function Productos({
                                     {producto.lotes.length === 0 ? (
                                       <TableRow>
                                         <TableCell
-                                          colSpan={4}
+                                          colSpan={6}
                                           className="text-center py-4 text-gray-500 text-sm"
                                         >
                                           No hay lotes registrados
@@ -1183,7 +1205,7 @@ export default function Productos({
                                             </span>
                                           </TableCell>
 
-                                          <TableCell>
+                                          <TableCell className="text-center">
                                             <Badge
                                               variant="outline"
                                               className="text-xs"
@@ -1191,6 +1213,11 @@ export default function Productos({
                                               {lote.bodega}
                                             </Badge>
                                           </TableCell>
+
+                                          <TableCell className="text-center font-medium text-gray-700">
+                                            {formatMoney(lote.precioCompraUnitario)}
+                                          </TableCell>
+
                                           <TableCell>
                                             <Badge
                                               variant="outline"
@@ -1447,9 +1474,10 @@ export default function Productos({
                     <TableHeader>
                       <TableRow className="bg-gray-50">
                         <TableHead>N° Lote</TableHead>
-                        <TableHead className="text-center">Cantidad</TableHead>
+                        <TableHead className="text-center">Disponible</TableHead>
                         <TableHead className="text-center">Vencimiento</TableHead>
-                        <TableHead>Bodega</TableHead>
+                        <TableHead className="text-center">Bodega</TableHead>
+                        <TableHead className="text-center">Precio unidad IVA incluido</TableHead>
                         <TableHead>Nota</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1458,7 +1486,7 @@ export default function Productos({
                       {modalLotes.length === 0 ? (
                         <TableRow>
                           <TableCell
-                            colSpan={5}
+                            colSpan={6}
                             className="py-6 text-center text-gray-500"
                           >
                             No hay lotes registrados
@@ -1483,10 +1511,14 @@ export default function Productos({
                               </span>
                             </TableCell>
 
-                            <TableCell>
+                            <TableCell className="text-center">
                               <Badge variant="outline" className="text-xs">
                                 {lote.bodega || "-"}
                               </Badge>
+                            </TableCell>
+
+                            <TableCell className="text-center font-semibold text-gray-800">
+                              {formatMoney(lote.precioCompraUnitario)}
                             </TableCell>
 
                             <TableCell className="max-w-xs text-gray-700">
@@ -1700,15 +1732,17 @@ export default function Productos({
                   </SelectContent>
                 </Select>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowNuevoIvaModal(true)}
-                  className="h-11 shrink-0 border-blue-200 bg-blue-50 px-4 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
-                >
-                  <Plus size={16} className="mr-2" />
-                  Nuevo IVA
-                </Button>
+                {canCreateIva && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowNuevoIvaModal(true)}
+                    className="h-11 shrink-0 border-blue-200 bg-blue-50 px-4 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
+                  >
+                    <Plus size={16} className="mr-2" />
+                    Nuevo IVA
+                  </Button>
+                )}
               </div>
 
               {errors.iva && touched.iva && (
@@ -1864,15 +1898,17 @@ export default function Productos({
                   </SelectContent>
                 </Select>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowNuevoIvaModal(true)}
-                  className="h-11 shrink-0 border-blue-200 bg-blue-50 px-4 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
-                >
-                  <Plus size={16} className="mr-2" />
-                  Nuevo IVA
-                </Button>
+                {canCreateIva && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowNuevoIvaModal(true)}
+                    className="h-11 shrink-0 border-blue-200 bg-blue-50 px-4 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
+                  >
+                    <Plus size={16} className="mr-2" />
+                    Nuevo IVA
+                  </Button>
+                )}
               </div>
 
               {errors.iva && touched.iva && (
