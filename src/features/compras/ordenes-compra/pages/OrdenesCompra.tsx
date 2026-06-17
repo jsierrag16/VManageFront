@@ -303,10 +303,15 @@ export default function Compras() {
   const {
     selectedBodegaId: outletSelectedBodegaId,
     selectedBodegaNombre: outletSelectedBodegaNombre,
+    bodegasDisponibles,
   } = useOutletContext<
     AppOutletContext & {
       selectedBodegaId?: number;
       selectedBodegaNombre?: string;
+      bodegasDisponibles?: Array<{
+        id: number;
+        nombre: string;
+      }>;
     }
   >();
 
@@ -483,9 +488,23 @@ export default function Compras() {
     return productosCatalogo.filter((p) => p.estado !== false);
   }, [productosCatalogo]);
 
-  const bodegasActivas = useMemo(() => {
-    return bodegas.filter((b) => b.estado !== false);
-  }, [bodegas]);
+  const bodegasActivas = useMemo<BasicOption[]>(() => {
+    const bodegasUsuario = bodegasDisponibles ?? [];
+
+    const normalizadas = bodegasUsuario
+      .map((bodega) => ({
+        id: Number(bodega.id),
+        nombre: String(bodega.nombre ?? "").trim(),
+        estado: true,
+      }))
+      .filter((bodega) => bodega.id > 0 && bodega.nombre);
+
+    if (normalizadas.length > 0) {
+      return normalizadas;
+    }
+
+    return bodegas.filter((bodega) => bodega.estado !== false);
+  }, [bodegasDisponibles, bodegas]);
 
   const proveedoresActivos = useMemo(() => {
     return proveedores.filter((p) => p.estado !== false);
@@ -1166,6 +1185,15 @@ export default function Compras() {
   };
 
   const resetCompraForm = () => {
+    const bodegaInicial =
+      effectiveSelectedBodegaId
+        ? bodegasActivas.find(
+          (bodega) => Number(bodega.id) === Number(effectiveSelectedBodegaId)
+        )
+        : bodegasActivas.length === 1
+          ? bodegasActivas[0]
+          : null;
+
     setFormData({
       numeroOrden: "",
       proveedorId: "",
@@ -1175,13 +1203,8 @@ export default function Compras() {
       fecha: getFechaActual(),
       estado: "Pendiente",
       observaciones: "",
-      bodega:
-        !isTodasLasBodegas && effectiveSelectedBodegaNombre
-          ? effectiveSelectedBodegaNombre
-          : "",
-      bodegaId: effectiveSelectedBodegaId
-        ? String(effectiveSelectedBodegaId)
-        : "",
+      bodega: bodegaInicial?.nombre ?? "",
+      bodegaId: bodegaInicial ? String(bodegaInicial.id) : "",
     });
 
     setSelectedProductoId("");
@@ -1199,6 +1222,7 @@ export default function Compras() {
     effectiveSelectedBodegaNombre,
     effectiveSelectedBodegaId,
     isTodasLasBodegas,
+    bodegasActivas,
   ]);
 
   useEffect(() => {

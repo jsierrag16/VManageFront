@@ -147,6 +147,15 @@ export default function Roles() {
     return roles.find((r) => r.id === numericId) ?? null;
   }, [roles, id]);
 
+  const esRolAdministrador = (rol?: Rol | null) => {
+    if (!rol) return false;
+
+    return (
+      rol.id === 1 ||
+      rol.nombre.trim().toLowerCase() === "administrador"
+    );
+  };
+
   const filteredRoles = useMemo(() => {
     return roles.filter((rol) => {
       const searchLower = searchTerm.toLowerCase();
@@ -470,12 +479,22 @@ export default function Roles() {
       return;
     }
 
+    if (esRolAdministrador(rol)) {
+      toast.warning("El rol Administrador no se puede editar");
+      return;
+    }
+
     navigate(`/app/roles/${rol.id}/editar`);
   };
 
   const handleDelete = (rol: Rol) => {
     if (!puedeEliminar) {
       toast.error("No tienes permiso para eliminar roles");
+      return;
+    }
+
+    if (esRolAdministrador(rol)) {
+      toast.warning("El rol Administrador no se puede eliminar");
       return;
     }
 
@@ -488,6 +507,11 @@ export default function Roles() {
   const handleToggleEstado = (rol: Rol) => {
     if (!puedeCambiarEstado) {
       toast.error("No tienes permiso para cambiar el estado de roles");
+      return;
+    }
+
+    if (esRolAdministrador(rol)) {
+      toast.warning("El rol Administrador no se puede desactivar");
       return;
     }
 
@@ -544,6 +568,12 @@ export default function Roles() {
     if (isUpdatingRol) return;
     if (!rolSeleccionado) return;
 
+    if (esRolAdministrador(rolSeleccionado)) {
+      toast.warning("El rol Administrador no se puede editar");
+      closeToList();
+      return;
+    }
+
     if (!validateForm()) return;
 
     const ids_permisos = permisosFrontendToIds(formPermisos, catalogoPermisos);
@@ -588,6 +618,12 @@ export default function Roles() {
     if (isDeletingRol) return;
     if (!rolSeleccionado) return;
 
+    if (esRolAdministrador(rolSeleccionado)) {
+      toast.warning("El rol Administrador no se puede eliminar");
+      closeToList();
+      return;
+    }
+
     try {
       setIsDeletingRol(true);
 
@@ -616,6 +652,13 @@ export default function Roles() {
 
     if (isChangingEstadoRol) return;
     if (!rolParaCambioEstado) return;
+
+    if (esRolAdministrador(rolParaCambioEstado)) {
+      toast.warning("El rol Administrador no se puede desactivar");
+      setShowConfirmEstadoModal(false);
+      setRolParaCambioEstado(null);
+      return;
+    }
 
     const nuevoEstado = !rolParaCambioEstado.estado;
 
@@ -781,7 +824,11 @@ export default function Roles() {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleToggleEstado(rol)}
-                        disabled={rol.usuariosAsignados > 0 || !puedeCambiarEstado}
+                        disabled={
+                          esRolAdministrador(rol) ||
+                          rol.usuariosAsignados > 0 ||
+                          !puedeCambiarEstado
+                        }
                         className={`h-7 ${rol.estado
                           ? "bg-green-100 text-green-800 hover:bg-green-200"
                           : "bg-red-100 text-red-800 hover:bg-red-200"
@@ -807,8 +854,17 @@ export default function Roles() {
                             variant="ghost"
                             size="icon"
                             onClick={() => handleEdit(rol)}
-                            className="h-8 w-8 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
-                            title="Editar"
+                            disabled={esRolAdministrador(rol)}
+                            className={
+                              esRolAdministrador(rol)
+                                ? "h-8 w-8 cursor-not-allowed text-gray-400 hover:bg-transparent"
+                                : "h-8 w-8 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                            }
+                            title={
+                              esRolAdministrador(rol)
+                                ? "El rol Administrador no se puede editar"
+                                : "Editar"
+                            }
                           >
                             <Edit size={16} />
                           </Button>
@@ -819,8 +875,14 @@ export default function Roles() {
                             size="icon"
                             onClick={() => handleDelete(rol)}
                             className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                            title="Eliminar"
-                            disabled={rol.usuariosAsignados > 0}
+                            title={
+                              esRolAdministrador(rol)
+                                ? "El rol Administrador no se puede eliminar"
+                                : rol.usuariosAsignados > 0
+                                  ? "No se puede eliminar porque tiene usuarios asignados"
+                                  : "Eliminar"
+                            }
+                            disabled={esRolAdministrador(rol) || rol.usuariosAsignados > 0}
                           >
                             <Trash2 size={16} />
                           </Button>
@@ -1196,51 +1258,58 @@ export default function Roles() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="edit-nombre">Nombre del Rol *</Label>
-              <Input
-                id="edit-nombre"
-                value={formNombre}
-                onChange={(e) => handleNombreChange(e.target.value)}
-                placeholder="Ej: Gerente de Ventas"
-                className={errors.nombre ? "border-red-500" : ""}
-                onBlur={handleNombreBlur}
-              />
-              {errors.nombre && (
-                <p className="text-red-500 text-sm mt-1">{errors.nombre}</p>
-              )}
+          {esRolAdministrador(rolSeleccionado) ? (
+            <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-5 text-sm text-yellow-800">
+              El rol Administrador es un rol protegido del sistema y no se puede editar.
             </div>
+          ) : (
 
-            <div>
-              <Label htmlFor="edit-descripcion">Descripción *</Label>
-              <Textarea
-                id="edit-descripcion"
-                value={formDescripcion}
-                onChange={(e) => handleDescripcionChange(e.target.value)}
-                placeholder="Describe las responsabilidades de este rol"
-                rows={3}
-                className={errors.descripcion ? "border-red-500" : ""}
-                onBlur={handleDescripcionBlur}
-              />
-              {errors.descripcion && (
-                <p className="text-red-500 text-sm mt-1">{errors.descripcion}</p>
-              )}
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="edit-nombre">Nombre del Rol *</Label>
+                <Input
+                  id="edit-nombre"
+                  value={formNombre}
+                  onChange={(e) => handleNombreChange(e.target.value)}
+                  placeholder="Ej: Gerente de Ventas"
+                  className={errors.nombre ? "border-red-500" : ""}
+                  onBlur={handleNombreBlur}
+                />
+                {errors.nombre && (
+                  <p className="text-red-500 text-sm mt-1">{errors.nombre}</p>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="edit-descripcion">Descripción *</Label>
+                <Textarea
+                  id="edit-descripcion"
+                  value={formDescripcion}
+                  onChange={(e) => handleDescripcionChange(e.target.value)}
+                  placeholder="Describe las responsabilidades de este rol"
+                  rows={3}
+                  className={errors.descripcion ? "border-red-500" : ""}
+                  onBlur={handleDescripcionBlur}
+                />
+                {errors.descripcion && (
+                  <p className="text-red-500 text-sm mt-1">{errors.descripcion}</p>
+                )}
+              </div>
+
+              <div className="pt-4 border-t">
+                <Label className="text-base mb-4 block">
+                  Configuración de Permisos
+                </Label>
+
+                <PermisosForm
+                  formPermisos={formPermisos}
+                  updatePermiso={updatePermiso}
+                  toggleModulePermissions={toggleModulePermissions}
+                  isModuleFullyChecked={isModuleFullyChecked}
+                />
+              </div>
             </div>
-
-            <div className="pt-4 border-t">
-              <Label className="text-base mb-4 block">
-                Configuración de Permisos
-              </Label>
-
-              <PermisosForm
-                formPermisos={formPermisos}
-                updatePermiso={updatePermiso}
-                toggleModulePermissions={toggleModulePermissions}
-                isModuleFullyChecked={isModuleFullyChecked}
-              />
-            </div>
-          </div>
+          )}
 
           <DialogFooter>
             <Button variant="outline" onClick={closeToList}>

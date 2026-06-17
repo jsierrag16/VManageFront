@@ -1534,7 +1534,7 @@ export default function RemisionesCompra() {
       navigate("/app/remisiones-compra", { replace: true });
 
       toast.success(
-        "Estado actualizado correctamente y existencias aplicadas desde backend"
+        "Estado actualizado correctamente y existencias aplicadas"
       );
     } catch (error) {
       toast.error(getErrorMessage(error, "No fue posible cambiar el estado"));

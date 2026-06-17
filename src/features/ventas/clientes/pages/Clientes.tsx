@@ -68,8 +68,6 @@ export default function Clientes() {
   const location = useLocation();
   const params = useParams<{ id: string }>();
 
-  useOutletContext<AppOutletContext>();
-
   const isCrear = location.pathname.endsWith("/crear");
   const isVer = location.pathname.endsWith("/ver");
   const isEditar = location.pathname.endsWith("/editar");
@@ -88,10 +86,40 @@ export default function Clientes() {
   const [tiposCliente, setTiposCliente] = useState<TipoClienteOption[]>([]);
   const [municipios, setMunicipios] = useState<MunicipioOption[]>([]);
   const [departamentos, setDepartamentos] = useState<DepartamentoOption[]>([]);
+
   const [bodegas, setBodegas] = useState<BodegaOption[]>([]);
   const [formDepartamentoId, setFormDepartamentoId] = useState("");
   const [isLoadingMunicipios, setIsLoadingMunicipios] = useState(false);
-  const { selectedBodegaId } = useOutletContext<AppOutletContext>();
+
+  const {
+    selectedBodegaId,
+    bodegasDisponibles,
+  } = useOutletContext<
+    AppOutletContext & {
+      selectedBodegaId?: number;
+      bodegasDisponibles?: Array<{
+        id: number;
+        nombre: string;
+      }>;
+    }
+  >();
+
+  const bodegasPermitidas = useMemo<BodegaOption[]>(() => {
+    const bodegasUsuario = bodegasDisponibles ?? [];
+
+    const normalizadas = bodegasUsuario
+      .map((bodega) => ({
+        id: Number(bodega.id),
+        nombre: String(bodega.nombre ?? "").trim(),
+      }))
+      .filter((bodega) => bodega.id > 0 && bodega.nombre);
+
+    if (normalizadas.length > 0) {
+      return normalizadas;
+    }
+
+    return bodegas;
+  }, [bodegasDisponibles, bodegas]);
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showConfirmEstadoModal, setShowConfirmEstadoModal] = useState(false);
@@ -478,7 +506,13 @@ export default function Clientes() {
     setFormDepartamentoId("");
     setMunicipios([]);
     setFormTipoClienteId("");
-    setFormBodegaId("");
+    setFormBodegaId(
+      selectedBodegaId
+        ? String(selectedBodegaId)
+        : bodegasPermitidas.length === 1
+          ? String(bodegasPermitidas[0].id)
+          : ""
+    );
 
     setErrors({
       tipoDoc: "",
@@ -503,7 +537,7 @@ export default function Clientes() {
       bodega: false,
       tipoCliente: false,
     });
-  }, [isCrear]);
+  }, [isCrear, selectedBodegaId, bodegasPermitidas]);
 
   // -------------------------
   // Precarga editar
@@ -605,6 +639,15 @@ export default function Clientes() {
 
     if (hasErrors) {
       toast.error("Por favor corrige los campos obligatorios");
+      return false;
+    }
+
+    const bodegaPermitida = bodegasPermitidas.some(
+      (bodega) => String(bodega.id) === String(formBodegaId)
+    );
+
+    if (!bodegaPermitida) {
+      toast.error("No tienes acceso a la bodega seleccionada");
       return false;
     }
 
@@ -887,12 +930,12 @@ export default function Clientes() {
             </SelectTrigger>
 
             <SelectContent>
-              {bodegas.length === 0 ? (
+              {bodegasPermitidas.length === 0 ? (
                 <div className="px-3 py-2 text-sm text-gray-500">
-                  No hay bodegas disponibles
+                  No tienes bodegas asignadas disponibles
                 </div>
               ) : (
-                bodegas.map((bodega) => (
+                bodegasPermitidas.map((bodega) => (
                   <SelectItem key={bodega.id} value={String(bodega.id)}>
                     {bodega.nombre}
                   </SelectItem>
