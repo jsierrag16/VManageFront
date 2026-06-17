@@ -46,6 +46,7 @@ import {
   SelectValue,
 } from "../../../../shared/components/ui/select";
 import { Textarea } from "../../../../shared/components/ui/textarea";
+import { TableLoadingRow } from "@/shared/components/TableLoadingRow";
 import { Label } from "../../../../shared/components/ui/label";
 import {
   Dialog,
@@ -1732,11 +1733,7 @@ export default function Compras() {
 
             <TableBody>
               {isLoading || !hasResolvedBodega ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-gray-500">
-                    Cargando órdenes de compra...
-                  </TableCell>
-                </TableRow>
+                <TableLoadingRow colSpan={10} text="Cargando órdenes de compra..." />
               ) : filteredCompras.length === 0 ? (
                 <TableRow>
                   <TableCell

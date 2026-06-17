@@ -12,6 +12,7 @@ import {
   Filter,
 } from "lucide-react";
 import { Button } from "../../../../shared/components/ui/button";
+import { TableLoadingRow } from "@/shared/components/TableLoadingRow";
 import { Input } from "../../../../shared/components/ui/input";
 import {
   Table,
@@ -739,7 +740,9 @@ export default function Roles() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {currentRoles.length === 0 ? (
+              {loading ? (
+                <TableLoadingRow colSpan={5} text="Cargando roles..." />
+              ) : currentRoles.length === 0 ? (
                 <TableRow>
                   <TableCell
                     colSpan={5}

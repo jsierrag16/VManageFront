@@ -38,6 +38,7 @@ import logoVmanage from "../../../../assets/images/VLogo.png"
 
 import type { AppOutletContext } from "../../../../layouts/MainLayout";
 import { Button } from "../../../../shared/components/ui/button";
+import { TableLoadingRow } from "@/shared/components/TableLoadingRow";
 import { Input } from "../../../../shared/components/ui/input";
 import { Label } from "../../../../shared/components/ui/label";
 import {
@@ -1924,11 +1925,7 @@ export default function RemisionesVenta() {
 
             <TableBody>
               {loading ? (
-                <TableRow>
-                  <TableCell colSpan={10} className="text-center py-8">
-                    Cargando...
-                  </TableCell>
-                </TableRow>
+                <TableLoadingRow colSpan={10} text="Cargando remisiones de venta..." />
               ) : currentRemisiones.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={10} className="text-center py-8 text-gray-500">

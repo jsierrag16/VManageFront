@@ -24,6 +24,7 @@ import { Button } from "../../../../shared/components/ui/button";
 import { Input } from "../../../../shared/components/ui/input";
 import { Badge } from "../../../../shared/components/ui/badge";
 import { Textarea } from "../../../../shared/components/ui/textarea";
+import { TableLoadingRow } from "@/shared/components/TableLoadingRow";
 import { Label } from "../../../../shared/components/ui/label";
 import {
   Table,
@@ -1677,14 +1678,6 @@ export default function OrdenesVenta() {
     return calcularTotalesConIva(detalleOrdenSeleccionada);
   }, [detalleOrdenSeleccionada]);
 
-  if (loading) {
-    return (
-      <div className="flex min-h-75 items-center justify-center text-gray-500">
-        Cargando órdenes de venta...
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <div>
@@ -1782,7 +1775,9 @@ export default function OrdenesVenta() {
             </TableHeader>
 
             <TableBody>
-              {filteredOrdenes.length === 0 ? (
+              {loading ? (
+                <TableLoadingRow colSpan={10} text="Cargando órdenes de venta..." />
+              ) : filteredOrdenes.length === 0 ? (
                 <TableRow>
                   <TableCell
                     colSpan={10}
@@ -2324,8 +2319,8 @@ export default function OrdenesVenta() {
 
                               <span
                                 className={`rounded-full px-2 py-0.5 text-xs font-medium ${precioProductoMenorCostoRef
-                                    ? "bg-red-50 text-red-600"
-                                    : "bg-amber-50 text-amber-700"
+                                  ? "bg-red-50 text-red-600"
+                                  : "bg-amber-50 text-amber-700"
                                   }`}
                               >
                                 {costosReferenciaPorProducto[selectedProductoId]?.origenReferencia ===

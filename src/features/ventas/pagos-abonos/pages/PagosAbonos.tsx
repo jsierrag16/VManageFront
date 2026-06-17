@@ -27,6 +27,7 @@ import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { Checkbox } from "@/shared/components/ui/checkbox";
+import { TableLoadingRow } from "@/shared/components/TableLoadingRow";
 import {
   Dialog,
   DialogContent,
@@ -831,7 +832,9 @@ export default function PagosAbonos() {
             </TableHeader>
 
             <TableBody>
-              {!loading && currentFacturas.length === 0 ? (
+              {loading ? (
+                <TableLoadingRow colSpan={9} text="Cargando pagos y abonos..." />
+              ) : currentFacturas.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={9} className="py-10 text-center text-gray-500">
                     No se encontraron pagos y abonos

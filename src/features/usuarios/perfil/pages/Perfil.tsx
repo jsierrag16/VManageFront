@@ -30,6 +30,7 @@ import {
   Lock,
   KeyRound,
   CalendarDays,
+  Loader2,
 } from "lucide-react";
 
 import { toast } from "sonner";
@@ -247,8 +248,8 @@ export default function Perfil() {
       console.error("Error actualizando perfil:", error);
       toast.error(
         error?.response?.data?.error?.message ||
-          error?.response?.data?.message ||
-          "No se pudieron guardar los cambios"
+        error?.response?.data?.message ||
+        "No se pudieron guardar los cambios"
       );
     } finally {
       setSaving(false);
@@ -288,9 +289,12 @@ export default function Perfil() {
 
   if (loadingPerfil) {
     return (
-      <div className="h-full bg-linear-to-br from-gray-50 to-blue-50 p-1">
-        <div className="max-w-7xl mx-auto py-10 text-gray-500">
-          Cargando perfil...
+      <div className="min-h-[60vh] bg-linear-to-br from-gray-50 to-blue-50 p-1">
+        <div className="flex min-h-[50vh] items-center justify-center">
+          <div className="flex items-center gap-2 text-gray-500">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <span>Cargando perfil...</span>
+          </div>
         </div>
       </div>
     );

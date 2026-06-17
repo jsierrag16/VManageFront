@@ -18,6 +18,7 @@ import {
   Edit2,
 } from "lucide-react";
 import { Button } from "../../../../shared/components/ui/button";
+import { TableLoadingRow } from "@/shared/components/TableLoadingRow";
 import { Input } from "../../../../shared/components/ui/input";
 import {
   Table,
@@ -971,18 +972,11 @@ export default function Productos({
 
             <TableBody>
               {isLoadingProductos ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={8}
-                    className="text-center py-8 text-gray-500"
-                  >
-                    Cargando productos...
-                  </TableCell>
-                </TableRow>
+                <TableLoadingRow colSpan={8} text="Cargando productos..." />
               ) : currentProductos.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="text-center py-8 text-gray-500"
                   >
                     No se encontraron productos

@@ -22,6 +22,7 @@ import { useAuth } from "@/shared/context/AuthContext";
 import type { AppOutletContext } from "@/layouts/MainLayout";
 
 import { Button } from "../../../../shared/components/ui/button";
+import { TableLoadingRow } from "@/shared/components/TableLoadingRow";
 import { Input } from "../../../../shared/components/ui/input";
 import {
   Table,
@@ -849,11 +850,7 @@ export default function Bodegas({ triggerCreate }: BodegasProps) {
 
             <TableBody>
               {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-10 text-gray-500">
-                    Cargando bodegas...
-                  </TableCell>
-                </TableRow>
+                <TableLoadingRow colSpan={6} text="Cargando bodegas..." />
               ) : currentBodegas.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-8 text-gray-500">

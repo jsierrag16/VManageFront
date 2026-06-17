@@ -11,6 +11,7 @@ import {
   Filter,
 } from "lucide-react";
 import { Button } from "../../../../shared/components/ui/button";
+import { TableLoadingRow } from "@/shared/components/TableLoadingRow";
 import { Input } from "../../../../shared/components/ui/input";
 import {
   Table,
@@ -1087,18 +1088,11 @@ export default function Clientes() {
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={10}
-                    className="text-center py-8 text-gray-500"
-                  >
-                    Cargando clientes...
-                  </TableCell>
-                </TableRow>
+                <TableLoadingRow colSpan={10} text="Cargando clientes..." />
               ) : currentClientes.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={9}
+                    colSpan={10}
                     className="text-center py-8 text-gray-500"
                   >
                     No se encontraron clientes

@@ -24,6 +24,7 @@ import {
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { Button } from "../../../../shared/components/ui/button";
+import { TableLoadingRow } from "@/shared/components/TableLoadingRow";
 import { Input } from "../../../../shared/components/ui/input";
 import {
   Table,
@@ -108,6 +109,7 @@ export default function Cotizaciones() {
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
   const [clientes, setClientes] = useState<ClienteCotizacion[]>([]);
   const [productosCatalogo, setProductosCatalogo] = useState<ProductoCotizacion[]>([]);
+  const [isLoadingCotizaciones, setIsLoadingCotizaciones] = useState(true);
   const [costosReferenciaPorProducto, setCostosReferenciaPorProducto] = useState<
     Record<
       string,
@@ -231,6 +233,8 @@ export default function Cotizaciones() {
 
   useEffect(() => {
     const cargarCotizaciones = async () => {
+      setIsLoadingCotizaciones(true);
+
       try {
         const cotizacionesApi = await cotizacionesService.getAll({
           idBodega: selectedBodegaId ?? undefined,
@@ -240,6 +244,8 @@ export default function Cotizaciones() {
       } catch (error) {
         console.error("Error cargando cotizaciones:", error);
         toast.error("No se pudo cargar el listado de cotizaciones");
+      } finally {
+        setIsLoadingCotizaciones(false);
       }
     };
 
@@ -1701,7 +1707,9 @@ export default function Cotizaciones() {
             </TableHeader>
 
             <TableBody>
-              {filteredCotizaciones.length === 0 ? (
+              {isLoadingCotizaciones ? (
+                <TableLoadingRow colSpan={10} text="Cargando cotizaciones..." />
+              ) : filteredCotizaciones.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={10} className="py-8 text-center text-gray-500">
                     <Package size={48} className="mx-auto mb-2 text-gray-300" />

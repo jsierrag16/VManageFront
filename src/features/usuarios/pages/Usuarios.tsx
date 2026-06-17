@@ -46,6 +46,7 @@ import {
   DialogFooter,
 } from "../../../shared/components/ui/dialog";
 import { Label } from "../../../shared/components/ui/label";
+import { TableLoadingRow } from "@/shared/components/TableLoadingRow";
 import { Badge } from "../../../shared/components/ui/badge";
 import {
   Select,
@@ -382,15 +383,6 @@ export default function Usuarios() {
     }
 
     return "";
-  };
-
-  const getFechaHoyInput = () => {
-    const hoy = new Date();
-    const year = hoy.getFullYear();
-    const month = String(hoy.getMonth() + 1).padStart(2, "0");
-    const day = String(hoy.getDate()).padStart(2, "0");
-
-    return `${year}-${month}-${day}`;
   };
 
   const getFechaMinimaNacimientoInput = () => {
@@ -1497,7 +1489,9 @@ export default function Usuarios() {
             </TableHeader>
 
             <TableBody>
-              {currentUsuarios.length === 0 ? (
+              {isLoadingUsuarios ? (
+                <TableLoadingRow colSpan={8} text="Cargando usuarios..." />
+              ) : currentUsuarios.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-8 text-gray-500">
                     No se encontraron usuarios

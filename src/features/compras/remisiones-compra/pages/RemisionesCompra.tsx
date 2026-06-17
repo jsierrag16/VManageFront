@@ -71,6 +71,7 @@ import type {
   CompraOption,
   RemisionCompraUI,
 } from "../services/remisiones-compras.types";
+import { TableLoadingRow } from "@/shared/components/TableLoadingRow";
 
 type ItemForm = {
   localId: string;
@@ -2102,22 +2103,11 @@ export default function RemisionesCompra() {
 
       toast.success(
         `PDF de la remisión ${detalle.numeroRemision} descargado exitosamente`
-      );  
+      );
     } catch (error) {
       toast.error(getErrorMessage(error, "Error al descargar la remisión en PDF"));
     }
   };
-
-  if (loadingPage) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="flex items-center gap-3 text-gray-600">
-          <Loader2 className="animate-spin" size={20} />
-          <span>Cargando remisiones de compra...</span>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -2225,7 +2215,9 @@ export default function RemisionesCompra() {
             </TableHeader>
 
             <TableBody>
-              {currentRemisiones.length === 0 ? (
+              {loadingPage ? (
+                <TableLoadingRow colSpan={11} text="Cargando remisiones de compra..." />
+              ) : currentRemisiones.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={11} className="text-center py-8 text-gray-500">
                     <FileText size={48} className="mx-auto mb-2 text-gray-300" />
