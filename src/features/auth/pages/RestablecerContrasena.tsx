@@ -125,8 +125,8 @@ export default function RestablecerContrasena() {
   return (
     <AuthLayout>
       <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="space-y-1">
-          <h2 className="text-2xl font-semibold text-gray-900">
+        <div className="space-y-1 text-center">
+          <h2 className="font-semibold text-gray-900">
             Restablecer contraseña
           </h2>
           <p className="text-sm text-gray-600">
