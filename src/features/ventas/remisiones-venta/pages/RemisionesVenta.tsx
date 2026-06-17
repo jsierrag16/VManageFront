@@ -41,6 +41,7 @@ import { Button } from "../../../../shared/components/ui/button";
 import { TableLoadingRow } from "@/shared/components/TableLoadingRow";
 import { Input } from "../../../../shared/components/ui/input";
 import { Label } from "../../../../shared/components/ui/label";
+import { usePermisos } from "@/shared/hooks/usePermisos";
 import {
   Dialog,
   DialogContent,
@@ -519,6 +520,15 @@ export default function RemisionesVenta() {
   const currentUserId = Number(
     outlet?.currentUser?.id_usuario ?? outlet?.currentUser?.id ?? 0
   );
+
+  const { remisionesVenta } = usePermisos();
+
+  const puedeVer = remisionesVenta.ver;
+  const puedeCrear = remisionesVenta.crear;
+  const puedeDescargar = remisionesVenta.descargar;
+  const puedeEditar = remisionesVenta.editar;
+  const puedeCambiarEstado = remisionesVenta.cambiarEstado;
+  const puedeAnular = remisionesVenta.anular;
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -1330,6 +1340,11 @@ export default function RemisionesVenta() {
   };
 
   const handleEdit = (remision: RemisionListadoUi) => {
+    if (!puedeEditar) {
+      toast.error("No tienes permiso para editar remisiones de venta");
+      return;
+    }
+
     if (!puedeEditarRemision(remision.estado)) {
       toast.info("Solo se pueden editar remisiones pendientes o despachadas");
       return;
@@ -1337,13 +1352,23 @@ export default function RemisionesVenta() {
 
     navigate(`/app/remisiones-venta/${remision.id}/editar`);
   };
+
   const handleAnular = (remision: RemisionListadoUi) => {
+    if (!puedeAnular) {
+      toast.error("No tienes permiso para anular remisiones de venta");
+      return;
+    }
+
     navigate(`/app/remisiones-venta/${remision.id}/anular`);
   };
-
   const closeToList = () => navigate("/app/remisiones-venta");
 
   const handleToggleEstado = (remision: RemisionListadoUi) => {
+    if (!puedeCambiarEstado) {
+      toast.error("No tienes permiso para cambiar el estado de remisiones de venta");
+      return;
+    }
+
     let siguiente: EstadoUi | null = null;
 
     if (remision.estado === "Pendiente") siguiente = "Despachado";
@@ -1895,13 +1920,15 @@ export default function RemisionesVenta() {
             />
           </div>
 
-          <Button
-            onClick={() => navigate("/app/remisiones-venta/crear")}
-            className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto"
-          >
-            <Plus size={20} className="mr-2" />
-            Nueva Remisión
-          </Button>
+          {puedeCrear && (
+            <Button
+              onClick={() => navigate("/app/remisiones-venta/crear")}
+              className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto"
+            >
+              <Plus size={20} className="mr-2" />
+              Nueva Remisión
+            </Button>
+          )}
         </div>
       </div>
 
@@ -1951,101 +1978,117 @@ export default function RemisionesVenta() {
                     <TableCell className="text-center">{remision.items}</TableCell>
 
                     <TableCell className="text-center">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleToggleEstado(remision)}
-                        disabled={!puedeCambiarEstadoRemision(remision.estado)}
-                        className={`h-7 ${getEstadoRemisionButtonClass(remision.estado)}`}
-                        title={getSiguienteEstadoTexto(remision.estado)}
-                      >
-                        {remision.estado}
-                      </Button>
+                      {puedeCambiarEstado ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleToggleEstado(remision)}
+                          disabled={!puedeCambiarEstadoRemision(remision.estado)}
+                          className={`h-7 ${getEstadoRemisionButtonClass(remision.estado)}`}
+                          title={getSiguienteEstadoTexto(remision.estado)}
+                        >
+                          {remision.estado}
+                        </Button>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          className={getEstadoRemisionBadgeClass(remision.estado)}
+                        >
+                          {remision.estado}
+                        </Badge>
+                      )}
                     </TableCell>
 
                     <TableCell>
                       <div className="flex items-center justify-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleView(remision)}
-                          className="hover:bg-blue-50"
-                          title="Ver detalles"
-                        >
-                          <Eye size={16} className="text-blue-600" />
-                        </Button>
+                        {puedeVer && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleView(remision)}
+                            className="hover:bg-blue-50"
+                            title="Ver detalles"
+                          >
+                            <Eye size={16} className="text-blue-600" />
+                          </Button>
+                        )}
 
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => void handleDescargarPDF(remision)}
-                          className="hover:bg-green-50"
-                          title="Descargar PDF"
-                        >
-                          <Download size={16} className="text-green-600" />
-                        </Button>
-
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEdit(remision)}
-                          disabled={!puedeEditarRemision(remision.estado)}
-                          className={
-                            puedeEditarRemision(remision.estado)
-                              ? "hover:bg-yellow-50"
-                              : "cursor-not-allowed hover:bg-transparent"
-                          }
-                          title={
-                            remision.estado === "Entregado"
-                              ? "No se puede editar una remisión entregada"
-                              : remision.estado === "Facturada"
-                                ? "No se puede editar una remisión facturada"
-                                : remision.estado === "Anulada"
-                                  ? "No se puede editar una remisión anulada"
-                                  : remision.estado === "Despachado"
-                                    ? "Editar cantidades remitidas"
-                                    : "Editar"
-                          }
-                        >
-                          <Edit
-                            size={16}
+                        {puedeDescargar && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => void handleDescargarPDF(remision)}
+                            className="hover:bg-green-50"
+                            title="Descargar PDF"
+                          >
+                            <Download size={16} className="text-green-600" />
+                          </Button>
+                        )}
+                        {puedeEditar && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEdit(remision)}
+                            disabled={!puedeEditarRemision(remision.estado)}
                             className={
                               puedeEditarRemision(remision.estado)
-                                ? "text-yellow-600"
-                                : "text-gray-400"
+                                ? "hover:bg-yellow-50"
+                                : "cursor-not-allowed hover:bg-transparent"
                             }
-                          />
-                        </Button>
+                            title={
+                              remision.estado === "Entregado"
+                                ? "No se puede editar una remisión entregada"
+                                : remision.estado === "Facturada"
+                                  ? "No se puede editar una remisión facturada"
+                                  : remision.estado === "Anulada"
+                                    ? "No se puede editar una remisión anulada"
+                                    : remision.estado === "Despachado"
+                                      ? "Editar cantidades remitidas"
+                                      : "Editar"
+                            }
+                          >
+                            <Edit
+                              size={16}
+                              className={
+                                puedeEditarRemision(remision.estado)
+                                  ? "text-yellow-600"
+                                  : "text-gray-400"
+                              }
+                            />
+                          </Button>
+                        )}
 
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleAnular(remision)}
-                          disabled={!puedeAnularRemision(remision.estado)}
-                          className={
-                            puedeAnularRemision(remision.estado)
-                              ? "hover:bg-red-50"
-                              : "cursor-not-allowed hover:bg-transparent"
-                          }
-                          title={
-                            remision.estado === "Entregado"
-                              ? "No se puede anular una remisión entregada"
-                              : remision.estado === "Facturada"
-                                ? "No se puede anular una remisión facturada"
-                                : remision.estado === "Anulada"
-                                  ? "La remisión ya está anulada"
-                                  : "Anular"
-                          }
-                        >
-                          <Ban
-                            size={16}
+                        {puedeAnular && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleAnular(remision)}
+                            disabled={!puedeAnularRemision(remision.estado)}
                             className={
                               puedeAnularRemision(remision.estado)
-                                ? "text-red-600"
-                                : "text-gray-400"
+                                ? "hover:bg-red-50"
+                                : "cursor-not-allowed hover:bg-transparent"
                             }
-                          />
-                        </Button>
+                            title={
+                              remision.estado === "Entregado"
+                                ? "No se puede anular una remisión entregada"
+                                : remision.estado === "Facturada"
+                                  ? "No se puede anular una remisión facturada"
+                                  : remision.estado === "Anulada"
+                                    ? "La remisión ya está anulada"
+                                    : "Anular"
+                            }
+                          >
+                            <Ban
+                              size={16}
+                              className={
+                                puedeAnularRemision(remision.estado)
+                                  ? "text-red-600"
+                                  : "text-gray-400"
+                              }
+                            />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
